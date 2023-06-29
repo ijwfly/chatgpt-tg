@@ -2,7 +2,7 @@ from typing import List
 
 import tiktoken
 
-from app.chatgpt.chatgpt import DialogueMessage
+from app.openai_helpers.chatgpt import DialogueMessage
 
 
 def count_prompt_tokens(messages: List[DialogueMessage], model="gpt-3.5-turbo") -> int:

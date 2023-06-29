@@ -1,7 +1,7 @@
 import asyncio
 
 from app import settings
-from app.chatgpt.chatgpt import ChatGPT, DialogueMessage
+from app.openai_helpers.chatgpt import ChatGPT, DialogueMessage
 from app.openai_helpers.count_tokens import count_prompt_tokens
 from app.openai_helpers.utils import set_openai_token
 
