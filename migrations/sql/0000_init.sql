@@ -28,7 +28,11 @@ CREATE TABLE chatgpttg.message
     dialog_id bigint NOT NULL,
     user_id bigint NOT NULL,
     message jsonb NOT NULL,
-    cdate timestamp WITH TIME ZONE NOT NULL default NOW()
+    cdate timestamp WITH TIME ZONE NOT NULL default NOW(),
+    previous_message_ids BIGINT[] DEFAULT '{}',
+    is_subdialog boolean NOT NULL DEFAULT false,
+    tg_chat_id bigint NOT NULL,
+    tg_message_id bigint NOT NULL
 );
 
 CREATE INDEX message_dialog_id_idx ON chatgpttg.message USING hash(dialog_id);

@@ -15,7 +15,7 @@ class GptModel:
 GPT_MODELS = {GptModel.GPT_35_TURBO, GptModel.GPT_35_TURBO_16K, GptModel.GPT_4}
 
 
-class DialogueMessage(pydantic.BaseModel):
+class DialogMessage(pydantic.BaseModel):
     role: str
     content: str
 
@@ -35,7 +35,7 @@ class ChatGPT:
             raise ValueError(f"Unknown model: {model}")
         self.model = model
 
-    async def send_user_message(self, message_to_send: DialogueMessage, previous_messages: List[DialogueMessage] = None, gpt_mode="assistant") -> DialogueMessage:
+    async def send_user_message(self, message_to_send: DialogMessage, previous_messages: List[DialogMessage] = None, gpt_mode="assistant") -> DialogMessage:
         if previous_messages is None:
             previous_messages = []
 
@@ -52,19 +52,19 @@ class ChatGPT:
                 messages=messages,
             )
             answer = resp.choices[0].message["content"].strip()
-            response = DialogueMessage(role='assistant', content=answer)
+            response = DialogMessage(role='assistant', content=answer)
             return response
         except openai.error.InvalidRequestError as e:
             # TODO: check for actual error
             raise ValueError("Too many tokens for current model") from e
 
     @staticmethod
-    def generate_prompt(message: DialogueMessage, previous_messages: List[DialogueMessage], gpt_mode="assistant") -> List[Any]:
+    def generate_prompt(message: DialogMessage, previous_messages: List[DialogMessage], gpt_mode="assistant") -> List[Any]:
         system_prompt = settings.gpt_mode[gpt_mode]["system"]
 
         messages = [{"role": "system", "content": system_prompt}]
-        for dialogue_message in previous_messages:
-            messages.append(dialogue_message.openai_message())
+        for dialog_message in previous_messages:
+            messages.append(dialog_message.openai_message())
         messages.append(message.openai_message())
 
         return messages

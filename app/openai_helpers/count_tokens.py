@@ -2,10 +2,10 @@ from typing import List
 
 import tiktoken
 
-from app.openai_helpers.chatgpt import DialogueMessage
+from app.openai_helpers.chatgpt import DialogMessage
 
 
-def count_prompt_tokens(messages: List[DialogueMessage], model="gpt-3.5-turbo") -> int:
+def count_prompt_tokens(messages: List[DialogMessage], model="gpt-3.5-turbo") -> int:
     encoding = tiktoken.encoding_for_model(model)
 
     if model == "gpt-3.5-turbo":

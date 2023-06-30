@@ -1,4 +1,4 @@
-from app.openai_helpers.chatgpt import DialogueMessage
+from app.chat.dialog_manager import DialogManager
 
 from aiogram import types
 
@@ -9,24 +9,19 @@ class TelegramChat:
         self.chat_gpt = chat_gpt
 
     async def simple_answer(self, message: types.Message):
-        user = await self.db.get_user(message.from_user.id)
-        if user is None:
-            user = await self.db.create_user(message.from_user.id)
+        dialog_manager = DialogManager(self.db)
 
-        dialog = await self.db.get_active_dialog(user.id)
-        if dialog is None:
-            dialog = await self.db.create_active_dialog(user.id, message.chat.id)
+        context_dialog_messages = await dialog_manager.process_dialog(message)
+        input_dialog_message = await dialog_manager.prepare_input_message(message)
 
-        dialog_messages = await self.db.get_dialog_messages(dialog.id)
-        dialog_messages = [d.message for d in dialog_messages]
+        response_dialog_message = await self.chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
+        if message.reply_to_message is None:
+            response = await message.answer(response_dialog_message.content)
+        else:
+            response = await message.reply(response_dialog_message.content)
 
-        request_text = message.text
-        dialogue_message = DialogueMessage(role="user", content=request_text)
-
-        response = await self.chat_gpt.send_user_message(dialogue_message, dialog_messages)
-        await message.answer(response.content)
-        await self.db.create_dialog_message(dialog.id, user.id, dialogue_message)
-        await self.db.create_dialog_message(dialog.id, user.id, response)
+        await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
+        await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
 
     async def reset_dialog(self, message: types.Message):
         user = await self.db.get_user(message.from_user.id)
