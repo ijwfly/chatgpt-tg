@@ -29,11 +29,13 @@ services:
   pgweb:
     restart: always
     image: sosedoff/pgweb
-    ports:
-      - "8081:8081"
+#    ports:
+#      - "8081:8081"
     links:
       - postgres:postgres
     environment:
       - DATABASE_URL=postgres://postgres:password@postgres:5432/chatgpttg?sslmode=disable
+#      - PGWEB_AUTH_USER=admin
+#      - PGWEB_AUTH_PASSWORD=password
     depends_on:
       - postgres

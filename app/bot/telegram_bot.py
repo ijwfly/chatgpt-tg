@@ -74,7 +74,7 @@ class TelegramBot:
                 mode = params[0] if len(params) == 1 else None
                 if mode is None or mode not in settings.gpt_mode.keys():
                     available_modes = ', '.join(list(settings.gpt_mode.keys()))
-                    await message.answer(f'Define mode: {available_modes}')
+                    await message.answer(f'Usage: /setmode mode\nModes: {available_modes}')
                     return
                 await self.set_current_mode(message, mode)
                 return
