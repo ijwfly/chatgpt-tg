@@ -11,6 +11,7 @@ from app.openai_helpers.chatgpt import DialogMessage, GptModel
 class User(pydantic.BaseModel):
     id: int
     telegram_id: int
+    current_model: str
 
 
 class Dialog(pydantic.BaseModel):
@@ -44,6 +45,10 @@ class DB:
         if record is None:
             return None
         return User(**record)
+
+    async def update_user(self, user: User):
+        sql = 'UPDATE chatgpttg.user SET current_model = $1 WHERE id = $2 RETURNING *'
+        return User(**await self.connection_pool.fetchrow(sql, user.current_model, user.id))
 
     async def create_user(self, telegram_user_id):
         sql = 'INSERT INTO chatgpttg.user (telegram_id) VALUES ($1) RETURNING *'

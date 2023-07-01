@@ -1,6 +1,7 @@
 from typing import List
 
 from app.openai_helpers.chatgpt import DialogMessage
+from app.storage.db import User
 
 from aiogram import types
 
@@ -44,13 +45,24 @@ class DialogManager:
         else:
             return await self.process_main_dialog(message)
 
-    async def prepare_input_message(self, message: types.Message):
+    async def prepare_input_message(self, message: types.Message) -> DialogMessage:
         request_text = message.text
         return DialogMessage(role="user", content=request_text)
 
-    async def add_message_to_dialog(self, dialog_message: DialogMessage, tg_message_id: id):
+    async def add_message_to_dialog(self, dialog_message: DialogMessage, tg_message_id: id) -> None:
         dialog_message = await self.db.create_dialog_message(
             self.dialog_id, self.user.id, self.chat_id, tg_message_id,
             dialog_message, self.dialog_messages, self.is_subdialog
         )
         self.dialog_messages.append(dialog_message)
+
+    def get_user(self) -> User:
+        if self.user is None:
+            raise ValueError('You must call process_main_dialog first')
+        return self.user
+
+    def get_dialog_messages(self) -> List[DialogMessage]:
+        if self.user is None:
+            raise ValueError('You must call process_main_dialog first')
+        dialog_messages = [d.message for d in self.dialog_messages]
+        return dialog_messages
