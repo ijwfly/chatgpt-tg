@@ -27,7 +27,7 @@ async def handler(message: types.Message) -> None:
     try:
         await chat.handle_message(message)
     except Exception as e:
-        await message.answer(f'Что-то пошло не так:\n{str(type(e))}\n{e}')
+        await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
 
 
 if __name__ == '__main__':
