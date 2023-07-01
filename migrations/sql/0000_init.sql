@@ -4,7 +4,8 @@ CREATE TABLE chatgpttg.user
 (
     id bigserial PRIMARY KEY,
     telegram_id bigserial NOT NULL,
-    current_model text NOT NULL DEFAULT 'gpt-3.5-turbo'
+    current_model text NOT NULL DEFAULT 'gpt-3.5-turbo',
+    gpt_mode text NOT NULL DEFAULT 'assistant'
 );
 
 CREATE INDEX user_telegram_id_idx ON chatgpttg.user USING hash(telegram_id);

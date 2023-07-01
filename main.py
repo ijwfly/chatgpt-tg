@@ -24,7 +24,10 @@ async def on_shutdown(_):
 @dp.message_handler()
 async def handler(message: types.Message) -> None:
     chat: TelegramBot = message.bot['chat']
-    await chat.handle_message(message)
+    try:
+        await chat.handle_message(message)
+    except Exception as e:
+        await message.answer(f'Что-то пошло не так:\n{str(type(e))}\n{e}')
 
 
 if __name__ == '__main__':

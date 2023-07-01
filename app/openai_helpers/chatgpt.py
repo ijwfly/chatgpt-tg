@@ -27,39 +27,36 @@ class DialogMessage(pydantic.BaseModel):
 
 
 class ChatGPT:
-    def __init__(self, model="gpt-3.5-turbo"):
-        self.set_model(model)
-
-    def set_model(self, model="gpt-3.5-turbo"):
+    def __init__(self, model="gpt-3.5-turbo", gpt_mode="assistant"):
         if model not in GPT_MODELS:
             raise ValueError(f"Unknown model: {model}")
         self.model = model
+        if gpt_mode not in settings.gpt_mode:
+            raise ValueError(f"Unknown GPT mode: {gpt_mode}")
+        self.gpt_mode = gpt_mode
 
-    async def send_user_message(self, message_to_send: DialogMessage, previous_messages: List[DialogMessage] = None, gpt_mode="assistant") -> DialogMessage:
+    async def send_user_message(self, message_to_send: DialogMessage, previous_messages: List[DialogMessage] = None) -> DialogMessage:
         if previous_messages is None:
             previous_messages = []
-
-        if gpt_mode not in settings.gpt_mode.keys():
-            raise ValueError(f"GPT Mode {gpt_mode} not found in settings")
 
         if self.model not in GPT_MODELS:
             raise ValueError(f"Unknown model: {self.model}")
 
-        messages = self.generate_prompt(message_to_send, previous_messages, gpt_mode)
+        messages = self.generate_prompt(message_to_send, previous_messages, self.gpt_mode)
         try:
             resp = await openai.ChatCompletion.acreate(
                 model=self.model,
                 messages=messages,
             )
             answer = resp.choices[0].message["content"].strip()
-            response = DialogMessage(role='assistant', content=answer)
+            response = DialogMessage(role="assistant", content=answer)
             return response
         except openai.error.InvalidRequestError as e:
-            # TODO: check for actual error
-            raise ValueError("Too many tokens for current model") from e
+            # TODO: check for error
+            raise
 
     @staticmethod
-    def generate_prompt(message: DialogMessage, previous_messages: List[DialogMessage], gpt_mode="assistant") -> List[Any]:
+    def generate_prompt(message: DialogMessage, previous_messages: List[DialogMessage], gpt_mode) -> List[Any]:
         system_prompt = settings.gpt_mode[gpt_mode]["system"]
 
         messages = [{"role": "system", "content": system_prompt}]

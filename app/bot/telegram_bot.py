@@ -1,4 +1,6 @@
+from app import settings
 from app.bot.dialog_manager import DialogManager
+from app.bot.utils import TypingWorker
 
 from app.openai_helpers.chatgpt import ChatGPT, GptModel
 
@@ -16,10 +18,11 @@ class TelegramBot:
         input_dialog_message = await dialog_manager.prepare_input_message(message)
         user = dialog_manager.get_user()
 
-        chat_gpt = ChatGPT(user.current_model)
+        chat_gpt = ChatGPT(user.current_model, user.gpt_mode)
 
-        await message.bot.send_chat_action(message.from_user.id, 'typing')
-        response_dialog_message = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
+        async with TypingWorker(message.bot, message.from_user.id).typing_context():
+            response_dialog_message = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
+
         if message.reply_to_message is None:
             response = await message.answer(response_dialog_message.content)
         else:
@@ -44,12 +47,20 @@ class TelegramBot:
         await self.db.update_user(user)
         await message.answer('👌')
 
+    async def set_current_mode(self, message: types.Message, gpt_mode):
+        user = await self.db.get_user(message.from_user.id)
+        if user is None:
+            user = await self.db.create_user(message.from_user.id)
+        user.gpt_mode = gpt_mode
+        await self.db.update_user(user)
+        await message.answer('👌')
+
     async def handle_message(self, message: types.Message):
         if message.text is None:
             return
 
         if message.text[0] == '/':
-            command = message.text[1:]
+            command, *params = [m.strip() for m in message.text[1:].split(' ')]
             if command == 'reset':
                 await self.reset_dialog(message)
                 return
@@ -58,6 +69,14 @@ class TelegramBot:
                 return
             if command == 'gpt4':
                 await self.set_current_model(message, GptModel.GPT_4)
+                return
+            if command == 'setmode':
+                mode = params[0] if len(params) == 1 else None
+                if mode is None or mode not in settings.gpt_mode.keys():
+                    available_modes = ', '.join(list(settings.gpt_mode.keys()))
+                    await message.answer(f'Define mode: {available_modes}')
+                    return
+                await self.set_current_mode(message, mode)
                 return
 
         await self.simple_answer(message)
