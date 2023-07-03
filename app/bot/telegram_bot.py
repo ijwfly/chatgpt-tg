@@ -1,3 +1,5 @@
+from aiogram.types import ParseMode
+
 from app import settings
 from app.bot.dialog_manager import DialogManager
 from app.bot.utils import TypingWorker
@@ -24,9 +26,9 @@ class TelegramBot:
             response_dialog_message = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
 
         if message.reply_to_message is None:
-            response = await message.answer(response_dialog_message.content)
+            response = await message.answer(response_dialog_message.content, parse_mode=ParseMode.MARKDOWN)
         else:
-            response = await message.reply(response_dialog_message.content)
+            response = await message.reply(response_dialog_message.content, parse_mode=ParseMode.MARKDOWN)
 
         await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
         await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
