@@ -61,12 +61,13 @@ class Settings:
                 chat_id=callback_query.from_user.id,
                 message_id=callback_query.message.message_id
             )
+            await self.bot.answer_callback_query(callback_query.id)
         else:
             user = await self.db.get_or_create_user(callback_query.from_user.id)
             user = self.toggle_setting(user, callback_query.data)
             await self.db.update_user(user)
 
-            await self.bot.answer_callback_query(callback_query.id, text=f"Settings saved")
+            await self.bot.answer_callback_query(callback_query.id)
             await self.bot.edit_message_reply_markup(
                 chat_id=callback_query.from_user.id,
                 message_id=callback_query.message.message_id,
