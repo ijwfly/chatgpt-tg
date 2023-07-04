@@ -1,9 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-TYPING_TIMEOUT = 30
+TYPING_TIMEOUT = 90
 TYPING_DELAY = 2
 TYPING_QUERIES_LIMIT = TYPING_TIMEOUT // TYPING_DELAY
+
 
 class TypingWorker:
     def __init__(self, bot, chat_id):

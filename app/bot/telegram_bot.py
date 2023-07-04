@@ -1,17 +1,39 @@
-from aiogram.types import ParseMode
-
 from app import settings
 from app.bot.dialog_manager import DialogManager
 from app.bot.utils import TypingWorker
-
+from app.storage.db import DBFactory
 from app.openai_helpers.chatgpt import ChatGPT, GptModel
 
-from aiogram import types
+from aiogram import types, Bot, Dispatcher
+from aiogram.utils import executor
 
 
 class TelegramBot:
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, bot: Bot, dispatcher: Dispatcher):
+        self.db = None
+        self.bot = bot
+        self.dispatcher = dispatcher
+
+        self.dispatcher.register_message_handler(self.handler)
+
+    async def on_startup(self, _):
+        self.db = await DBFactory().create_database(
+            settings.POSTGRES_USER, settings.POSTGRES_PASSWORD,
+            settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
+        )
+
+    async def on_shutdown(self, _):
+        await DBFactory().close_database()
+        self.db = None
+
+    async def handler(self, message: types.Message):
+        try:
+            await self.handle_message(message)
+        except Exception as e:
+            await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
+
+    def run(self):
+        executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
 
     async def simple_answer(self, message: types.Message):
         dialog_manager = DialogManager(self.db)
@@ -26,9 +48,9 @@ class TelegramBot:
             response_dialog_message = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
 
         if message.reply_to_message is None:
-            response = await message.answer(response_dialog_message.content, parse_mode=ParseMode.MARKDOWN)
+            response = await message.answer(response_dialog_message.content, parse_mode=types.ParseMode.MARKDOWN)
         else:
-            response = await message.reply(response_dialog_message.content, parse_mode=ParseMode.MARKDOWN)
+            response = await message.reply(response_dialog_message.content, parse_mode=types.ParseMode.MARKDOWN)
 
         await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
         await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
