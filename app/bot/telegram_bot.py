@@ -1,5 +1,6 @@
 from app import settings
 from app.bot.dialog_manager import DialogManager
+from app.bot.settings import Settings
 from app.bot.utils import TypingWorker
 from app.storage.db import DBFactory
 from app.openai_helpers.chatgpt import ChatGPT, GptModel
@@ -13,14 +14,17 @@ class TelegramBot:
         self.db = None
         self.bot = bot
         self.dispatcher = dispatcher
-
         self.dispatcher.register_message_handler(self.handler)
+
+        # initialized in on_startup
+        self.settings = None
 
     async def on_startup(self, _):
         self.db = await DBFactory().create_database(
             settings.POSTGRES_USER, settings.POSTGRES_PASSWORD,
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
         )
+        self.settings = Settings(self.bot, self.dispatcher, self.db)
 
     async def on_shutdown(self, _):
         await DBFactory().close_database()
@@ -31,6 +35,7 @@ class TelegramBot:
             await self.handle_message(message)
         except Exception as e:
             await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
+            raise
 
     def run(self):
         executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
@@ -56,28 +61,25 @@ class TelegramBot:
         await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
 
     async def reset_dialog(self, message: types.Message):
-        user = await self.db.get_user(message.from_user.id)
-        if user is None:
-            user = await self.db.create_user(message.from_user.id)
+        user = await self.db.get_or_create_user(message.from_user.id)
 
         await self.db.deactivate_active_dialog(user.id)
         await message.answer('👌')
 
     async def set_current_model(self, message: types.Message, model):
-        user = await self.db.get_user(message.from_user.id)
-        if user is None:
-            user = await self.db.create_user(message.from_user.id)
+        user = await self.db.get_or_create_user(message.from_user.id)
         user.current_model = model
         await self.db.update_user(user)
         await message.answer('👌')
 
     async def set_current_mode(self, message: types.Message, gpt_mode):
-        user = await self.db.get_user(message.from_user.id)
-        if user is None:
-            user = await self.db.create_user(message.from_user.id)
+        user = await self.db.get_or_create_user(message.from_user.id)
         user.gpt_mode = gpt_mode
         await self.db.update_user(user)
         await message.answer('👌')
+
+    async def open_settings(self, message: types.Message):
+        await self.settings.send_settings(message)
 
     async def handle_message(self, message: types.Message):
         if message.text is None:
@@ -87,6 +89,13 @@ class TelegramBot:
             command, *params = [m.strip() for m in message.text[1:].split(' ')]
             if command == 'reset':
                 await self.reset_dialog(message)
+                return
+            if command == 'settings':
+                await self.bot.delete_message(
+                    chat_id=message.from_user.id,
+                    message_id=message.message_id
+                )
+                await self.open_settings(message)
                 return
             if command == 'gpt3':
                 await self.set_current_model(message, GptModel.GPT_35_TURBO)

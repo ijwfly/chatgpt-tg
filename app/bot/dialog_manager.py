@@ -35,9 +35,7 @@ class DialogManager:
 
     async def process_dialog(self, message: types.Message) -> List[DialogMessage]:
         self.chat_id = message.chat.id
-        self.user = await self.db.get_user(message.from_user.id)
-        if self.user is None:
-            self.user = await self.db.create_user(message.from_user.id)
+        self.user = await self.db.get_or_create_user(message.from_user.id)
 
         if message.reply_to_message is not None:
             self.is_subdialog = True

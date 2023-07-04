@@ -51,7 +51,7 @@ class ChatGPT:
             answer = resp.choices[0].message["content"].strip()
             response = DialogMessage(role="assistant", content=answer)
             return response
-        except openai.error.InvalidRequestError as e:
+        except openai.error.InvalidRequestError:
             # TODO: check for error
             raise
 
