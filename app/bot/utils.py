@@ -1,4 +1,7 @@
+import dataclasses
+import re
 import asyncio
+from typing import List
 from contextlib import asynccontextmanager
 
 TYPING_TIMEOUT = 90
@@ -37,3 +40,20 @@ class TypingWorker:
             except asyncio.CancelledError:
                 pass
             self.typing_task = None
+
+
+@dataclasses.dataclass
+class CodeFragment:
+    language: str
+    code: str
+
+
+def detect_and_extract_code(text) -> List[CodeFragment]:
+    pattern = r"```(\S+)\n(.*?)```"
+    matches = re.findall(pattern, text, re.DOTALL)
+    results = []
+    for match in matches:
+        language, code = match
+        fragment = CodeFragment(language, code)
+        results.append(fragment)
+    return results

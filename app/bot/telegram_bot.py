@@ -1,7 +1,7 @@
 from app import settings
 from app.bot.dialog_manager import DialogManager
 from app.bot.settings import Settings
-from app.bot.utils import TypingWorker
+from app.bot.utils import TypingWorker, detect_and_extract_code
 from app.storage.db import DBFactory
 from app.openai_helpers.chatgpt import ChatGPT, GptModel
 
@@ -52,10 +52,12 @@ class TelegramBot:
         async with TypingWorker(message.bot, message.from_user.id).typing_context():
             response_dialog_message = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
 
+        code_fragments = detect_and_extract_code(response_dialog_message.content)
+        parse_mode = types.ParseMode.MARKDOWN if code_fragments else types.ParseMode.HTML
         if message.reply_to_message is None:
-            response = await message.answer(response_dialog_message.content, parse_mode=types.ParseMode.MARKDOWN)
+            response = await message.answer(response_dialog_message.content, parse_mode=parse_mode)
         else:
-            response = await message.reply(response_dialog_message.content, parse_mode=types.ParseMode.MARKDOWN)
+            response = await message.reply(response_dialog_message.content, parse_mode=parse_mode)
 
         await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
         await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
