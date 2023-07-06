@@ -51,14 +51,15 @@ class TelegramBot:
         file = await self.bot.get_file(file_id)
         file_path = file.file_path
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            ogg_filepath = os.path.join(temp_dir, f'voice_{file_id}.ogg')
-            mp3_filename = os.path.join(temp_dir, f'voice_{file_id}.mp3')
-            await self.bot.download_file(file_path, destination=ogg_filepath)
-            audio = AudioSegment.from_ogg(ogg_filepath)
-            audio.export(mp3_filename, format="mp3")
-            speech_text = get_audio_speech_to_text(mp3_filename)
-            speech_text = f'speech2text:\n{speech_text}'
+        async with TypingWorker(self.bot, message.chat.id).typing_context():
+            with tempfile.TemporaryDirectory() as temp_dir:
+                ogg_filepath = os.path.join(temp_dir, f'voice_{file_id}.ogg')
+                mp3_filename = os.path.join(temp_dir, f'voice_{file_id}.mp3')
+                await self.bot.download_file(file_path, destination=ogg_filepath)
+                audio = AudioSegment.from_ogg(ogg_filepath)
+                audio.export(mp3_filename, format="mp3")
+                speech_text = await get_audio_speech_to_text(mp3_filename)
+                speech_text = f'speech2text:\n{speech_text}'
 
         dialog_manager = DialogManager(self.db)
         await dialog_manager.process_dialog(message)
