@@ -1,12 +1,17 @@
+import os.path
+import tempfile
+
 from app import settings
 from app.bot.dialog_manager import DialogManager
 from app.bot.settings import Settings
 from app.bot.utils import TypingWorker, detect_and_extract_code
+from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory
-from app.openai_helpers.chatgpt import ChatGPT, GptModel
+from app.openai_helpers.chatgpt import ChatGPT, GptModel, DialogMessage
 
 from aiogram import types, Bot, Dispatcher
 from aiogram.utils import executor
+from pydub import AudioSegment
 
 
 class TelegramBot:
@@ -14,6 +19,7 @@ class TelegramBot:
         self.db = None
         self.bot = bot
         self.dispatcher = dispatcher
+        self.dispatcher.register_message_handler(self.handle_voice, content_types=types.ContentType.VOICE)
         self.dispatcher.register_message_handler(self.handler)
 
         # initialized in on_startup
@@ -39,6 +45,26 @@ class TelegramBot:
 
     def run(self):
         executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
+
+    async def handle_voice(self, message: types.Message):
+        file_id = message.voice.file_id
+        file = await self.bot.get_file(file_id)
+        file_path = file.file_path
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ogg_filepath = os.path.join(temp_dir, f'voice_{file_id}.ogg')
+            mp3_filename = os.path.join(temp_dir, f'voice_{file_id}.mp3')
+            await self.bot.download_file(file_path, destination=ogg_filepath)
+            audio = AudioSegment.from_ogg(ogg_filepath)
+            audio.export(mp3_filename, format="mp3")
+            speech_text = get_audio_speech_to_text(mp3_filename)
+            speech_text = f'speech2text:\n{speech_text}'
+
+        dialog_manager = DialogManager(self.db)
+        await dialog_manager.process_dialog(message)
+        speech_dialog_message = DialogMessage(role="user", content=speech_text)
+        response = await message.reply(speech_text)
+        await dialog_manager.add_message_to_dialog(speech_dialog_message, response.message_id)
 
     async def simple_answer(self, message: types.Message):
         dialog_manager = DialogManager(self.db)
