@@ -1,4 +1,4 @@
-from app import settings
+import settings
 
 from aiogram import Bot, types, Dispatcher
 
@@ -6,6 +6,28 @@ from app.storage.db import User, DB
 
 
 GPT_MODELS_OPTIONS = ['gpt-3.5-turbo', 'gpt-4']
+
+
+class TwoOptionsSetting:
+    def __init__(self, model_field: str, option_1: str, option_2: str):
+        self.model_field = model_field
+        self.option_1 = option_1
+        self.option_2 = option_2
+
+    def get_button_string(self, user: User):
+        current_value = getattr(user, self.model_field)
+        if current_value == self.option_1:
+            return f"<{self.option_1}> | {self.option_2}"
+        else:
+            return f"{self.option_1} | <{self.option_2}>"
+
+    def toggle(self, user: User):
+        current_value = getattr(user, self.model_field)
+        if current_value == self.option_1:
+            setattr(user, self.model_field, self.option_2)
+        else:
+            setattr(user, self.model_field, self.option_1)
+        return user
 
 
 class ChoiceSetting:
@@ -33,14 +55,14 @@ class Settings:
         self.dispatcher = dispatcher
         self.db = db
         self.settings = {
-            'current_model': ChoiceSetting('Current model', 'current_model', GPT_MODELS_OPTIONS),
+            'current_model': TwoOptionsSetting('current_model', *GPT_MODELS_OPTIONS),
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys()))
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data in self.settings or c.data == 'hide')
 
     async def send_settings(self, message: types.Message):
         user = await self.db.get_or_create_user(message.from_user.id)
-        await message.answer("*Settings*", reply_markup=self.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN)
+        await message.answer("Settings:", reply_markup=self.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN)
 
     def get_keyboard(self, user: User):
         keyboard = types.InlineKeyboardMarkup()

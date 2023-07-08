@@ -1,9 +1,9 @@
 import os.path
 import tempfile
 
-from app import settings
+import settings
 from app.bot.dialog_manager import DialogManager
-from app.bot.settings import Settings
+from app.bot.settings_menu import Settings
 from app.bot.utils import TypingWorker, detect_and_extract_code
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory
@@ -47,15 +47,16 @@ class TelegramBot:
         executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
 
     async def handle_voice(self, message: types.Message):
-        file_id = message.voice.file_id
-        file = await self.bot.get_file(file_id)
-        file_path = file.file_path
+        file = await self.bot.get_file(message.voice.file_id)
+        if file.file_size > 25 * 1024 * 1024:
+            await message.reply('Voice file is too big')
+            return
 
         async with TypingWorker(self.bot, message.chat.id).typing_context():
             with tempfile.TemporaryDirectory() as temp_dir:
-                ogg_filepath = os.path.join(temp_dir, f'voice_{file_id}.ogg')
-                mp3_filename = os.path.join(temp_dir, f'voice_{file_id}.mp3')
-                await self.bot.download_file(file_path, destination=ogg_filepath)
+                ogg_filepath = os.path.join(temp_dir, f'voice_{message.voice.file_id}.ogg')
+                mp3_filename = os.path.join(temp_dir, f'voice_{message.voice.file_id}.mp3')
+                await self.bot.download_file(file.file_path, destination=ogg_filepath)
                 audio = AudioSegment.from_ogg(ogg_filepath)
                 audio.export(mp3_filename, format="mp3")
                 speech_text = await get_audio_speech_to_text(mp3_filename)

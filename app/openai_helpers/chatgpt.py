@@ -1,6 +1,6 @@
 from typing import List, Any
 
-from app import settings
+import settings
 
 import pydantic
 import openai
