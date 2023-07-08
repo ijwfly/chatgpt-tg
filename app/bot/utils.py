@@ -73,3 +73,7 @@ def get_username(user: types.User):
         return f'@{username}'
     else:
         raise ValueError("User has no full_name and username")
+
+
+def message_is_forward(message: types.Message):
+    return message.forward_from or message.forward_from_chat or message.forward_sender_name

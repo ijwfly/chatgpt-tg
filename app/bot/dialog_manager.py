@@ -1,5 +1,6 @@
 from typing import List
 
+from app.bot.utils import message_is_forward
 from app.openai_helpers.chatgpt import DialogMessage
 from app.storage.db import User
 
@@ -37,7 +38,7 @@ class DialogManager:
         self.chat_id = message.chat.id
         self.user = await self.db.get_or_create_user(message.from_user.id)
 
-        if message.reply_to_message is not None:
+        if message.reply_to_message is not None and not message_is_forward(message):
             self.is_subdialog = True
             return await self.process_sub_dialog(message)
         else:

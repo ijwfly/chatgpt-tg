@@ -4,7 +4,7 @@ import tempfile
 import settings
 from app.bot.dialog_manager import DialogManager
 from app.bot.settings_menu import Settings
-from app.bot.utils import TypingWorker, detect_and_extract_code, get_username
+from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory
 from app.openai_helpers.chatgpt import ChatGPT, GptModel, DialogMessage
@@ -46,7 +46,7 @@ class TelegramBot:
         if message.text is None:
             return
 
-        if message.forward_from or message.forward_from_chat or message.forward_sender_name:
+        if message_is_forward(message):
             await self.handle_forward_text(message)
             return
 
