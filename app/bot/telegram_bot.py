@@ -4,7 +4,7 @@ import tempfile
 import settings
 from app.bot.dialog_manager import DialogManager
 from app.bot.settings_menu import Settings
-from app.bot.utils import TypingWorker, detect_and_extract_code
+from app.bot.utils import TypingWorker, detect_and_extract_code, get_username
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory
 from app.openai_helpers.chatgpt import ChatGPT, GptModel, DialogMessage
@@ -39,17 +39,37 @@ class TelegramBot:
         await DBFactory().close_database()
         self.db = None
 
+    def run(self):
+        executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
+
     async def handler(self, message: types.Message):
+        if message.text is None:
+            return
+
+        if message.forward_from or message.forward_from_chat:
+            await self.handle_forward_text(message)
+            return
+
         try:
-            if message.text is None:
-                return
             await self.simple_answer(message)
         except Exception as e:
             await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
             raise
 
-    def run(self):
-        executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
+    async def handle_forward_text(self, message: types.Message):
+        user = await self.db.get_or_create_user(message.from_user.id)
+        if user.forward_as_prompt:
+            await self.simple_answer(message)
+            return
+
+        # add forwarded text as context to current dialog, not as prompt
+        username = get_username(message.forward_from)
+        forwarded_text = f'{username}:\n{message.text}'
+
+        dialog_manager = DialogManager(self.db)
+        await dialog_manager.process_dialog(message)
+        speech_dialog_message = DialogMessage(role="user", content=forwarded_text)
+        await dialog_manager.add_message_to_dialog(speech_dialog_message, message.message_id)
 
     async def handle_voice(self, message: types.Message):
         file = await self.bot.get_file(message.voice.file_id)
@@ -67,11 +87,20 @@ class TelegramBot:
                 speech_text = await get_audio_speech_to_text(mp3_filename)
                 speech_text = f'speech2text:\n{speech_text}'
 
+        user = await self.db.get_or_create_user(message.from_user.id)
         dialog_manager = DialogManager(self.db)
         await dialog_manager.process_dialog(message)
         speech_dialog_message = DialogMessage(role="user", content=speech_text)
         response = await message.reply(speech_text)
-        await dialog_manager.add_message_to_dialog(speech_dialog_message, response.message_id)
+
+        if user.voice_as_prompt:
+            # HACK: dirty hack with aiogram.Message to process voice as text prompt
+            message.text = speech_text
+            await self.handler(message)
+            return
+        else:
+            # add voice message text as context to current dialog, not as prompt
+            await dialog_manager.add_message_to_dialog(speech_dialog_message, response.message_id)
 
     async def simple_answer(self, message: types.Message):
         dialog_manager = DialogManager(self.db)
@@ -82,7 +111,7 @@ class TelegramBot:
 
         chat_gpt = ChatGPT(user.current_model, user.gpt_mode)
 
-        async with TypingWorker(message.bot, message.from_user.id).typing_context():
+        async with TypingWorker(self.bot, message.from_user.id).typing_context():
             response_dialog_message = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
 
         code_fragments = detect_and_extract_code(response_dialog_message.content)

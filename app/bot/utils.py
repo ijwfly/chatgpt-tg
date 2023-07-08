@@ -4,6 +4,8 @@ import asyncio
 from typing import List
 from contextlib import asynccontextmanager
 
+from aiogram import types
+
 TYPING_TIMEOUT = 180
 TYPING_DELAY = 2
 TYPING_QUERIES_LIMIT = TYPING_TIMEOUT // TYPING_DELAY
@@ -57,3 +59,17 @@ def detect_and_extract_code(text) -> List[CodeFragment]:
         fragment = CodeFragment(language, code)
         results.append(fragment)
     return results
+
+
+def get_username(user: types.User):
+    full_name = user.full_name
+    username = user.username
+
+    if full_name and username:
+        return f'{full_name} (@{username})'
+    elif full_name:
+        return full_name
+    elif username:
+        return f'@{username}'
+    else:
+        raise ValueError("User has no full_name and username")

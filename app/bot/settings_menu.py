@@ -30,6 +30,27 @@ class TwoOptionsSetting:
         return user
 
 
+class OnOffSetting:
+    def __init__(self, name: str, model_field: str):
+        self.model_field = model_field
+        self.setting_name = name
+
+    def get_button_string(self, user: User):
+        current_value = getattr(user, self.model_field)
+        if current_value:
+            return f"{self.setting_name}: On"
+        else:
+            return f"{self.setting_name}: Off"
+
+    def toggle(self, user: User):
+        current_value = getattr(user, self.model_field)
+        if current_value:
+            setattr(user, self.model_field, False)
+        else:
+            setattr(user, self.model_field, True)
+        return user
+
+
 class ChoiceSetting:
     def __init__(self, name: str, model_field: str, options: list):
         self.name = name
@@ -56,7 +77,9 @@ class Settings:
         self.db = db
         self.settings = {
             'current_model': TwoOptionsSetting('current_model', *GPT_MODELS_OPTIONS),
-            'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys()))
+            'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
+            'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
+            'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data in self.settings or c.data == 'hide')
 
