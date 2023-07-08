@@ -46,7 +46,7 @@ class TelegramBot:
         if message.text is None:
             return
 
-        if message.forward_from or message.forward_from_chat:
+        if message.forward_from or message.forward_from_chat or message.forward_sender_name:
             await self.handle_forward_text(message)
             return
 
@@ -63,7 +63,12 @@ class TelegramBot:
             return
 
         # add forwarded text as context to current dialog, not as prompt
-        username = get_username(message.forward_from)
+        if message.forward_from:
+            username = get_username(message.forward_from)
+        elif message.forward_sender_name:
+            username = message.forward_sender_name
+        else:
+            username = ''
         forwarded_text = f'{username}:\n{message.text}'
 
         dialog_manager = DialogManager(self.db)
