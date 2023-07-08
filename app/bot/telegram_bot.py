@@ -20,6 +20,9 @@ class TelegramBot:
         self.bot = bot
         self.dispatcher = dispatcher
         self.dispatcher.register_message_handler(self.handle_voice, content_types=types.ContentType.VOICE)
+        self.dispatcher.register_message_handler(self.reset_dialog, commands=['reset'])
+        self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
+        self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4'])
         self.dispatcher.register_message_handler(self.handler)
 
         # initialized in on_startup
@@ -38,7 +41,9 @@ class TelegramBot:
 
     async def handler(self, message: types.Message):
         try:
-            await self.handle_message(message)
+            if message.text is None:
+                return
+            await self.simple_answer(message)
         except Exception as e:
             await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
             raise
@@ -96,7 +101,8 @@ class TelegramBot:
         await self.db.deactivate_active_dialog(user.id)
         await message.answer('👌')
 
-    async def set_current_model(self, message: types.Message, model):
+    async def set_current_model(self, message: types.Message):
+        model = GptModel.GPT_35_TURBO if message.get_command() == '/gpt3' else GptModel.GPT_4
         user = await self.db.get_or_create_user(message.from_user.id)
         user.current_model = model
         await self.db.update_user(user)
@@ -109,37 +115,8 @@ class TelegramBot:
         await message.answer('👌')
 
     async def open_settings(self, message: types.Message):
+        await self.bot.delete_message(
+            chat_id=message.from_user.id,
+            message_id=message.message_id
+        )
         await self.settings.send_settings(message)
-
-    async def handle_message(self, message: types.Message):
-        if message.text is None:
-            return
-
-        if message.text[0] == '/':
-            command, *params = [m.strip() for m in message.text[1:].split(' ')]
-            if command == 'reset':
-                await self.reset_dialog(message)
-                return
-            if command == 'settings':
-                await self.bot.delete_message(
-                    chat_id=message.from_user.id,
-                    message_id=message.message_id
-                )
-                await self.open_settings(message)
-                return
-            if command == 'gpt3':
-                await self.set_current_model(message, GptModel.GPT_35_TURBO)
-                return
-            if command == 'gpt4':
-                await self.set_current_model(message, GptModel.GPT_4)
-                return
-            if command == 'setmode':
-                mode = params[0] if len(params) == 1 else None
-                if mode is None or mode not in settings.gpt_mode.keys():
-                    available_modes = ', '.join(list(settings.gpt_mode.keys()))
-                    await message.answer(f'Usage: /setmode mode\nModes: {available_modes}')
-                    return
-                await self.set_current_mode(message, mode)
-                return
-
-        await self.simple_answer(message)
