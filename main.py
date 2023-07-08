@@ -1,11 +1,12 @@
 import settings
+from app.bot.queued_dispatcher import QueuedDispatcher
 from app.bot.telegram_bot import TelegramBot
 from app.openai_helpers.utils import set_openai_token
 
-from aiogram import Dispatcher, Bot
+from aiogram import Bot
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
-dp = Dispatcher(bot)
+dp = QueuedDispatcher(bot)
 
 
 if __name__ == '__main__':
