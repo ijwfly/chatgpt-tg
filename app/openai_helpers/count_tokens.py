@@ -26,7 +26,9 @@ def count_prompt_tokens(messages: List[DialogMessage], model="gpt-3.5-turbo") ->
     for message in openai_messages:
         tokens_count += tokens_per_message
         for key, value in message.items():
-            tokens_count += len(encoding.encode(value))
+            if value is None:
+                continue
+            tokens_count += len(encoding.encode(str(value)))
             if key == "name":
                 tokens_count += tokens_per_name
 

@@ -44,9 +44,14 @@ class DialogManager:
         else:
             return await self.process_main_dialog(message)
 
-    async def prepare_input_message(self, message: types.Message) -> DialogMessage:
+    @staticmethod
+    def prepare_input_message(message: types.Message) -> DialogMessage:
         request_text = message.text
         return DialogMessage(role="user", content=request_text)
+
+    @staticmethod
+    def prepare_function_response(function_name, function_response):
+        return DialogMessage(role="function", name=function_name, content=function_response)
 
     async def add_message_to_dialog(self, dialog_message: DialogMessage, tg_message_id: id) -> None:
         dialog_message = await self.db.create_dialog_message(

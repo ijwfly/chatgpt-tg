@@ -80,6 +80,7 @@ class Settings:
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
             'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
+            'use_functions': OnOffSetting('Use functions', 'use_functions'),
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data in self.settings or c.data == 'hide')
 

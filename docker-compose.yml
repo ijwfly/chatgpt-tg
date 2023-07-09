@@ -37,7 +37,7 @@ services:
 #    environment:
 #      - DATABASE_URL=postgres://postgres:password@postgres:5432/chatgpttg?sslmode=disable
 #      - PGWEB_AUTH_USER=admin
-#      - PGWEB_AUTH_PASSWORD=password
+#      - PGWEB_AUTH_PASS=password
 #    depends_on:
 #      - postgres
 

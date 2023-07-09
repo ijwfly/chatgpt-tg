@@ -15,6 +15,7 @@ class User(pydantic.BaseModel):
     gpt_mode: str
     forward_as_prompt: bool
     voice_as_prompt: bool
+    use_functions: bool
 
 
 class Dialog(pydantic.BaseModel):
@@ -57,10 +58,11 @@ class DB:
 
     async def update_user(self, user: User):
         sql = '''UPDATE chatgpttg.user 
-        SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3, voice_as_prompt = $4
-        WHERE id = $5 RETURNING *'''
+        SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3, voice_as_prompt = $4, use_functions = $5
+        WHERE id = $6 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
-            sql, user.current_model, user.gpt_mode, user.forward_as_prompt, user.voice_as_prompt, user.id
+            sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
+            user.voice_as_prompt, user.use_functions, user.id
         ))
 
     async def create_user(self, telegram_user_id):

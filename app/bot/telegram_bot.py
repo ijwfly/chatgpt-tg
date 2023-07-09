@@ -1,3 +1,4 @@
+import json
 import os.path
 import tempfile
 
@@ -5,6 +6,7 @@ import settings
 from app.bot.dialog_manager import DialogManager
 from app.bot.settings_menu import Settings
 from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward
+from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory
 from app.openai_helpers.chatgpt import ChatGPT, GptModel, DialogMessage
@@ -15,7 +17,7 @@ from pydub import AudioSegment
 
 
 class TelegramBot:
-    def __init__(self, bot: Bot, dispatcher: Dispatcher):
+    def __init__(self, bot: Bot, dispatcher: Dispatcher, function_storage: FunctionStorage = None):
         self.db = None
         self.bot = bot
         self.dispatcher = dispatcher
@@ -24,6 +26,8 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
         self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4'])
         self.dispatcher.register_message_handler(self.handler)
+
+        self.function_storage = function_storage
 
         # initialized in on_startup
         self.settings = None
@@ -51,7 +55,7 @@ class TelegramBot:
             return
 
         try:
-            await self.simple_answer(message)
+            await self.answer_text_message(message)
         except Exception as e:
             await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
             raise
@@ -59,7 +63,7 @@ class TelegramBot:
     async def handle_forward_text(self, message: types.Message):
         user = await self.db.get_or_create_user(message.from_user.id)
         if user.forward_as_prompt:
-            await self.simple_answer(message)
+            await self.answer_text_message(message)
             return
 
         # add forwarded text as context to current dialog, not as prompt
@@ -107,27 +111,51 @@ class TelegramBot:
             # add voice message text as context to current dialog, not as prompt
             await dialog_manager.add_message_to_dialog(speech_dialog_message, response.message_id)
 
-    async def simple_answer(self, message: types.Message):
+    async def send_telegram_message(self, message: types.Message, text: str, parse_mode=types.ParseMode.HTML):
+        if message.reply_to_message is None:
+            response = await message.answer(text, parse_mode=parse_mode)
+        else:
+            response = await message.reply(text, parse_mode=parse_mode)
+        return response
+
+    async def answer_text_message(self, message: types.Message):
         dialog_manager = DialogManager(self.db)
 
         context_dialog_messages = await dialog_manager.process_dialog(message)
-        input_dialog_message = await dialog_manager.prepare_input_message(message)
+        input_dialog_message = dialog_manager.prepare_input_message(message)
         user = dialog_manager.get_user()
 
-        chat_gpt = ChatGPT(user.current_model, user.gpt_mode)
+        function_storage = None
+        if user.use_functions:
+            function_storage = self.function_storage
+        chat_gpt = ChatGPT(user.current_model, user.gpt_mode, function_storage)
 
         async with TypingWorker(self.bot, message.from_user.id).typing_context():
             response_dialog_message = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
 
-        code_fragments = detect_and_extract_code(response_dialog_message.content)
-        parse_mode = types.ParseMode.MARKDOWN if code_fragments else types.ParseMode.HTML
-        if message.reply_to_message is None:
-            response = await message.answer(response_dialog_message.content, parse_mode=parse_mode)
-        else:
-            response = await message.reply(response_dialog_message.content, parse_mode=parse_mode)
+        if response_dialog_message.function_call:
+            function_name = response_dialog_message.function_call.name
+            function_args = json.loads(response_dialog_message.function_call.arguments)
+            async with TypingWorker(self.bot, message.from_user.id).typing_context():
+                function_response_raw = await self.function_storage.run_function(function_name, function_args)
 
-        await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
-        await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
+                await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
+
+                function_response = dialog_manager.prepare_function_response(function_name, function_response_raw)
+                context_dialog_messages = dialog_manager.get_dialog_messages()
+
+                response_dialog_message = await chat_gpt.send_user_message(function_response, context_dialog_messages)
+                function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
+                function_response_tg_message = await self.send_telegram_message(message, function_response_text)
+                response = await self.send_telegram_message(message, response_dialog_message.content)
+                await dialog_manager.add_message_to_dialog(function_response, function_response_tg_message.message_id)
+                await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
+        else:
+            code_fragments = detect_and_extract_code(response_dialog_message.content)
+            parse_mode = types.ParseMode.MARKDOWN if code_fragments else types.ParseMode.HTML
+            response = await self.send_telegram_message(message, response_dialog_message.content, parse_mode)
+            await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
+            await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
 
     async def reset_dialog(self, message: types.Message):
         user = await self.db.get_or_create_user(message.from_user.id)

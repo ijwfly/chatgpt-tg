@@ -44,7 +44,7 @@ class FunctionStorage:
 
         return function_info
 
-    def get_openai_info(self):
+    def get_openai_prompt(self):
         functions = []
         for function in self.functions.values():
             parameters_dict = {
@@ -71,6 +71,12 @@ class FunctionStorage:
 
         return functions
 
-    def run_function(self, function_name: str, parameters: Dict[str, Any]):
+    async def run_function(self, function_name: str, parameters: Dict[str, Any]):
         function = self.functions[function_name]['obj']
-        return function(**parameters)
+        try:
+            result = await function(**parameters)
+            if not result:
+                return 'Function returned nothing'
+            return result
+        except Exception as e:
+            return f'Function raised an exception: {e}'
