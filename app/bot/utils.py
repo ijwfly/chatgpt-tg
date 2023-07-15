@@ -20,9 +20,11 @@ class TypingWorker:
 
     @asynccontextmanager
     async def typing_context(self):
-        await self.start_typing()
-        yield
-        await self.stop_typing()
+        try:
+            await self.start_typing()
+            yield
+        finally:
+            await self.stop_typing()
 
     async def start_typing(self):
         async def typing_worker():

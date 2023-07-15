@@ -125,9 +125,7 @@ class TelegramBot:
         input_dialog_message = dialog_manager.prepare_input_message(message)
         user = dialog_manager.get_user()
 
-        function_storage = None
-        if user.use_functions:
-            function_storage = self.function_storage
+        function_storage = self.function_storage if user.use_functions else None
         chat_gpt = ChatGPT(user.current_model, user.gpt_mode, function_storage)
 
         async with TypingWorker(self.bot, message.from_user.id).typing_context():
