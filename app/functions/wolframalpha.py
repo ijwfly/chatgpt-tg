@@ -11,7 +11,7 @@ FIELDS_TO_EXTRACT = ['Input interpretation', 'Result', 'Results']
 async def query_wolframalpha(query: str):
     """
     Query WolframAlpha for factual info and calculations
-    :param query: query WolframAlpha, like "weather in Moscow"
+    :param query: query WolframAlpha
     :return:
     """
     url = 'https://www.wolframalpha.com/api/v1/llm-api'

@@ -22,6 +22,13 @@ class FunctionCall(pydantic.BaseModel):
     arguments: str
 
 
+class CompletionUsage(pydantic.BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    model: str
+
+
 class DialogMessage(pydantic.BaseModel):
     role: str
     name: Optional[str] = None
@@ -53,7 +60,7 @@ class ChatGPT:
             raise ValueError(f"Unknown GPT mode: {gpt_mode}")
         self.gpt_mode = gpt_mode
 
-    async def send_user_message(self, message_to_send: DialogMessage, previous_messages: List[DialogMessage] = None) -> DialogMessage:
+    async def send_user_message(self, message_to_send: DialogMessage, previous_messages: List[DialogMessage] = None) -> (DialogMessage, CompletionUsage):
         additional_fields = {}
         if self.function_storage is not None:
             additional_fields.update({
@@ -69,11 +76,13 @@ class ChatGPT:
             resp = await openai.ChatCompletion.acreate(
                 model=self.model,
                 messages=messages,
+                temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
                 **additional_fields,
             )
+            completion_usage = CompletionUsage(model=self.model, **resp.usage)
             message = resp.choices[0].message
             response = DialogMessage(**message)
-            return response
+            return response, completion_usage
         except openai.error.InvalidRequestError:
             # TODO: check for error
             raise

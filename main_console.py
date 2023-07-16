@@ -20,7 +20,7 @@ async def main():
         print('Tokens: ', count_prompt_tokens(dialog))
         request_text = input('User: ')
         message = DialogMessage(role="user", content=request_text)
-        response = await chat_gpt.send_user_message(message, dialog)
+        response, _ = await chat_gpt.send_user_message(message, dialog)
         dialog.append(message)
         if response.function_call:
             dialog.append(response)
@@ -28,7 +28,7 @@ async def main():
             function_args = json.loads(response.function_call.arguments)
             function_response = await function_storage.run_function(function_name, function_args)
             function_response_obj = DialogMessage(role="function", name=function_name, content=function_response)
-            response = await chat_gpt.send_user_message(function_response_obj, dialog)
+            response, _ = await chat_gpt.send_user_message(function_response_obj, dialog)
             dialog.append(function_response_obj)
         print('AI:', response.content)
         print()

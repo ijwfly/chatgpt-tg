@@ -72,8 +72,8 @@ class TelegramBot:
         elif message.forward_sender_name:
             username = message.forward_sender_name
         else:
-            username = ''
-        forwarded_text = f'{username}:\n{message.text}'
+            username = None
+        forwarded_text = f'{username}:\n{message.text}' if username else message.text
 
         dialog_manager = DialogManager(self.db)
         await dialog_manager.process_dialog(message)
@@ -92,6 +92,7 @@ class TelegramBot:
                 mp3_filename = os.path.join(temp_dir, f'voice_{message.voice.file_id}.mp3')
                 await self.bot.download_file(file.file_path, destination=ogg_filepath)
                 audio = AudioSegment.from_ogg(ogg_filepath)
+                # audio_length_seconds = len(audio) // 1000 + 1
                 audio.export(mp3_filename, format="mp3")
                 speech_text = await get_audio_speech_to_text(mp3_filename)
                 speech_text = f'speech2text:\n{speech_text}'
@@ -103,10 +104,9 @@ class TelegramBot:
         response = await message.reply(speech_text)
 
         if user.voice_as_prompt:
-            # HACK: dirty hack with aiogram.Message to process voice as text prompt
+            # HACK: hack with aiogram.Message to process voice as text prompt
             message.text = speech_text
             await self.handler(message)
-            return
         else:
             # add voice message text as context to current dialog, not as prompt
             await dialog_manager.add_message_to_dialog(speech_dialog_message, response.message_id)
@@ -129,7 +129,7 @@ class TelegramBot:
         chat_gpt = ChatGPT(user.current_model, user.gpt_mode, function_storage)
 
         async with TypingWorker(self.bot, message.from_user.id).typing_context():
-            response_dialog_message = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
+            response_dialog_message, usage = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
 
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
@@ -142,7 +142,7 @@ class TelegramBot:
                 function_response = dialog_manager.prepare_function_response(function_name, function_response_raw)
                 context_dialog_messages = dialog_manager.get_dialog_messages()
 
-                response_dialog_message = await chat_gpt.send_user_message(function_response, context_dialog_messages)
+                response_dialog_message, usage = await chat_gpt.send_user_message(function_response, context_dialog_messages)
                 function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
                 function_response_tg_message = await self.send_telegram_message(message, function_response_text)
                 response = await self.send_telegram_message(message, response_dialog_message.content)
