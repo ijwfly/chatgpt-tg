@@ -137,6 +137,10 @@ class DB:
             return None
         return Dialog(**record)
 
+    async def create_completion_usage(self, user_id, prompt_tokens, completion_tokens, total_tokens, model) -> None:
+        sql = 'INSERT INTO chatgpttg.completion_usage (user_id, prompt_tokens, completion_tokens, total_tokens, model) VALUES ($1, $2, $3, $4, $5)'
+        await self.connection_pool.fetchrow(sql, user_id, prompt_tokens, completion_tokens, total_tokens, model)
+
 
 class DBFactory:
     connection_pool = None

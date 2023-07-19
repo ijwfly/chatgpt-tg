@@ -1,4 +1,4 @@
-CREATE SCHEMA chatgpttg;
+CREATE SCHEMA IF NOT EXISTS chatgpttg;
 
 CREATE TABLE IF NOT EXISTS chatgpttg.user
 (

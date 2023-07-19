@@ -3,6 +3,7 @@ import os.path
 import tempfile
 
 import settings
+from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.dialog_manager import DialogManager
 from app.bot.settings_menu import Settings
 from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward
@@ -126,10 +127,10 @@ class TelegramBot:
         user = dialog_manager.get_user()
 
         function_storage = self.function_storage if user.use_functions else None
-        chat_gpt = ChatGPT(user.current_model, user.gpt_mode, function_storage)
+        chat_gpt_manager = ChatGptManager(ChatGPT(user.current_model, user.gpt_mode, function_storage), self.db)
 
         async with TypingWorker(self.bot, message.from_user.id).typing_context():
-            response_dialog_message, usage = await chat_gpt.send_user_message(input_dialog_message, context_dialog_messages)
+            response_dialog_message = await chat_gpt_manager.send_user_message(user, input_dialog_message, context_dialog_messages)
 
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
@@ -142,7 +143,7 @@ class TelegramBot:
                 function_response = dialog_manager.prepare_function_response(function_name, function_response_raw)
                 context_dialog_messages = dialog_manager.get_dialog_messages()
 
-                response_dialog_message, usage = await chat_gpt.send_user_message(function_response, context_dialog_messages)
+                response_dialog_message = await chat_gpt_manager.send_user_message(user, function_response, context_dialog_messages)
                 function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
                 function_response_tg_message = await self.send_telegram_message(message, function_response_text)
                 response = await self.send_telegram_message(message, response_dialog_message.content)
