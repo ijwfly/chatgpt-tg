@@ -87,18 +87,19 @@ class TelegramBot:
             await message.reply('Voice file is too big')
             return
 
+        user = await self.db.get_or_create_user(message.from_user.id)
         async with TypingWorker(self.bot, message.chat.id).typing_context():
             with tempfile.TemporaryDirectory() as temp_dir:
                 ogg_filepath = os.path.join(temp_dir, f'voice_{message.voice.file_id}.ogg')
                 mp3_filename = os.path.join(temp_dir, f'voice_{message.voice.file_id}.mp3')
                 await self.bot.download_file(file.file_path, destination=ogg_filepath)
                 audio = AudioSegment.from_ogg(ogg_filepath)
-                # audio_length_seconds = len(audio) // 1000 + 1
+                audio_length_seconds = len(audio) // 1000 + 1
+                await self.db.create_whisper_usage(user.id, audio_length_seconds)
                 audio.export(mp3_filename, format="mp3")
                 speech_text = await get_audio_speech_to_text(mp3_filename)
                 speech_text = f'speech2text:\n{speech_text}'
 
-        user = await self.db.get_or_create_user(message.from_user.id)
         dialog_manager = DialogManager(self.db)
         await dialog_manager.process_dialog(message)
         speech_dialog_message = DialogMessage(role="user", content=speech_text)

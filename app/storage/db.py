@@ -141,6 +141,9 @@ class DB:
         sql = 'INSERT INTO chatgpttg.completion_usage (user_id, prompt_tokens, completion_tokens, total_tokens, model) VALUES ($1, $2, $3, $4, $5)'
         await self.connection_pool.fetchrow(sql, user_id, prompt_tokens, completion_tokens, total_tokens, model)
 
+    async def create_whisper_usage(self, user_id, audio_seconds) -> None:
+        sql = 'INSERT INTO chatgpttg.whisper_usage (user_id, audio_seconds) VALUES ($1, $2)'
+        await self.connection_pool.fetchrow(sql, user_id, audio_seconds)
 
 class DBFactory:
     connection_pool = None
