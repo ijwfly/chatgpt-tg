@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS chatgpttg.user
     use_functions boolean NOT NULL DEFAULT false
 );
 
-CREATE INDEX user_telegram_id_idx ON chatgpttg.user USING hash(telegram_id);
+CREATE INDEX IF NOT EXISTS user_telegram_id_idx ON chatgpttg.user USING hash(telegram_id);
 
 CREATE TABLE IF NOT EXISTS chatgpttg.dialog
 (
