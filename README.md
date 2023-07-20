@@ -25,6 +25,7 @@ In addition, you should configure the following /commands in your bot through Bo
 reset - reset current dialog
 gpt3 - set model to gpt-3.5-turbo
 gpt4 - set model to gpt-4
+usage - show usage for current month
 settings - open settings menu
 ```
 These commands will provide additional interaction control for the bot users.

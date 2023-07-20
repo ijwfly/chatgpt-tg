@@ -8,6 +8,7 @@ from app.bot.dialog_manager import DialogManager
 from app.bot.settings_menu import Settings
 from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward
 from app.openai_helpers.function_storage import FunctionStorage
+from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory
 from app.openai_helpers.chatgpt import ChatGPT, GptModel, DialogMessage
@@ -26,6 +27,7 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.reset_dialog, commands=['reset'])
         self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
         self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4'])
+        self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.handler)
 
         self.function_storage = function_storage
@@ -175,6 +177,23 @@ class TelegramBot:
         user.gpt_mode = gpt_mode
         await self.db.update_user(user)
         await message.answer('👌')
+
+    async def get_usage(self, message: types.Message):
+        user = await self.db.get_or_create_user(message.from_user.id)
+        whisper_usage = await self.db.get_user_current_month_whisper_usage(user.id)
+        whisper_price = calculate_whisper_usage_price(whisper_usage)
+
+        completion_usages = await self.db.get_user_current_month_completion_usage(user.id)
+        result = []
+        total = whisper_price
+        for usage in completion_usages:
+            price = calculate_completion_usage_price(usage.prompt_tokens, usage.completion_tokens, usage.model)
+            total += price
+            result.append(f'{usage.model}: {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${price}')
+        if whisper_price:
+            result.append(f'Speech2Text: {whisper_usage} seconds, ${whisper_price}')
+        result.append(f'Total: ${total}')
+        await self.send_telegram_message(message, '\n'.join(result))
 
     async def open_settings(self, message: types.Message):
         await self.bot.delete_message(

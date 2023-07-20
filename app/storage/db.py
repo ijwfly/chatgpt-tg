@@ -5,7 +5,7 @@ from typing import List
 import asyncpg
 import pydantic
 
-from app.openai_helpers.chatgpt import DialogMessage, GptModel
+from app.openai_helpers.chatgpt import DialogMessage, GptModel, CompletionUsage
 
 
 class User(pydantic.BaseModel):
@@ -125,7 +125,8 @@ class DB:
         openai_message = json.dumps(message.openai_message())
         previous_message_ids = [m.id for m in previous_messages]
 
-        record = await self.connection_pool.fetchrow(sql, dialog_id, user_id, openai_message, is_subdialog, previous_message_ids, tg_chat_id, tg_message_id)
+        record = await self.connection_pool.fetchrow(sql, dialog_id, user_id, openai_message, is_subdialog,
+                                                     previous_message_ids, tg_chat_id, tg_message_id)
         record = dict(record)
         record['message'] = json.loads(record['message'])
         return Message(**record)
@@ -144,6 +145,33 @@ class DB:
     async def create_whisper_usage(self, user_id, audio_seconds) -> None:
         sql = 'INSERT INTO chatgpttg.whisper_usage (user_id, audio_seconds) VALUES ($1, $2)'
         await self.connection_pool.fetchrow(sql, user_id, audio_seconds)
+
+    async def get_user_current_month_whisper_usage(self, user_id):
+        sql = '''SELECT SUM(audio_seconds) AS audio_seconds
+            FROM chatgpttg.whisper_usage
+            WHERE user_id = $1 AND date_trunc('month', cdate) = date_trunc('month', current_date)
+        '''
+        record = await self.connection_pool.fetchrow(sql, user_id)
+        if record is None:
+            return 0
+        return record['audio_seconds']
+
+    async def get_user_current_month_completion_usage(self, user_id):
+        sql = '''
+        SELECT model, 
+           SUM(prompt_tokens) AS prompt_tokens, 
+           SUM(completion_tokens) AS completion_tokens,
+           SUM(total_tokens) AS total_tokens
+        FROM chatgpttg.completion_usage
+        WHERE user_id = $1 AND
+          date_trunc('month', cdate) = date_trunc('month', current_date)
+        GROUP BY model;
+        '''
+        records = await self.connection_pool.fetch(sql, user_id)
+        if not records:
+            return []
+        return [CompletionUsage(**dict(record)) for record in records]
+
 
 class DBFactory:
     connection_pool = None
