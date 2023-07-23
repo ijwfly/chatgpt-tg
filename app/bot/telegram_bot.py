@@ -13,6 +13,7 @@ from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory
 from app.openai_helpers.chatgpt import ChatGPT, GptModel, DialogMessage
 
+from aiogram.utils.exceptions import CantParseEntities
 from aiogram import types, Bot, Dispatcher
 from aiogram.utils import executor
 from pydub import AudioSegment
@@ -115,12 +116,18 @@ class TelegramBot:
             # add voice message text as context to current dialog, not as prompt
             await dialog_manager.add_message_to_dialog(speech_dialog_message, response.message_id)
 
-    async def send_telegram_message(self, message: types.Message, text: str, parse_mode=types.ParseMode.HTML):
+    @staticmethod
+    async def send_telegram_message(message: types.Message, text: str, parse_mode=None):
         if message.reply_to_message is None:
-            response = await message.answer(text, parse_mode=parse_mode)
+            send_message = message.answer
         else:
-            response = await message.reply(text, parse_mode=parse_mode)
-        return response
+            send_message = message.reply
+
+        try:
+            return await send_message(text, parse_mode=parse_mode)
+        except CantParseEntities:
+            # try to send message without parse_mode once
+            return await send_message(text)
 
     async def answer_text_message(self, message: types.Message):
         dialog_manager = DialogManager(self.db)
@@ -154,7 +161,7 @@ class TelegramBot:
                 await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
         else:
             code_fragments = detect_and_extract_code(response_dialog_message.content)
-            parse_mode = types.ParseMode.MARKDOWN if code_fragments else types.ParseMode.HTML
+            parse_mode = types.ParseMode.MARKDOWN if code_fragments else None
             response = await self.send_telegram_message(message, response_dialog_message.content, parse_mode)
             await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
             await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
