@@ -25,7 +25,7 @@ async def main():
         if response.function_call:
             dialog.append(response)
             function_name = response.function_call.name
-            function_args = json.loads(response.function_call.arguments)
+            function_args = response.function_call.arguments
             function_response = await function_storage.run_function(function_name, function_args)
             function_response_obj = DialogMessage(role="function", name=function_name, content=function_response)
             response, _ = await chat_gpt.send_user_message(function_response_obj, dialog)

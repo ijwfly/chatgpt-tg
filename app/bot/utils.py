@@ -37,13 +37,15 @@ class TypingWorker:
         return self
 
     async def stop_typing(self):
-        if self.typing_task is not None:
-            self.typing_task.cancel()
-            try:
-                await self.typing_task
-            except asyncio.CancelledError:
-                pass
-            self.typing_task = None
+        if self.typing_task is None:
+            return
+
+        self.typing_task.cancel()
+        try:
+            await self.typing_task
+        except asyncio.CancelledError:
+            pass
+        self.typing_task = None
 
 
 @dataclasses.dataclass

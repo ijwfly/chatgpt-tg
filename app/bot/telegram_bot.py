@@ -81,8 +81,8 @@ class TelegramBot:
 
         dialog_manager = DialogManager(self.db)
         await dialog_manager.process_dialog(message)
-        speech_dialog_message = DialogMessage(role="user", content=forwarded_text)
-        await dialog_manager.add_message_to_dialog(speech_dialog_message, message.message_id)
+        forward_dialog_message = DialogMessage(role="user", content=forwarded_text)
+        await dialog_manager.add_message_to_dialog(forward_dialog_message, message.message_id)
 
     async def handle_voice(self, message: types.Message):
         file = await self.bot.get_file(message.voice.file_id)
@@ -142,9 +142,12 @@ class TelegramBot:
         async with TypingWorker(self.bot, message.from_user.id).typing_context():
             response_dialog_message = await chat_gpt_manager.send_user_message(user, input_dialog_message, context_dialog_messages)
 
+        await self.handle_gpt_response(user, chat_gpt_manager, dialog_manager, message, input_dialog_message, response_dialog_message)
+
+    async def handle_gpt_response(self, user, chat_gpt_manager, dialog_manager, message, input_dialog_message, response_dialog_message):
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
-            function_args = json.loads(response_dialog_message.function_call.arguments)
+            function_args = response_dialog_message.function_call.arguments
             async with TypingWorker(self.bot, message.from_user.id).typing_context():
                 function_response_raw = await self.function_storage.run_function(function_name, function_args)
 
@@ -156,9 +159,13 @@ class TelegramBot:
                 response_dialog_message = await chat_gpt_manager.send_user_message(user, function_response, context_dialog_messages)
                 function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
                 function_response_tg_message = await self.send_telegram_message(message, function_response_text)
-                response = await self.send_telegram_message(message, response_dialog_message.content)
                 await dialog_manager.add_message_to_dialog(function_response, function_response_tg_message.message_id)
-                await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
+
+                if response_dialog_message.content:
+                    response = await self.send_telegram_message(message, response_dialog_message.content)
+                    await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
+                else:
+                    await self.handle_gpt_response(user, chat_gpt_manager, dialog_manager, message, input_dialog_message, response_dialog_message)
         else:
             code_fragments = detect_and_extract_code(response_dialog_message.content)
             parse_mode = types.ParseMode.MARKDOWN if code_fragments else None

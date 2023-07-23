@@ -1,4 +1,5 @@
 import inspect
+import json
 from typing import Any, Dict
 from docstring_parser import parse
 
@@ -19,7 +20,8 @@ class FunctionStorage:
         }
         return func
 
-    def extract_function_info(self, function) -> Dict[str, Any]:
+    @staticmethod
+    def extract_function_info(function) -> Dict[str, Any]:
         signature = inspect.signature(function)
         params = []
         for name, param in signature.parameters.items():
@@ -71,12 +73,23 @@ class FunctionStorage:
 
         return functions
 
-    async def run_function(self, function_name: str, parameters: Dict[str, Any]):
-        function = self.functions[function_name]['obj']
+    @staticmethod
+    def parse_function_args(function_arguments):
         try:
-            result = await function(**parameters)
+            return json.loads(function_arguments)
+        except json.JSONDecodeError:
+            return function_arguments
+
+    async def run_function(self, function_name: str, parameters: str):
+        function = self.functions[function_name]['obj']
+        parsed_parameters = self.parse_function_args(parameters)
+        try:
+            if isinstance(parsed_parameters, str):
+                result = await function(parsed_parameters)
+            else:
+                result = await function(**parsed_parameters)
             if not result:
                 return 'Function returned nothing'
-            return result
+            return str(result)
         except Exception as e:
             return f'Function raised an exception: {e}'
