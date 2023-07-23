@@ -1,4 +1,3 @@
-import json
 import os.path
 import tempfile
 
@@ -186,13 +185,8 @@ class TelegramBot:
         await self.db.update_user(user)
         await message.answer('👌')
 
-    async def set_current_mode(self, message: types.Message, gpt_mode):
-        user = await self.db.get_or_create_user(message.from_user.id)
-        user.gpt_mode = gpt_mode
-        await self.db.update_user(user)
-        await message.answer('👌')
-
     async def get_usage(self, message: types.Message):
+        await self.bot.delete_message(message.chat.id, message.message_id)
         user = await self.db.get_or_create_user(message.from_user.id)
         whisper_usage = await self.db.get_user_current_month_whisper_usage(user.id)
         whisper_price = calculate_whisper_usage_price(whisper_usage)
