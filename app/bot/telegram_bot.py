@@ -5,11 +5,12 @@ import settings
 from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.dialog_manager import DialogManager
 from app.bot.settings_menu import Settings
+from app.bot.user_middleware import UserMiddleware
 from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward
 from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
-from app.storage.db import DBFactory
+from app.storage.db import DBFactory, User
 from app.openai_helpers.chatgpt import ChatGPT, GptModel, DialogMessage
 
 from aiogram.utils.exceptions import CantParseEntities
@@ -41,6 +42,7 @@ class TelegramBot:
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
         )
         self.settings = Settings(self.bot, self.dispatcher, self.db)
+        self.dispatcher.middleware.setup(UserMiddleware(self.db))
 
     async def on_shutdown(self, _):
         await DBFactory().close_database()
@@ -49,24 +51,23 @@ class TelegramBot:
     def run(self):
         executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
 
-    async def handler(self, message: types.Message):
+    async def handler(self, message: types.Message, user: User):
         if message.text is None:
             return
 
         if message_is_forward(message):
-            await self.handle_forward_text(message)
+            await self.handle_forward_text(message, user)
             return
 
         try:
-            await self.answer_text_message(message)
+            await self.answer_text_message(message, user)
         except Exception as e:
             await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
             raise
 
-    async def handle_forward_text(self, message: types.Message):
-        user = await self.db.get_or_create_user(message.from_user.id)
+    async def handle_forward_text(self, message: types.Message, user: User):
         if user.forward_as_prompt:
-            await self.answer_text_message(message)
+            await self.answer_text_message(message, user)
             return
 
         # add forwarded text as context to current dialog, not as prompt
@@ -78,18 +79,17 @@ class TelegramBot:
             username = None
         forwarded_text = f'{username}:\n{message.text}' if username else message.text
 
-        dialog_manager = DialogManager(self.db)
+        dialog_manager = DialogManager(self.db, user)
         await dialog_manager.process_dialog(message)
         forward_dialog_message = DialogMessage(role="user", content=forwarded_text)
         await dialog_manager.add_message_to_dialog(forward_dialog_message, message.message_id)
 
-    async def handle_voice(self, message: types.Message):
+    async def handle_voice(self, message: types.Message, user: User):
         file = await self.bot.get_file(message.voice.file_id)
         if file.file_size > 25 * 1024 * 1024:
             await message.reply('Voice file is too big')
             return
 
-        user = await self.db.get_or_create_user(message.from_user.id)
         async with TypingWorker(self.bot, message.chat.id).typing_context():
             with tempfile.TemporaryDirectory() as temp_dir:
                 ogg_filepath = os.path.join(temp_dir, f'voice_{message.voice.file_id}.ogg')
@@ -102,7 +102,7 @@ class TelegramBot:
                 speech_text = await get_audio_speech_to_text(mp3_filename)
                 speech_text = f'speech2text:\n{speech_text}'
 
-        dialog_manager = DialogManager(self.db)
+        dialog_manager = DialogManager(self.db, user)
         await dialog_manager.process_dialog(message)
         speech_dialog_message = DialogMessage(role="user", content=speech_text)
         response = await message.reply(speech_text)
@@ -110,7 +110,7 @@ class TelegramBot:
         if user.voice_as_prompt:
             # HACK: hack with aiogram.Message to process voice as text prompt
             message.text = speech_text
-            await self.handler(message)
+            await self.handler(message, user)
         else:
             # add voice message text as context to current dialog, not as prompt
             await dialog_manager.add_message_to_dialog(speech_dialog_message, response.message_id)
@@ -128,12 +128,11 @@ class TelegramBot:
             # try to send message without parse_mode once
             return await send_message(text)
 
-    async def answer_text_message(self, message: types.Message):
-        dialog_manager = DialogManager(self.db)
+    async def answer_text_message(self, message: types.Message, user: User):
+        dialog_manager = DialogManager(self.db, user)
 
         context_dialog_messages = await dialog_manager.process_dialog(message)
         input_dialog_message = dialog_manager.prepare_input_message(message)
-        user = dialog_manager.get_user()
 
         function_storage = self.function_storage if user.use_functions else None
         chat_gpt_manager = ChatGptManager(ChatGPT(user.current_model, user.gpt_mode, function_storage), self.db)
@@ -172,22 +171,18 @@ class TelegramBot:
             await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
             await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
 
-    async def reset_dialog(self, message: types.Message):
-        user = await self.db.get_or_create_user(message.from_user.id)
-
+    async def reset_dialog(self, message: types.Message, user: User):
         await self.db.deactivate_active_dialog(user.id)
         await message.answer('👌')
 
-    async def set_current_model(self, message: types.Message):
+    async def set_current_model(self, message: types.Message, user: User):
         model = GptModel.GPT_35_TURBO if message.get_command() == '/gpt3' else GptModel.GPT_4
-        user = await self.db.get_or_create_user(message.from_user.id)
         user.current_model = model
         await self.db.update_user(user)
         await message.answer('👌')
 
-    async def get_usage(self, message: types.Message):
+    async def get_usage(self, message: types.Message, user: User):
         await self.bot.delete_message(message.chat.id, message.message_id)
-        user = await self.db.get_or_create_user(message.from_user.id)
         whisper_usage = await self.db.get_user_current_month_whisper_usage(user.id)
         whisper_price = calculate_whisper_usage_price(whisper_usage)
 

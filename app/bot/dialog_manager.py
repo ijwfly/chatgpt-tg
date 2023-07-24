@@ -2,15 +2,15 @@ from typing import List
 
 from app.bot.utils import message_is_forward
 from app.openai_helpers.chatgpt import DialogMessage
-from app.storage.db import User
+from app.storage.db import User, DB
 
 from aiogram import types
 
 
 class DialogManager:
-    def __init__(self, db):
+    def __init__(self, db: DB, user: User):
         self.db = db
-        self.user = None
+        self.user = user
         self.dialog_id = None
         self.dialog_messages = None
         self.is_subdialog = False
@@ -36,7 +36,6 @@ class DialogManager:
 
     async def process_dialog(self, message: types.Message) -> List[DialogMessage]:
         self.chat_id = message.chat.id
-        self.user = await self.db.get_or_create_user(message.from_user.id)
 
         if message.reply_to_message is not None and not message_is_forward(message):
             self.is_subdialog = True
@@ -60,13 +59,8 @@ class DialogManager:
         )
         self.dialog_messages.append(dialog_message)
 
-    def get_user(self) -> User:
-        if self.user is None:
-            raise ValueError('You must call process_main_dialog first')
-        return self.user
-
     def get_dialog_messages(self) -> List[DialogMessage]:
-        if self.user is None:
-            raise ValueError('You must call process_main_dialog first')
+        if self.dialog_messages is None:
+            raise ValueError('You must call process_dialog first')
         dialog_messages = [d.message for d in self.dialog_messages]
         return dialog_messages
