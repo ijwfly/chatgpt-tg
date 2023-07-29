@@ -1,26 +1,25 @@
-from typing import List
+from typing import Iterable
 
 import tiktoken
 
 from app.openai_helpers.chatgpt import DialogMessage
 
 
-def count_prompt_tokens(messages: List[DialogMessage], model="gpt-3.5-turbo") -> int:
-    encoding = tiktoken.encoding_for_model(model)
-
-    if model == "gpt-3.5-turbo":
+def count_prompt_tokens(messages: Iterable[DialogMessage], model="gpt-3.5-turbo") -> int:
+    if "gpt-3.5-turbo" in model:
+        model = "gpt-3.5-turbo"
         tokens_per_message = 4
         tokens_per_name = -1
-    elif model == "gpt-4":
+    elif "gpt-4" in model:
+        model = "gpt-4"
         tokens_per_message = 3
         tokens_per_name = 1
     else:
         raise ValueError(f"Unknown model: {model}")
 
-    openai_messages = []
-    for message in messages:
-        message = message.openai_message()
-        openai_messages.append(message)
+    encoding = tiktoken.encoding_for_model(model)
+
+    openai_messages = (m.openai_message() for m in messages)
 
     tokens_count = 0
     for message in openai_messages:

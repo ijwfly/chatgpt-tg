@@ -16,6 +16,7 @@ class User(pydantic.BaseModel):
     forward_as_prompt: bool
     voice_as_prompt: bool
     use_functions: bool
+    dynamic_dialog: bool
 
 
 class Dialog(pydantic.BaseModel):
@@ -58,11 +59,11 @@ class DB:
 
     async def update_user(self, user: User):
         sql = '''UPDATE chatgpttg.user 
-        SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3, voice_as_prompt = $4, use_functions = $5
-        WHERE id = $6 RETURNING *'''
+        SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
+        voice_as_prompt = $4, use_functions = $5, dynamic_dialog = $6 WHERE id = $7 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
-            user.voice_as_prompt, user.use_functions, user.id
+            user.voice_as_prompt, user.use_functions, user.dynamic_dialog, user.id,
         ))
 
     async def create_user(self, telegram_user_id):
@@ -92,15 +93,19 @@ class DB:
             result.append(record)
         return [Message(**record) for record in result]
 
-    async def get_subdialog_messages(self, tg_chat_id, tg_message_id):
+    async def get_telegram_message(self, tg_chat_id, tg_message_id):
         sql = 'SELECT * FROM chatgpttg.message WHERE tg_chat_id = $1 AND tg_message_id = $2'
         tg_message_record = await self.connection_pool.fetchrow(sql, tg_chat_id, tg_message_id)
         if tg_message_record is None:
-            raise ValueError("subdialog root message not found")
+            return None
         tg_message_record = dict(tg_message_record)
         tg_message_record['message'] = json.loads(tg_message_record['message'])
-        tg_root_message = Message(**tg_message_record)
+        return Message(**tg_message_record)
 
+    async def get_subdialog_messages(self, tg_chat_id, tg_message_id):
+        tg_root_message = await self.get_telegram_message(tg_chat_id, tg_message_id)
+        if tg_root_message is None:
+            raise ValueError("subdialog root message not found")
         sql = 'SELECT * FROM chatgpttg.message WHERE id = ANY($1::bigint[]) ORDER BY cdate ASC'
         records = await self.connection_pool.fetch(sql, tg_root_message.previous_message_ids)
         if records is None:

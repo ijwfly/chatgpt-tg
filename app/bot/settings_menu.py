@@ -5,28 +5,35 @@ from aiogram import Bot, types, Dispatcher
 from app.storage.db import User, DB
 
 
-GPT_MODELS_OPTIONS = ['gpt-3.5-turbo', 'gpt-4']
+GPT_MODELS_OPTIONS = {
+    'gpt-3.5-turbo': 'GPT-3.5',
+    'gpt-3.5-turbo-16k': 'GPT-3.5 16k',
+    'gpt-4': 'GPT-4',
+}
 
 
-class TwoOptionsSetting:
-    def __init__(self, model_field: str, option_1: str, option_2: str):
+class VisibleOptionsSetting:
+    def __init__(self, model_field: str, options):
         self.model_field = model_field
-        self.option_1 = option_1
-        self.option_2 = option_2
+        self.options = options
 
     def get_button_string(self, user: User):
         current_value = getattr(user, self.model_field)
-        if current_value == self.option_1:
-            return f"<{self.option_1}> | {self.option_2}"
-        else:
-            return f"{self.option_1} | <{self.option_2}>"
+        rendered_options = []
+        for value, display_name in self.options.items():
+            if current_value == value:
+                rendered_options.append(f"<{display_name}>")
+            else:
+                rendered_options.append(display_name)
+        return " | ".join(rendered_options)
 
     def toggle(self, user: User):
         current_value = getattr(user, self.model_field)
-        if current_value == self.option_1:
-            setattr(user, self.model_field, self.option_2)
-        else:
-            setattr(user, self.model_field, self.option_1)
+        options_values = list(self.options.keys())
+        current_index = options_values.index(current_value)
+        new_index = (current_index + 1) % len(options_values)
+        new_value = options_values[new_index]
+        setattr(user, self.model_field, new_value)
         return user
 
 
@@ -76,11 +83,12 @@ class Settings:
         self.dispatcher = dispatcher
         self.db = db
         self.settings = {
-            'current_model': TwoOptionsSetting('current_model', *GPT_MODELS_OPTIONS),
+            'current_model': VisibleOptionsSetting('current_model', GPT_MODELS_OPTIONS),
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
             'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
+            'dynamic_dialog': OnOffSetting('Dynamic dialog', 'dynamic_dialog'),
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data in self.settings or c.data == 'hide')
 

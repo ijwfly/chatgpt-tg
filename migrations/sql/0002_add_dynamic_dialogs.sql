@@ -1,0 +1,1 @@
+ALTER TABLE chatgpttg.user ADD COLUMN IF NOT EXISTS dynamic_dialog BOOLEAN DEFAULT FALSE;

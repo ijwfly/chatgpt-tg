@@ -1,10 +1,49 @@
+import dataclasses
 from typing import List
 
 from aiogram import types
 
-from app.bot.dialog_manager import DialogManager
+from app.bot.dialog_manager import DynamicDialogManager, DialogManager
 from app.openai_helpers.chatgpt import DialogMessage
 from app.storage.db import DB, User
+
+
+@dataclasses.dataclass
+class ContextConfiguration:
+    model_name: str
+
+    # long term memory is based on embedding context search
+    long_term_memory_tokens: int
+    # mid term memory is used for storing summaries of short term memory
+    mid_term_memory_tokens: int
+    # short term memory is used for storing last messages
+    short_term_memory_tokens: int
+
+    @staticmethod
+    def get_config(model: str):
+        if model == 'gpt-3.5-turbo':
+            return ContextConfiguration(
+                model_name=model,
+                long_term_memory_tokens=512,
+                mid_term_memory_tokens=512,
+                short_term_memory_tokens=2560,
+            )
+        elif model == 'gpt-3.5-turbo-16k':
+            return ContextConfiguration(
+                model_name=model,
+                long_term_memory_tokens=1024,
+                mid_term_memory_tokens=1024,
+                short_term_memory_tokens=4096,
+            )
+        elif model == 'gpt-4':
+            return ContextConfiguration(
+                model_name=model,
+                long_term_memory_tokens=512,
+                mid_term_memory_tokens=1024,
+                short_term_memory_tokens=2048,
+            )
+        else:
+            raise ValueError(f'Unknown model name: {model}')
 
 
 class ContextManager:
@@ -14,11 +53,24 @@ class ContextManager:
         self.message = message
         self.dialog_manager = None
 
-    async def process_dialog(self):
+    async def process_dynamic_dialog(self) -> DynamicDialogManager:
+        context_configuration = ContextConfiguration.get_config(self.user.current_model)
+        dialog_manager = DynamicDialogManager(self.db, self.user, context_configuration)
+        await dialog_manager.process_dialog(self.message)
+        self.dialog_manager = dialog_manager
+        return dialog_manager
+
+    async def process_classic_dialog(self) -> DialogManager:
         dialog_manager = DialogManager(self.db, self.user)
         await dialog_manager.process_dialog(self.message)
         self.dialog_manager = dialog_manager
         return dialog_manager
+
+    async def process_dialog(self):
+        if self.user.dynamic_dialog:
+            return await self.process_dynamic_dialog()
+        else:
+            return await self.process_classic_dialog()
 
     async def process(self):
         await self.process_dialog()
