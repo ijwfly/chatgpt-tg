@@ -116,6 +116,30 @@ class DB:
         result.append(tg_root_message)
         return result
 
+    async def get_messages_by_ids(self, message_ids: List[int]):
+        sql = 'SELECT * FROM chatgpttg.message WHERE id = ANY($1::bigint[]) ORDER BY cdate ASC'
+        records = await self.connection_pool.fetch(sql, message_ids)
+        if records is None:
+            return []
+
+        result = []
+        for record in records:
+            record = dict(record)
+            record['message'] = json.loads(record['message'])
+            result.append(record)
+
+        result = [Message(**record) for record in result]
+        return result
+
+    async def get_last_message(self, user_id, tg_chat_id):
+        sql = 'SELECT * FROM chatgpttg.message WHERE user_id = $1 AND tg_chat_id = $2 ORDER BY cdate DESC LIMIT 1'
+        record = await self.connection_pool.fetchrow(sql, user_id, tg_chat_id)
+        if record is None:
+            return None
+        record = dict(record)
+        record['message'] = json.loads(record['message'])
+        return Message(**record)
+
     async def create_dialog_message(self, dialog_id, user_id, tg_chat_id, tg_message_id, message: DialogMessage,
                                     previous_messages: List[DialogMessage] = None, is_subdialog=False):
         if previous_messages is None:
