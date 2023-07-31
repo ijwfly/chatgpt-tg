@@ -1,19 +1,23 @@
 # chatgpt-tg
 
-This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, a state-of-the-art language models by OpenAI.
+This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, state-of-the-art language models by OpenAI.
 
-**Key Features**
+🔑 **Key Features**
 
-1. **Model Support**: The bot supports both gpt-3.5-turbo and gpt-4 models with the capability to switch between them on-the-fly.
-2. **Customizable System Prompts**: Enables the user to initiate conversations with custom system prompts to shape the bot's behavior.
-3. **Conversation Context Preservation**: The bot retains the context of the ongoing dialogue to provide relevant and cohesive responses.
+1. **Dynamic Dialog Management**: In dynamic dialog mode, the bot automatically manages the context of the conversation, eliminating the need for the user to manually reset the context using the /reset command. This feature enhances the user experience by making the bot more efficient and user-friendly.
+2. **Automatic Context Summarization**: In case the context size exceeds the model's maximum limit, the bot automatically summarizes the context to ensure the continuity of the conversation (works only in dynamic dialog mode).
+3. **Functions Support**: You can embed functions within the bot. This allows the GPT to invoke these functions when needed, based on the context. The description of the function and its parameters are extracted from the function's docstring.
 4. **Sub-dialogue Mechanism**: "Chat Thread Isolation" feature, where if a message is replied to within the bot, only the corresponding message chain is considered as context. This adds an extra level of context control for the users.
 5. **Voice Recognition**: The bot is capable of transcribing voice messages, allowing users to use speech as context or prompt for ChatGPT.
-6. **Functions Support**: You can embed functions within bot. This allows the GPT to invoke these functions when needed, based on the context. The description of the function and its parameters are extracted from the function's docstring.
+6. **API Usage Tracking**: The bot includes a function that tracks and provides information about the current month's usage of the OpenAI API. This allows users to monitor and manage their API usage costs.
+7. **Model Support**: The bot supports both gpt-3.5-turbo and gpt-4 models with the capability to switch between them on-the-fly.
+8. **Customizable System Prompts**: Enables the user to initiate conversations with custom system prompts to shape the bot's behavior.
+9. **Standard Dialog Management**: The bot also supports the standard dialog management mechanism where an ongoing dialog exists and the context needs to be explicitly reset. This feature provides users with greater control over the bot, allowing them to manually manage the context of the conversation when necessary.
+10. **Context Window Size Customization**: The bot provides a feature to customize the maximum context window size. This allows users to set the context size for gpt-3.5-turbo and gpt-4 models individually, enabling more granular control over usage costs. This feature is particularly useful for managing API usage and optimizing the balance between cost and performance.
 
 The purpose of this telegram bot is to create a ChatGpt-like user-friendly platform for interacting with GPT models. The repository is open for exploration, feedback, and contributions.
 
-**Installation**
+🔧 **Installation**
 
 To get this bot up and running, follow these steps:
 
