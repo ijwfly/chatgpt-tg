@@ -25,7 +25,6 @@ class Dialog(pydantic.BaseModel):
     chat_id: int
     cdate: datetime
     is_active: bool
-    model: str
 
 
 class Message(pydantic.BaseModel):
@@ -33,9 +32,10 @@ class Message(pydantic.BaseModel):
     dialog_id: int
     user_id: int
     message: DialogMessage
-    cdate: datetime
-    previous_message_ids: List[int]
-    is_subdialog: bool
+    cdate: datetime  # message creation date
+    activation_dtime: datetime  # last interaction with message
+    previous_message_ids: List[int]  # ids of previous messages in the branch of subdialog
+    is_subdialog: bool  # is this message a part of subdialog (applicable only for default dialog manager)
     tg_chat_id: int
     tg_message_id: int
 
@@ -77,8 +77,8 @@ class DB:
             return None
         return Dialog(**record)
 
-    async def create_active_dialog(self, user_id, chat_id, model=GptModel.GPT_35_TURBO):
-        sql = 'INSERT INTO chatgpttg.dialog (user_id, chat_id, model) VALUES ($1, $2, $3) RETURNING *'
+    async def create_active_dialog(self, user_id, chat_id):
+        sql = 'INSERT INTO chatgpttg.dialog (user_id, chat_id) VALUES ($1, $2) RETURNING *'
         return Dialog(**await self.connection_pool.fetchrow(sql, user_id, chat_id, model))
 
     async def get_dialog_messages(self, dialog_id):
@@ -144,6 +144,10 @@ class DB:
         record = dict(record)
         record['message'] = json.loads(record['message'])
         return Message(**record)
+
+    async def update_activation_dtime(self, message_ids: List[int]):
+        sql = 'UPDATE chatgpttg.message SET activation_dtime = NOW() WHERE id = ANY($1::bigint[])'
+        await self.connection_pool.execute(sql, message_ids)
 
     async def create_dialog_message(self, dialog_id, user_id, tg_chat_id, tg_message_id, message: DialogMessage,
                                     previous_messages: List[DialogMessage] = None, is_subdialog=False):

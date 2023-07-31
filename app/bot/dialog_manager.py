@@ -84,8 +84,10 @@ class DynamicDialogManager:
         self.chat_id = message.chat.id
 
         if message.reply_to_message is not None and not message_is_forward(message):
+            is_reply = True
             db_message = await self.db.get_telegram_message(self.chat_id, message.reply_to_message.message_id)
         else:
+            is_reply = False
             db_message = await self.db.get_last_message(self.user.id, self.chat_id)
 
         if not db_message:
@@ -95,10 +97,16 @@ class DynamicDialogManager:
         dialog_messages = await self.db.get_messages_by_ids(db_message.previous_message_ids)
         dialog_messages.append(db_message)
 
-        dialog_messages = self.filter_old_messages(dialog_messages)
-        if not dialog_messages:
-            self.dialog_messages = []
-            return []
+        if is_reply:
+            # if it's a reply, we don't filter old messages
+            # instead we update activation time of all messages to be included in context
+            await self.db.update_activation_dtime([m.id for m in dialog_messages])
+        else:
+            # if it's not a reply, we filter old messages from context
+            dialog_messages = self.filter_old_messages(dialog_messages)
+            if not dialog_messages:
+                self.dialog_messages = []
+                return []
 
         if count_prompt_tokens(m.message for m in dialog_messages) >= self.context_configuration.short_term_memory_tokens:
             to_summarize, to_process = self.split_context_by_token_length(dialog_messages)
@@ -110,9 +118,12 @@ class DynamicDialogManager:
 
     @staticmethod
     def filter_old_messages(messages: List[Message]):
+        """
+        Filter messages by activation_dtime
+        """
         tz = datetime.datetime.now().astimezone().tzinfo
         time_window = datetime.datetime.now(tz) - datetime.timedelta(seconds=settings.MESSAGE_EXPIRATION_WINDOW)
-        return list(filter(lambda m: m.cdate >= time_window, messages))
+        return list(filter(lambda m: m.activation_dtime >= time_window, messages))
 
     def split_context_by_token_length(self, messages: List[Message]):
         token_length = self.context_configuration.short_term_memory_tokens / 2
@@ -125,7 +136,14 @@ class DynamicDialogManager:
             return messages, []
 
     async def summarize_messages(self, messages: List[Message]):
-        summarized = await summarize_messages([m.message for m in messages], self.user.current_model, self.context_configuration.mid_term_memory_tokens)
+        summarized, completion_usage = await summarize_messages(
+            [m.message for m in messages], self.user.current_model, self.context_configuration.mid_term_memory_tokens
+        )
+        await self.db.create_completion_usage(
+            self.user.id, completion_usage.prompt_tokens, completion_usage.completion_tokens,
+            completion_usage.total_tokens, completion_usage.model
+        )
+
         summarized_message = DialogUtils.prepare_user_message(f"Summarized previous conversation:\n{summarized}")
         # TODO: make tg_message_id nullable
         tg_message_id = -1
