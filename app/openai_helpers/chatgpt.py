@@ -97,3 +97,18 @@ class ChatGPT:
         messages.append(message.openai_message())
 
         return messages
+
+
+async def summarize_messages(messages: List[DialogMessage], model: str, summary_max_length: int) -> (str, CompletionUsage):
+    prompt_messages = [m.openai_message() for m in messages]
+    prompt_messages += [{
+        "role": "user",
+        "content": f"Summarize this conversation in {summary_max_length} characters or less. Divide different themes explicitly with new lines. Return only text of summary, nothing else.",
+    }]
+    resp = await openai.ChatCompletion.acreate(
+        model=model,
+        messages=prompt_messages,
+        temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
+    )
+    completion_usage = CompletionUsage(model=model, **resp.usage)
+    return resp.choices[0].message.content, completion_usage

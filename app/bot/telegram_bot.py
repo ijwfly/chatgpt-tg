@@ -3,15 +3,16 @@ import tempfile
 
 import settings
 from app.bot.chatgpt_manager import ChatGptManager
-from app.bot.dialog_manager import DialogManager
+from app.bot.dialog_manager import DialogUtils
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward
+from app.context.context_manager import build_context_manager
 from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory, User
-from app.openai_helpers.chatgpt import ChatGPT, GptModel, DialogMessage
+from app.openai_helpers.chatgpt import ChatGPT, GptModel
 
 from aiogram.utils.exceptions import CantParseEntities
 from aiogram import types, Bot, Dispatcher
@@ -55,21 +56,18 @@ class TelegramBot:
         if message.text is None:
             return
 
-        if message_is_forward(message):
+        if message_is_forward(message) and not user.forward_as_prompt:
             await self.handle_forward_text(message, user)
             return
 
         try:
-            await self.answer_text_message(message, user)
+            async with TypingWorker(self.bot, message.chat.id).typing_context():
+                await self.answer_text_message(message, user)
         except Exception as e:
             await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
             raise
 
     async def handle_forward_text(self, message: types.Message, user: User):
-        if user.forward_as_prompt:
-            await self.answer_text_message(message, user)
-            return
-
         # add forwarded text as context to current dialog, not as prompt
         if message.forward_from:
             username = get_username(message.forward_from)
@@ -79,10 +77,9 @@ class TelegramBot:
             username = None
         forwarded_text = f'{username}:\n{message.text}' if username else message.text
 
-        dialog_manager = DialogManager(self.db, user)
-        await dialog_manager.process_dialog(message)
-        forward_dialog_message = DialogMessage(role="user", content=forwarded_text)
-        await dialog_manager.add_message_to_dialog(forward_dialog_message, message.message_id)
+        context_manager = await build_context_manager(self.db, user, message)
+        forward_dialog_message = DialogUtils.prepare_user_message(forwarded_text)
+        await context_manager.add_message(forward_dialog_message, message.message_id)
 
     async def handle_voice(self, message: types.Message, user: User):
         file = await self.bot.get_file(message.voice.file_id)
@@ -102,9 +99,6 @@ class TelegramBot:
                 speech_text = await get_audio_speech_to_text(mp3_filename)
                 speech_text = f'speech2text:\n{speech_text}'
 
-        dialog_manager = DialogManager(self.db, user)
-        await dialog_manager.process_dialog(message)
-        speech_dialog_message = DialogMessage(role="user", content=speech_text)
         response = await message.reply(speech_text)
 
         if user.voice_as_prompt:
@@ -113,7 +107,9 @@ class TelegramBot:
             await self.handler(message, user)
         else:
             # add voice message text as context to current dialog, not as prompt
-            await dialog_manager.add_message_to_dialog(speech_dialog_message, response.message_id)
+            context_manager = await build_context_manager(self.db, user, message)
+            speech_dialog_message = DialogUtils.prepare_user_message(speech_text)
+            await context_manager.add_message(speech_dialog_message, response.message_id)
 
     @staticmethod
     async def send_telegram_message(message: types.Message, text: str, parse_mode=None):
@@ -129,49 +125,47 @@ class TelegramBot:
             return await send_message(text)
 
     async def answer_text_message(self, message: types.Message, user: User):
-        dialog_manager = DialogManager(self.db, user)
-
-        context_dialog_messages = await dialog_manager.process_dialog(message)
-        input_dialog_message = dialog_manager.prepare_input_message(message)
+        context_manager = await build_context_manager(self.db, user, message)
+        context_dialog_messages = await context_manager.get_context_messages()
 
         function_storage = self.function_storage if user.use_functions else None
         chat_gpt_manager = ChatGptManager(ChatGPT(user.current_model, user.gpt_mode, function_storage), self.db)
 
-        async with TypingWorker(self.bot, message.from_user.id).typing_context():
-            response_dialog_message = await chat_gpt_manager.send_user_message(user, input_dialog_message, context_dialog_messages)
+        user_dialog_message = DialogUtils.prepare_user_message(message.text)
+        response_dialog_message = await chat_gpt_manager.send_user_message(user, user_dialog_message, context_dialog_messages)
 
-        await self.handle_gpt_response(user, chat_gpt_manager, dialog_manager, message, input_dialog_message, response_dialog_message)
+        await self.handle_gpt_response(user, chat_gpt_manager, context_manager, message, user_dialog_message, response_dialog_message)
 
-    async def handle_gpt_response(self, user, chat_gpt_manager, dialog_manager, message, input_dialog_message, response_dialog_message):
+    async def handle_gpt_response(self, user, chat_gpt_manager, context_manager, message, user_dialog_message, response_dialog_message):
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
-            async with TypingWorker(self.bot, message.from_user.id).typing_context():
-                function_response_raw = await self.function_storage.run_function(function_name, function_args)
+            function_response_raw = await self.function_storage.run_function(function_name, function_args)
 
-                await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
+            context_dialog_messages = await context_manager.add_message(user_dialog_message, message.message_id)
 
-                function_response = dialog_manager.prepare_function_response(function_name, function_response_raw)
-                context_dialog_messages = dialog_manager.get_dialog_messages()
+            function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
+            response_dialog_message = await chat_gpt_manager.send_user_message(user, function_response, context_dialog_messages)
+            function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
+            function_response_tg_message = await self.send_telegram_message(message, function_response_text)
+            await context_manager.add_message(function_response, function_response_tg_message.message_id)
 
-                response_dialog_message = await chat_gpt_manager.send_user_message(user, function_response, context_dialog_messages)
-                function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
-                function_response_tg_message = await self.send_telegram_message(message, function_response_text)
-                await dialog_manager.add_message_to_dialog(function_response, function_response_tg_message.message_id)
-
-                if response_dialog_message.content:
-                    response = await self.send_telegram_message(message, response_dialog_message.content)
-                    await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
-                else:
-                    await self.handle_gpt_response(user, chat_gpt_manager, dialog_manager, message, input_dialog_message, response_dialog_message)
+            if response_dialog_message.content:
+                response = await self.send_telegram_message(message, response_dialog_message.content)
+                await context_manager.add_message(response_dialog_message, response.message_id)
+            else:
+                await self.handle_gpt_response(user, chat_gpt_manager, context_manager, message, user_dialog_message, response_dialog_message)
         else:
             code_fragments = detect_and_extract_code(response_dialog_message.content)
             parse_mode = types.ParseMode.MARKDOWN if code_fragments else None
             response = await self.send_telegram_message(message, response_dialog_message.content, parse_mode)
-            await dialog_manager.add_message_to_dialog(input_dialog_message, message.message_id)
-            await dialog_manager.add_message_to_dialog(response_dialog_message, response.message_id)
+            await context_manager.add_message(user_dialog_message, message.message_id)
+            await context_manager.add_message(response_dialog_message, response.message_id)
 
     async def reset_dialog(self, message: types.Message, user: User):
+        if user.dynamic_dialog:
+            await message.answer("You don't need to reset dynamic dialog")
+            return
         await self.db.deactivate_active_dialog(user.id)
         await message.answer('👌')
 
@@ -192,11 +186,11 @@ class TelegramBot:
         for usage in completion_usages:
             price = calculate_completion_usage_price(usage.prompt_tokens, usage.completion_tokens, usage.model)
             total += price
-            result.append(f'{usage.model}: {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${price}')
+            result.append(f'*{usage.model}:* {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${price}')
         if whisper_price:
-            result.append(f'Speech2Text: {whisper_usage} seconds, ${whisper_price}')
-        result.append(f'Total: ${total}')
-        await self.send_telegram_message(message, '\n'.join(result))
+            result.append(f'*Speech2Text:* {whisper_usage} seconds, ${whisper_price}')
+        result.append(f'*Total:* ${total}')
+        await self.send_telegram_message(message, '\n'.join(result), types.ParseMode.MARKDOWN)
 
     async def open_settings(self, message: types.Message):
         await self.bot.delete_message(

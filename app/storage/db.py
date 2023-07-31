@@ -16,6 +16,7 @@ class User(pydantic.BaseModel):
     forward_as_prompt: bool
     voice_as_prompt: bool
     use_functions: bool
+    dynamic_dialog: bool
 
 
 class Dialog(pydantic.BaseModel):
@@ -24,7 +25,6 @@ class Dialog(pydantic.BaseModel):
     chat_id: int
     cdate: datetime
     is_active: bool
-    model: str
 
 
 class Message(pydantic.BaseModel):
@@ -32,9 +32,10 @@ class Message(pydantic.BaseModel):
     dialog_id: int
     user_id: int
     message: DialogMessage
-    cdate: datetime
-    previous_message_ids: List[int]
-    is_subdialog: bool
+    cdate: datetime  # message creation date
+    activation_dtime: datetime  # last interaction with message
+    previous_message_ids: List[int]  # ids of previous messages in the branch of subdialog
+    is_subdialog: bool  # is this message a part of subdialog (applicable only for default dialog manager)
     tg_chat_id: int
     tg_message_id: int
 
@@ -58,11 +59,11 @@ class DB:
 
     async def update_user(self, user: User):
         sql = '''UPDATE chatgpttg.user 
-        SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3, voice_as_prompt = $4, use_functions = $5
-        WHERE id = $6 RETURNING *'''
+        SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
+        voice_as_prompt = $4, use_functions = $5, dynamic_dialog = $6 WHERE id = $7 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
-            user.voice_as_prompt, user.use_functions, user.id
+            user.voice_as_prompt, user.use_functions, user.dynamic_dialog, user.id,
         ))
 
     async def create_user(self, telegram_user_id):
@@ -76,8 +77,8 @@ class DB:
             return None
         return Dialog(**record)
 
-    async def create_active_dialog(self, user_id, chat_id, model=GptModel.GPT_35_TURBO):
-        sql = 'INSERT INTO chatgpttg.dialog (user_id, chat_id, model) VALUES ($1, $2, $3) RETURNING *'
+    async def create_active_dialog(self, user_id, chat_id):
+        sql = 'INSERT INTO chatgpttg.dialog (user_id, chat_id) VALUES ($1, $2) RETURNING *'
         return Dialog(**await self.connection_pool.fetchrow(sql, user_id, chat_id, model))
 
     async def get_dialog_messages(self, dialog_id):
@@ -92,15 +93,19 @@ class DB:
             result.append(record)
         return [Message(**record) for record in result]
 
-    async def get_subdialog_messages(self, tg_chat_id, tg_message_id):
+    async def get_telegram_message(self, tg_chat_id, tg_message_id):
         sql = 'SELECT * FROM chatgpttg.message WHERE tg_chat_id = $1 AND tg_message_id = $2'
         tg_message_record = await self.connection_pool.fetchrow(sql, tg_chat_id, tg_message_id)
         if tg_message_record is None:
-            raise ValueError("subdialog root message not found")
+            return None
         tg_message_record = dict(tg_message_record)
         tg_message_record['message'] = json.loads(tg_message_record['message'])
-        tg_root_message = Message(**tg_message_record)
+        return Message(**tg_message_record)
 
+    async def get_subdialog_messages(self, tg_chat_id, tg_message_id):
+        tg_root_message = await self.get_telegram_message(tg_chat_id, tg_message_id)
+        if tg_root_message is None:
+            raise ValueError("subdialog root message not found")
         sql = 'SELECT * FROM chatgpttg.message WHERE id = ANY($1::bigint[]) ORDER BY cdate ASC'
         records = await self.connection_pool.fetch(sql, tg_root_message.previous_message_ids)
         if records is None:
@@ -115,6 +120,34 @@ class DB:
         result = [Message(**record) for record in result]
         result.append(tg_root_message)
         return result
+
+    async def get_messages_by_ids(self, message_ids: List[int]):
+        sql = 'SELECT * FROM chatgpttg.message WHERE id = ANY($1::bigint[]) ORDER BY cdate ASC'
+        records = await self.connection_pool.fetch(sql, message_ids)
+        if records is None:
+            return []
+
+        result = []
+        for record in records:
+            record = dict(record)
+            record['message'] = json.loads(record['message'])
+            result.append(record)
+
+        result = [Message(**record) for record in result]
+        return result
+
+    async def get_last_message(self, user_id, tg_chat_id):
+        sql = 'SELECT * FROM chatgpttg.message WHERE user_id = $1 AND tg_chat_id = $2 ORDER BY cdate DESC LIMIT 1'
+        record = await self.connection_pool.fetchrow(sql, user_id, tg_chat_id)
+        if record is None:
+            return None
+        record = dict(record)
+        record['message'] = json.loads(record['message'])
+        return Message(**record)
+
+    async def update_activation_dtime(self, message_ids: List[int]):
+        sql = 'UPDATE chatgpttg.message SET activation_dtime = NOW() WHERE id = ANY($1::bigint[])'
+        await self.connection_pool.execute(sql, message_ids)
 
     async def create_dialog_message(self, dialog_id, user_id, tg_chat_id, tg_message_id, message: DialogMessage,
                                     previous_messages: List[DialogMessage] = None, is_subdialog=False):
