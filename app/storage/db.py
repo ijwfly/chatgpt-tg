@@ -185,9 +185,10 @@ class DB:
             WHERE user_id = $1 AND date_trunc('month', cdate) = date_trunc('month', current_date)
         '''
         record = await self.connection_pool.fetchrow(sql, user_id)
-        if record is None:
+        audio_seconds = record['audio_seconds']
+        if audio_seconds is None:
             return 0
-        return record['audio_seconds']
+        return audio_seconds
 
     async def get_user_current_month_completion_usage(self, user_id):
         sql = '''

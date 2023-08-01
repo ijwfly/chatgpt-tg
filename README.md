@@ -4,7 +4,7 @@ This GitHub repository contains the implementation of a telegram bot, designed t
 
 🔑 **Key Features**
 
-1. **Dynamic Dialog Management**: In dynamic dialog mode, the bot automatically manages the context of the conversation, eliminating the need for the user to manually reset the context using the /reset command. This feature enhances the user experience by making the bot more efficient and user-friendly.
+1. **Dynamic Dialog Management**: In dynamic dialog mode, the bot automatically manages the context of the conversation, eliminating the need for the user to manually reset the context using the /reset command.
 2. **Automatic Context Summarization**: In case the context size exceeds the model's maximum limit, the bot automatically summarizes the context to ensure the continuity of the conversation (works only in dynamic dialog mode).
 3. **Functions Support**: You can embed functions within the bot. This allows the GPT to invoke these functions when needed, based on the context. The description of the function and its parameters are extracted from the function's docstring.
 4. **Sub-dialogue Mechanism**: "Chat Thread Isolation" feature, where if a message is replied to within the bot, only the corresponding message chain is considered as context. This adds an extra level of context control for the users.
