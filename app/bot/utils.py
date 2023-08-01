@@ -81,3 +81,9 @@ def get_username(user: types.User):
 
 def message_is_forward(message: types.Message):
     return message.forward_from or message.forward_from_chat or message.forward_sender_name
+
+
+def get_hide_button():
+    keyboard = types.InlineKeyboardMarkup(1)
+    keyboard.add(types.InlineKeyboardButton(text='Hide', callback_data='hide'))
+    return keyboard

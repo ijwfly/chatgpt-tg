@@ -90,7 +90,7 @@ class Settings:
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
             'dynamic_dialog': OnOffSetting('Dynamic dialog', 'dynamic_dialog'),
         }
-        self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data in self.settings or c.data == 'hide')
+        self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data in self.settings or c.data == 'settings.hide')
 
     async def send_settings(self, message: types.Message):
         user = await self.db.get_or_create_user(message.from_user.id)
@@ -101,7 +101,7 @@ class Settings:
         for setting_name, setting_obj in self.settings.items():
             text = setting_obj.get_button_string(user)
             keyboard.add(types.InlineKeyboardButton(text=text, callback_data=setting_name))
-        keyboard.add(types.InlineKeyboardButton(text='Hide settings', callback_data='hide'))
+        keyboard.add(types.InlineKeyboardButton(text='Hide settings', callback_data='settings.hide'))
         return keyboard
 
     def toggle_setting(self, user: User, setting: str):
@@ -110,7 +110,7 @@ class Settings:
         return user
 
     async def process_callback(self, callback_query: types.CallbackQuery):
-        if callback_query.data == 'hide':
+        if callback_query.data == 'settings.hide':
             await self.bot.delete_message(
                 chat_id=callback_query.from_user.id,
                 message_id=callback_query.message.message_id

@@ -6,7 +6,7 @@ from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.dialog_manager import DialogUtils
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
-from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward
+from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward, get_hide_button
 from app.context.context_manager import build_context_manager
 from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
@@ -31,6 +31,7 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4'])
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.handler)
+        self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data == 'hide')
 
         self.function_storage = function_storage
 
@@ -51,6 +52,14 @@ class TelegramBot:
 
     def run(self):
         executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
+
+    async def process_callback(self, callback_query: types.CallbackQuery):
+        if callback_query.data == 'hide':
+            await self.bot.delete_message(
+                chat_id=callback_query.from_user.id,
+                message_id=callback_query.message.message_id
+            )
+            await self.bot.answer_callback_query(callback_query.id)
 
     async def handler(self, message: types.Message, user: User):
         if message.text is None:
@@ -112,17 +121,17 @@ class TelegramBot:
             await context_manager.add_message(speech_dialog_message, response.message_id)
 
     @staticmethod
-    async def send_telegram_message(message: types.Message, text: str, parse_mode=None):
+    async def send_telegram_message(message: types.Message, text: str, parse_mode=None, reply_markup=None):
         if message.reply_to_message is None:
             send_message = message.answer
         else:
             send_message = message.reply
 
         try:
-            return await send_message(text, parse_mode=parse_mode)
+            return await send_message(text, parse_mode=parse_mode, reply_markup=reply_markup)
         except CantParseEntities:
             # try to send message without parse_mode once
-            return await send_message(text)
+            return await send_message(text, reply_markup=reply_markup)
 
     async def answer_text_message(self, message: types.Message, user: User):
         context_manager = await build_context_manager(self.db, user, message)
@@ -164,6 +173,7 @@ class TelegramBot:
 
     async def reset_dialog(self, message: types.Message, user: User):
         if user.dynamic_dialog:
+            # TODO: add reset mechanism for dynamic_dialog
             await message.answer("You don't need to reset dynamic dialog")
             return
         await self.db.deactivate_active_dialog(user.id)
@@ -190,11 +200,13 @@ class TelegramBot:
         if whisper_price:
             result.append(f'*Speech2Text:* {whisper_usage} seconds, ${whisper_price}')
         result.append(f'*Total:* ${total}')
-        await self.send_telegram_message(message, '\n'.join(result), types.ParseMode.MARKDOWN)
+        await self.send_telegram_message(
+            message, '\n'.join(result), types.ParseMode.MARKDOWN, reply_markup=get_hide_button()
+        )
 
     async def open_settings(self, message: types.Message):
         await self.bot.delete_message(
             chat_id=message.from_user.id,
-            message_id=message.message_id
+            message_id=message.message_id,
         )
         await self.settings.send_settings(message)
