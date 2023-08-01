@@ -172,12 +172,8 @@ class TelegramBot:
             await context_manager.add_message(response_dialog_message, response.message_id)
 
     async def reset_dialog(self, message: types.Message, user: User):
-        if user.dynamic_dialog:
-            # TODO: add reset mechanism for dynamic_dialog
-            await message.answer("You don't need to reset dynamic dialog")
-            return
-        await self.db.deactivate_active_dialog(user.id)
-        await message.answer('👌')
+        # TODO: add reset mechanism for dynamic_dialog
+        await message.answer("You don't need to reset dynamic dialog")
 
     async def set_current_model(self, message: types.Message, user: User):
         model = GptModel.GPT_35_TURBO if message.get_command() == '/gpt3' else GptModel.GPT_4
