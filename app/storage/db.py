@@ -79,7 +79,7 @@ class DB:
 
     async def create_active_dialog(self, user_id, chat_id):
         sql = 'INSERT INTO chatgpttg.dialog (user_id, chat_id) VALUES ($1, $2) RETURNING *'
-        return Dialog(**await self.connection_pool.fetchrow(sql, user_id, chat_id, model))
+        return Dialog(**await self.connection_pool.fetchrow(sql, user_id, chat_id))
 
     async def get_dialog_messages(self, dialog_id):
         sql = 'SELECT * FROM chatgpttg.message WHERE dialog_id = $1 AND is_subdialog = FALSE ORDER BY cdate ASC'
