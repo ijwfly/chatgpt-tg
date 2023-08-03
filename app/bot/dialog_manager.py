@@ -5,7 +5,7 @@ import settings
 from app.bot.utils import message_is_forward
 from app.openai_helpers.chatgpt import DialogMessage, summarize_messages
 from app.openai_helpers.count_tokens import count_prompt_tokens
-from app.storage.db import User, DB, Message
+from app.storage.db import User, DB, Message, MessageType
 
 from aiogram import types
 
@@ -28,7 +28,7 @@ class DialogManager:
             is_reply = False
             db_message = await self.db.get_last_message(self.user.id, self.chat_id)
 
-        if not db_message:
+        if not db_message or db_message.message_type == MessageType.RESET:
             self.dialog_messages = []
             return []
 
@@ -83,9 +83,10 @@ class DialogManager:
         )
 
         summarized_message = DialogUtils.prepare_user_message(f"Summarized previous conversation:\n{summarized}")
-        # TODO: make tg_message_id nullable
         tg_message_id = -1
-        message = await self.db.create_message(self.user.id, self.chat_id, tg_message_id, summarized_message, [])
+        message = await self.db.create_message(
+            self.user.id, self.chat_id, tg_message_id, summarized_message, [], MessageType.SUMMARY
+        )
         return message
 
     async def add_message_to_dialog(self, dialog_message: DialogMessage, tg_message_id: id) -> List[DialogMessage]:

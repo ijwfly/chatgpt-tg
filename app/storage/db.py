@@ -1,11 +1,12 @@
 import json
 from datetime import datetime
+from enum import Enum
 from typing import List
 
 import asyncpg
 import pydantic
 
-from app.openai_helpers.chatgpt import DialogMessage, GptModel, CompletionUsage
+from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage
 
 
 class User(pydantic.BaseModel):
@@ -18,6 +19,12 @@ class User(pydantic.BaseModel):
     use_functions: bool
 
 
+class MessageType(Enum):
+    MESSAGE = 'message'
+    SUMMARY = 'summary'
+    RESET = 'reset'
+
+
 class Message(pydantic.BaseModel):
     id: int
     user_id: int
@@ -27,6 +34,7 @@ class Message(pydantic.BaseModel):
     previous_message_ids: List[int]  # ids of previous messages in the branch of subdialog
     tg_chat_id: int
     tg_message_id: int
+    message_type: MessageType
 
 
 class DB:
@@ -97,19 +105,26 @@ class DB:
         await self.connection_pool.execute(sql, message_ids)
 
     async def create_message(self, user_id, tg_chat_id, tg_message_id, message: DialogMessage,
-                             previous_messages: List[DialogMessage] = None):
+                             previous_messages: List[DialogMessage] = None, message_type: MessageType = MessageType.MESSAGE):
         if previous_messages is None:
             previous_messages = []
 
-        sql = 'INSERT INTO chatgpttg.message (user_id, message, previous_message_ids, tg_chat_id, tg_message_id) VALUES ($1, $2, $3, $4, $5) RETURNING *'
+        sql = 'INSERT INTO chatgpttg.message (user_id, message, previous_message_ids, tg_chat_id, tg_message_id, message_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *'
         openai_message = json.dumps(message.openai_message())
         previous_message_ids = [m.id for m in previous_messages]
 
         record = await self.connection_pool.fetchrow(sql, user_id, openai_message, previous_message_ids,
-                                                     tg_chat_id, tg_message_id)
+                                                     tg_chat_id, tg_message_id, message_type.value)
         record = dict(record)
         record['message'] = json.loads(record['message'])
         return Message(**record)
+
+    async def create_reset_message(self, user_id, tg_chat_id):
+        tg_message_id = -1
+        message = '{}'
+        sql = 'INSERT INTO chatgpttg.message (user_id, tg_chat_id, tg_message_id, message, message_type) VALUES ($1, $2, $3, $4, $5) RETURNING *'
+        await self.connection_pool.fetchrow(sql, user_id, tg_chat_id, tg_message_id, message, 'reset')
+        return
 
     async def create_completion_usage(self, user_id, prompt_tokens, completion_tokens, total_tokens, model) -> None:
         sql = 'INSERT INTO chatgpttg.completion_usage (user_id, prompt_tokens, completion_tokens, total_tokens, model) VALUES ($1, $2, $3, $4, $5)'
