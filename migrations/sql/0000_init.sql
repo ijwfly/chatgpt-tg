@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS chatgpttg.user
     gpt_mode text NOT NULL DEFAULT 'assistant',
     forward_as_prompt boolean NOT NULL DEFAULT false,
     voice_as_prompt boolean NOT NULL DEFAULT true,
-    use_functions boolean NOT NULL DEFAULT false
+    use_functions boolean NOT NULL DEFAULT true
 );
 
 CREATE INDEX IF NOT EXISTS user_telegram_id_idx ON chatgpttg.user USING hash(telegram_id);

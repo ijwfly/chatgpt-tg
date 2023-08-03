@@ -17,6 +17,7 @@ class User(pydantic.BaseModel):
     forward_as_prompt: bool
     voice_as_prompt: bool
     use_functions: bool
+    auto_summarize: bool
 
 
 class MessageType(Enum):
@@ -57,10 +58,10 @@ class DB:
     async def update_user(self, user: User):
         sql = '''UPDATE chatgpttg.user 
         SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
-        voice_as_prompt = $4, use_functions = $5 WHERE id = $6 RETURNING *'''
+        voice_as_prompt = $4, use_functions = $5, auto_summarize = $6 WHERE id = $7 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
-            user.voice_as_prompt, user.use_functions, user.id,
+            user.voice_as_prompt, user.use_functions, user.auto_summarize, user.id,
         ))
 
     async def create_user(self, telegram_user_id):

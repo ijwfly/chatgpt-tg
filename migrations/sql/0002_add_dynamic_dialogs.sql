@@ -14,5 +14,7 @@ BEGIN
    END IF;
 END
 $$;
-
 ALTER TABLE chatgpttg.message ADD COLUMN IF NOT EXISTS message_type chatgpttg.message_types NOT NULL DEFAULT 'message';
+
+-- add auto_summarize setting
+ALTER TABLE chatgpttg.user ADD COLUMN IF NOT EXISTS auto_summarize BOOLEAN NOT NULL DEFAULT TRUE;

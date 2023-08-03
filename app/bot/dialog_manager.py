@@ -46,7 +46,7 @@ class DialogManager:
                 self.dialog_messages = []
                 return []
 
-        if count_prompt_tokens(m.message for m in dialog_messages) >= self.context_configuration.short_term_memory_tokens:
+        if self.user.auto_summarize and count_prompt_tokens(m.message for m in dialog_messages) >= self.context_configuration.short_term_memory_tokens:
             to_summarize, to_process = self.split_context_by_token_length(dialog_messages)
             summarized_message = await self.summarize_messages(to_summarize)
             self.dialog_messages = [summarized_message] + to_process
