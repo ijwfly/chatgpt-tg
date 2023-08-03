@@ -30,7 +30,7 @@ class CompletionUsage(pydantic.BaseModel):
 
 
 class DialogMessage(pydantic.BaseModel):
-    role: str
+    role: Optional[str] = None
     name: Optional[str] = None
     content: Optional[str] = None
     function_call: Optional[FunctionCall] = None

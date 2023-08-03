@@ -3,7 +3,7 @@ from typing import List
 
 from aiogram import types
 
-from app.bot.dialog_manager import DynamicDialogManager, DialogManager
+from app.bot.dialog_manager import DialogManager
 from app.openai_helpers.chatgpt import DialogMessage
 from app.storage.db import DB, User
 
@@ -53,24 +53,11 @@ class ContextManager:
         self.message = message
         self.dialog_manager = None
 
-    async def process_dynamic_dialog(self) -> DynamicDialogManager:
-        context_configuration = ContextConfiguration.get_config(self.user.current_model)
-        dialog_manager = DynamicDialogManager(self.db, self.user, context_configuration)
-        await dialog_manager.process_dialog(self.message)
-        self.dialog_manager = dialog_manager
-        return dialog_manager
-
-    async def process_classic_dialog(self) -> DialogManager:
-        dialog_manager = DialogManager(self.db, self.user)
-        await dialog_manager.process_dialog(self.message)
-        self.dialog_manager = dialog_manager
-        return dialog_manager
-
     async def process_dialog(self):
-        if self.user.dynamic_dialog:
-            return await self.process_dynamic_dialog()
-        else:
-            return await self.process_classic_dialog()
+        context_configuration = ContextConfiguration.get_config(self.user.current_model)
+        dialog_manager = DialogManager(self.db, self.user, context_configuration)
+        await dialog_manager.process_dialog(self.message)
+        self.dialog_manager = dialog_manager
 
     async def process(self):
         await self.process_dialog()
