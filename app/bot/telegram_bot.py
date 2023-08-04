@@ -46,6 +46,15 @@ class TelegramBot:
         self.settings = Settings(self.bot, self.dispatcher, self.db)
         self.dispatcher.middleware.setup(UserMiddleware(self.db))
 
+        commands = [
+            types.BotCommand(command="/reset", description="reset current dialog"),
+            types.BotCommand(command="/gpt3", description="set model to gpt-3.5-turbo"),
+            types.BotCommand(command="/gpt4", description="set model to gpt-4"),
+            types.BotCommand(command="/usage", description="show usage for current month"),
+            types.BotCommand(command="/settings", description="open settings menu"),
+        ]
+        await self.bot.set_my_commands(commands)
+
     async def on_shutdown(self, _):
         await DBFactory().close_database()
         self.db = None

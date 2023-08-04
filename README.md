@@ -23,12 +23,12 @@ To get this bot up and running, follow these steps:
 1. Set the `TELEGRAM_BOT_TOKEN` and `OPENAI_TOKEN` variables in the `settings.py` file.
 2. Run `docker-compose up -d` in the root directory of the project.
 
-In addition, you should configure the following /commands in your bot through BotFather:
+🤖 **Commands**
 ```
-reset - reset current dialog
-gpt3 - set model to gpt-3.5-turbo
-gpt4 - set model to gpt-4
-usage - show usage for current month
-settings - open settings menu
+/reset - reset current dialog
+/gpt3 - set model to gpt-3.5-turbo
+/gpt4 - set model to gpt-4
+/settings - open settings menu
+/usage - show usage for current month
 ```
 These commands will provide additional interaction control for the bot users.

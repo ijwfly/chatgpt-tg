@@ -7,7 +7,7 @@ from app.storage.db import User, DB
 
 GPT_MODELS_OPTIONS = {
     'gpt-3.5-turbo': 'GPT-3.5',
-    'gpt-3.5-turbo-16k': 'GPT-3.5 16k',
+    # 'gpt-3.5-turbo-16k': 'GPT-3.5 16k',
     'gpt-4': 'GPT-4',
 }
 
