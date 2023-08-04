@@ -71,6 +71,10 @@ class TelegramBot:
             await self.bot.answer_callback_query(callback_query.id)
 
     async def handler(self, message: types.Message, user: User):
+        if message.from_user.id not in settings.ALLOWED_USER_IDS:
+            await message.answer('Sorry, you are not allowed to use this bot')
+            return
+
         if message.text is None:
             return
 
@@ -100,6 +104,10 @@ class TelegramBot:
         await context_manager.add_message(forward_dialog_message, message.message_id)
 
     async def handle_voice(self, message: types.Message, user: User):
+        if message.from_user.id not in settings.ALLOWED_USER_IDS:
+            await message.answer('Sorry, you are not allowed to use this bot')
+            return
+
         file = await self.bot.get_file(message.voice.file_id)
         if file.file_size > 25 * 1024 * 1024:
             await message.reply('Voice file is too big')
