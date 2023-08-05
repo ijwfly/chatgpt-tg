@@ -10,3 +10,5 @@ DO $$
     END
 $$;
 ALTER TABLE chatgpttg.user ADD COLUMN IF NOT EXISTS role chatgpttg.user_roles;
+ALTER TABLE chatgpttg.user ADD COLUMN IF NOT EXISTS cdate timestamp WITH TIME ZONE NOT NULL default NOW();
+
