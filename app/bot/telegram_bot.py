@@ -6,6 +6,7 @@ from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.dialog_manager import DialogUtils
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
+from app.bot.user_role_manager import UserRoleManager
 from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward, get_hide_button
 from app.context.context_manager import build_context_manager
 from app.openai_helpers.function_storage import FunctionStorage
@@ -37,6 +38,7 @@ class TelegramBot:
 
         # initialized in on_startup
         self.settings = None
+        self.role_manager = None
 
     async def on_startup(self, _):
         self.db = await DBFactory().create_database(
@@ -44,6 +46,7 @@ class TelegramBot:
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
         )
         self.settings = Settings(self.bot, self.dispatcher, self.db)
+        self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
         self.dispatcher.middleware.setup(UserMiddleware(self.db))
 
         commands = [
@@ -71,10 +74,6 @@ class TelegramBot:
             await self.bot.answer_callback_query(callback_query.id)
 
     async def handler(self, message: types.Message, user: User):
-        if message.from_user.id not in settings.ALLOWED_USER_IDS:
-            await message.answer('Sorry, you are not allowed to use this bot')
-            return
-
         if message.text is None:
             return
 
@@ -104,10 +103,6 @@ class TelegramBot:
         await context_manager.add_message(forward_dialog_message, message.message_id)
 
     async def handle_voice(self, message: types.Message, user: User):
-        if message.from_user.id not in settings.ALLOWED_USER_IDS:
-            await message.answer('Sorry, you are not allowed to use this bot')
-            return
-
         file = await self.bot.get_file(message.voice.file_id)
         if file.file_size > 25 * 1024 * 1024:
             await message.reply('Voice file is too big')
@@ -217,9 +212,9 @@ class TelegramBot:
             message, '\n'.join(result), types.ParseMode.MARKDOWN, reply_markup=get_hide_button()
         )
 
-    async def open_settings(self, message: types.Message):
+    async def open_settings(self, message: types.Message, user: User):
         await self.bot.delete_message(
             chat_id=message.from_user.id,
             message_id=message.message_id,
         )
-        await self.settings.send_settings(message)
+        await self.settings.send_settings(message, user)

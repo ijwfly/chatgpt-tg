@@ -92,8 +92,7 @@ class Settings:
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data in self.settings or c.data == 'settings.hide')
 
-    async def send_settings(self, message: types.Message):
-        user = await self.db.get_or_create_user(message.from_user.id)
+    async def send_settings(self, message: types.Message, user: User):
         await message.answer("Settings:", reply_markup=self.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN)
 
     def get_keyboard(self, user: User):

@@ -1,3 +1,6 @@
+from app.storage.user_role import UserRole
+
+# ChatGPT system prompts
 gpt_mode = {
     'assistant': {
         'system': 'As an advanced chatbot Assistant, your primary goal is to assist users to the best of your ability.'
@@ -15,15 +18,28 @@ gpt_mode = {
     }
 }
 
-
+# Mandatory settings
 OPENAI_TOKEN = 'YOUR_TOKEN'
 TELEGRAM_BOT_TOKEN = 'YOUR_TOKEN'
 
-ALLOWED_USER_IDS = []
-
+# Utility settings
 OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 
+# User access settings
+DEFAULT_USER_ROLE = UserRole.BASIC  # default role assigned to user
+BOT_ACCESS_ROLE_LEVEL = UserRole.BASIC  # minimum role needed to access bot
+# TODO: CHOOSE_MODEL_SETTING = UserRole.ADVANCED  # minimum role needed to choose model (gpt-3.5/gpt-4)
+
+# Enables chat for user role management
+ENABLE_USER_ROLE_MANAGER_CHAT = False
+USER_ROLE_MANAGER_CHAT_ID = -1
+
+# Plugins settings
+ENABLE_WOLFRAMALPHA = False
+WOLFRAMALPHA_APPID = 'YOUR_TOKEN'
+
+# Database settings
 POSTGRES_HOST = 'postgres'
 POSTGRES_PORT = 5432
 POSTGRES_USER = 'postgres'

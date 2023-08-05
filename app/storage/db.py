@@ -3,10 +3,12 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
+import settings
+from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage
+from app.storage.user_role import UserRole
+
 import asyncpg
 import pydantic
-
-from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage
 
 
 class User(pydantic.BaseModel):
@@ -20,6 +22,7 @@ class User(pydantic.BaseModel):
     auto_summarize: bool
     full_name: Optional[str]
     username: Optional[str]
+    role: Optional[UserRole]
 
 
 class MessageType(Enum):
@@ -47,7 +50,7 @@ class DB:
     async def get_or_create_user(self, telegram_user_id):
         user = await self.get_user(telegram_user_id)
         if user is None:
-            user = await self.create_user(telegram_user_id)
+            user = await self.create_user(telegram_user_id, settings.DEFAULT_USER_ROLE)
         return user
 
     async def get_user(self, telegram_user_id):
@@ -61,18 +64,18 @@ class DB:
         sql = '''UPDATE chatgpttg.user 
         SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
         voice_as_prompt = $4, use_functions = $5, auto_summarize = $6,
-        full_name = $7, username = $8 WHERE id = $9 RETURNING *'''
+        full_name = $7, username = $8, role = $9 WHERE id = $10 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
             user.voice_as_prompt, user.use_functions, user.auto_summarize,
-            user.full_name, user.username, user.id,
+            user.full_name, user.username, user.role.value, user.id,
         ))
 
-    async def create_user(self, telegram_user_id):
-        sql = 'INSERT INTO chatgpttg.user (telegram_id) VALUES ($1) RETURNING *'
-        return User(**await self.connection_pool.fetchrow(sql, telegram_user_id))
+    async def create_user(self, telegram_user_id: int, role: UserRole):
+        sql = 'INSERT INTO chatgpttg.user (telegram_id, role) VALUES ($1, $2) RETURNING *'
+        return User(**await self.connection_pool.fetchrow(sql, telegram_user_id, role.value))
 
-    async def get_telegram_message(self, tg_chat_id, tg_message_id):
+    async def get_telegram_message(self, tg_chat_id: int, tg_message_id: int):
         sql = 'SELECT * FROM chatgpttg.message WHERE tg_chat_id = $1 AND tg_message_id = $2'
         tg_message_record = await self.connection_pool.fetchrow(sql, tg_chat_id, tg_message_id)
         if tg_message_record is None:
