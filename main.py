@@ -1,3 +1,5 @@
+from typing import Optional
+
 import settings
 from app.bot.queued_dispatcher import QueuedDispatcher
 from app.bot.telegram_bot import TelegramBot
@@ -11,11 +13,14 @@ bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 dp = QueuedDispatcher(bot)
 
 
-def setup_function_storage() -> FunctionStorage:
+def setup_function_storage() -> Optional[FunctionStorage]:
     functions = []
 
     if settings.ENABLE_WOLFRAMALPHA:
         functions.append(query_wolframalpha)
+
+    if not functions:
+        return None
 
     function_storage = FunctionStorage()
     for function in functions:
