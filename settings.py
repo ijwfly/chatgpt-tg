@@ -27,9 +27,9 @@ OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 
 # User access settings
-DEFAULT_USER_ROLE = UserRole.BASIC  # default role assigned to user
+DEFAULT_USER_ROLE = UserRole.BASIC  # default role assigned to new users
 BOT_ACCESS_ROLE_LEVEL = UserRole.BASIC  # minimum role needed to access bot
-# TODO: CHOOSE_MODEL_SETTING = UserRole.ADVANCED  # minimum role needed to choose model (gpt-3.5/gpt-4)
+CHOOSE_MODEL_SETTING_ROLE_LEVEL = UserRole.BASIC  # minimum role needed to choose model (gpt-3.5/gpt-4)
 
 # Enables chat for user role management
 ENABLE_USER_ROLE_MANAGER_CHAT = False

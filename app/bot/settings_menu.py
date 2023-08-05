@@ -3,13 +3,17 @@ import settings
 from aiogram import Bot, types, Dispatcher
 
 from app.storage.db import User, DB
-
+from app.storage.user_role import check_role
 
 GPT_MODELS_OPTIONS = {
     'gpt-3.5-turbo': 'GPT-3.5',
     # 'gpt-3.5-turbo-16k': 'GPT-3.5 16k',
     'gpt-4': 'GPT-4',
 }
+
+
+SETTINGS_PREFIX = 'settings'
+HIDE_COMMAND = 'hide'
 
 
 class VisibleOptionsSetting:
@@ -90,34 +94,50 @@ class Settings:
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
             'auto_summarize': OnOffSetting('Auto summarize', 'auto_summarize'),
         }
-        self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data in self.settings or c.data == 'settings.hide')
+        self.minimum_required_roles = {
+            'current_model': settings.CHOOSE_MODEL_SETTING_ROLE_LEVEL,
+        }
+        self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: SETTINGS_PREFIX in c.data)
 
     async def send_settings(self, message: types.Message, user: User):
         await message.answer("Settings:", reply_markup=self.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN)
 
+    def is_setting_available_for_user(self, setting_name: str, user: User):
+        mininum_required_role = self.minimum_required_roles.get(setting_name)
+        if mininum_required_role and not check_role(mininum_required_role, user.role):
+            return False
+        return True
+
     def get_keyboard(self, user: User):
         keyboard = types.InlineKeyboardMarkup()
         for setting_name, setting_obj in self.settings.items():
+            if not self.is_setting_available_for_user(setting_name, user):
+                continue
+
             text = setting_obj.get_button_string(user)
-            keyboard.add(types.InlineKeyboardButton(text=text, callback_data=setting_name))
-        keyboard.add(types.InlineKeyboardButton(text='Hide settings', callback_data='settings.hide'))
+            keyboard.add(types.InlineKeyboardButton(text=text, callback_data=f'{SETTINGS_PREFIX}.{setting_name}'))
+        keyboard.add(types.InlineKeyboardButton(text='Hide settings', callback_data=f'{SETTINGS_PREFIX}.{HIDE_COMMAND}'))
         return keyboard
 
-    def toggle_setting(self, user: User, setting: str):
-        setting = self.settings[setting]
-        user = setting.toggle(user)
+    def toggle_setting(self, user: User, setting_name: str):
+        if not self.is_setting_available_for_user(setting_name, user):
+            return user
+        setting_name = self.settings[setting_name]
+        user = setting_name.toggle(user)
         return user
 
     async def process_callback(self, callback_query: types.CallbackQuery):
-        if callback_query.data == 'settings.hide':
+        _, command = callback_query.data.split('.')
+        if command == HIDE_COMMAND:
             await self.bot.delete_message(
                 chat_id=callback_query.from_user.id,
                 message_id=callback_query.message.message_id
             )
             await self.bot.answer_callback_query(callback_query.id)
         else:
+            setting = command
             user = await self.db.get_or_create_user(callback_query.from_user.id)
-            user = self.toggle_setting(user, callback_query.data)
+            user = self.toggle_setting(user, setting)
             await self.db.update_user(user)
 
             await self.bot.answer_callback_query(callback_query.id)
