@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 import asyncpg
 import pydantic
@@ -18,6 +18,8 @@ class User(pydantic.BaseModel):
     voice_as_prompt: bool
     use_functions: bool
     auto_summarize: bool
+    full_name: Optional[str]
+    username: Optional[str]
 
 
 class MessageType(Enum):
@@ -58,10 +60,12 @@ class DB:
     async def update_user(self, user: User):
         sql = '''UPDATE chatgpttg.user 
         SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
-        voice_as_prompt = $4, use_functions = $5, auto_summarize = $6 WHERE id = $7 RETURNING *'''
+        voice_as_prompt = $4, use_functions = $5, auto_summarize = $6,
+        full_name = $7, username = $8 WHERE id = $9 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
-            user.voice_as_prompt, user.use_functions, user.auto_summarize, user.id,
+            user.voice_as_prompt, user.use_functions, user.auto_summarize,
+            user.full_name, user.username, user.id,
         ))
 
     async def create_user(self, telegram_user_id):
