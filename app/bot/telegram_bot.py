@@ -6,12 +6,14 @@ from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.dialog_manager import DialogUtils
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
+from app.bot.user_role_manager import UserRoleManager
 from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward, get_hide_button
 from app.context.context_manager import build_context_manager
 from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory, User
+from app.storage.user_role import check_access_conditions
 from app.openai_helpers.chatgpt import ChatGPT, GptModel
 
 from aiogram.utils.exceptions import CantParseEntities
@@ -37,6 +39,7 @@ class TelegramBot:
 
         # initialized in on_startup
         self.settings = None
+        self.role_manager = None
 
     async def on_startup(self, _):
         self.db = await DBFactory().create_database(
@@ -44,6 +47,7 @@ class TelegramBot:
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
         )
         self.settings = Settings(self.bot, self.dispatcher, self.db)
+        self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
         self.dispatcher.middleware.setup(UserMiddleware(self.db))
 
         commands = [
@@ -185,6 +189,10 @@ class TelegramBot:
         await message.answer('👌')
 
     async def set_current_model(self, message: types.Message, user: User):
+        if not check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user.role):
+            await message.answer(f'Your model is {user.current_model}. You have no permissions to change model')
+            return
+
         model = GptModel.GPT_35_TURBO if message.get_command() == '/gpt3' else GptModel.GPT_4
         user.current_model = model
         await self.db.update_user(user)
@@ -209,9 +217,9 @@ class TelegramBot:
             message, '\n'.join(result), types.ParseMode.MARKDOWN, reply_markup=get_hide_button()
         )
 
-    async def open_settings(self, message: types.Message):
+    async def open_settings(self, message: types.Message, user: User):
         await self.bot.delete_message(
             chat_id=message.from_user.id,
             message_id=message.message_id,
         )
-        await self.settings.send_settings(message)
+        await self.settings.send_settings(message, user)
