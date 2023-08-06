@@ -50,7 +50,7 @@ class DB:
     async def get_or_create_user(self, telegram_user_id):
         user = await self.get_user(telegram_user_id)
         if user is None:
-            user = await self.create_user(telegram_user_id, settings.DEFAULT_USER_ROLE)
+            user = await self.create_user(telegram_user_id, settings.USER_ROLE_DEFAULT)
         return user
 
     async def get_user(self, telegram_user_id):

@@ -13,7 +13,7 @@ from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory, User
-from app.storage.user_role import check_role
+from app.storage.user_role import check_access_conditions
 from app.openai_helpers.chatgpt import ChatGPT, GptModel
 
 from aiogram.utils.exceptions import CantParseEntities
@@ -189,7 +189,7 @@ class TelegramBot:
         await message.answer('👌')
 
     async def set_current_model(self, message: types.Message, user: User):
-        if not check_role(settings.CHOOSE_MODEL_SETTING_ROLE_LEVEL, user.role):
+        if not check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user.role):
             await message.answer(f'Your model is {user.current_model}. You have no permissions to change model')
             return
 

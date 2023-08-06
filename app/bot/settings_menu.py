@@ -3,7 +3,7 @@ import settings
 from aiogram import Bot, types, Dispatcher
 
 from app.storage.db import User, DB
-from app.storage.user_role import check_role
+from app.storage.user_role import check_access_conditions
 
 GPT_MODELS_OPTIONS = {
     'gpt-3.5-turbo': 'GPT-3.5',
@@ -95,7 +95,7 @@ class Settings:
             'auto_summarize': OnOffSetting('Auto summarize', 'auto_summarize'),
         }
         self.minimum_required_roles = {
-            'current_model': settings.CHOOSE_MODEL_SETTING_ROLE_LEVEL,
+            'current_model': settings.USER_ROLE_CHOOSE_MODEL,
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: SETTINGS_PREFIX in c.data)
 
@@ -104,7 +104,7 @@ class Settings:
 
     def is_setting_available_for_user(self, setting_name: str, user: User):
         mininum_required_role = self.minimum_required_roles.get(setting_name)
-        if mininum_required_role and not check_role(mininum_required_role, user.role):
+        if mininum_required_role and not check_access_conditions(mininum_required_role, user.role):
             return False
         return True
 

@@ -2,7 +2,7 @@ from aiogram import types, Bot, Dispatcher
 
 import settings
 from app.storage.db import User, DB
-from app.storage.user_role import UserRole, check_role
+from app.storage.user_role import UserRole, check_access_conditions
 
 
 SET_ROLE_COMMAND = 'setrole'
@@ -60,12 +60,12 @@ class UserRoleManager:
         command, tg_user_id, role_value = callback_query.data.split('.')
         tg_user_id = int(tg_user_id)
         user = await self.db.get_user(tg_user_id)
-        user_had_access = check_role(settings.BOT_ACCESS_ROLE_LEVEL, user.role)
+        user_had_access = check_access_conditions(settings.USER_ROLE_BOT_ACCESS, user.role)
         user.role = UserRole(role_value)
         await self.db.update_user(user)
         await self.bot.answer_callback_query(callback_query.id)
         await self.update_message(callback_query.message, user)
-        if check_role(settings.BOT_ACCESS_ROLE_LEVEL, user.role) and not user_had_access:
+        if check_access_conditions(settings.USER_ROLE_BOT_ACCESS, user.role) and not user_had_access:
             await self.bot.send_message(tg_user_id, f'You have been granted access to the bot.')
 
     async def updaterole_callback(self, callback_query: types.CallbackQuery):
