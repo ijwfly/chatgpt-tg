@@ -13,6 +13,7 @@ This GitHub repository contains the implementation of a telegram bot, designed t
 7. **Model Support**: The bot supports both gpt-3.5-turbo and gpt-4 models with the capability to switch between them on-the-fly.
 8. **Customizable System Prompts**: Enables the user to initiate conversations with custom system prompts to shape the bot's behavior.
 9. **Context Window Size Customization**: The bot provides a feature to customize the maximum context window size. This allows users to set the context size for gpt-3.5-turbo and gpt-4 models individually, enabling more granular control over usage costs. This feature is particularly useful for managing API usage and optimizing the balance between cost and performance.
+10. **Access Control**: The bot includes a feature for access control. Each user is assigned a role (stranger, basic, advanced, admin), and depending on the role, they gain access to the bot. Role management is carried out through a messaging mechanism, with inline buttons sent to the admin for role changes.
 
 The purpose of this telegram bot is to create a ChatGpt-like user-friendly platform for interacting with GPT models. The repository is open for exploration, feedback, and contributions.
 
