@@ -7,7 +7,7 @@ class QueuedDispatcher(Dispatcher):
     A custom Dispatcher for aiogram that ensures sequential processing of updates within a single chat.
 
     This class solves the issue of parallel processing in aiogram by creating a separate queue for each user. If the update
-    type is `message` or `callback_query`, updates are processed sequentially within the user-specific queue. Other update
+    type is `message`, updates are processed sequentially within the user-specific queue. Other update
     types are processed normally.
 
     If a user-specific task is already being processed, new tasks from the same user are immediately cancelled, preventing
@@ -23,8 +23,6 @@ class QueuedDispatcher(Dispatcher):
         user_id = None
         if update.message:
             user_id = update.message.chat.id
-        elif update.callback_query:
-            user_id = update.callback_query.message.chat.id
 
         if user_id is None:
             # update is not desired type, process normally
