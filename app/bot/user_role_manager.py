@@ -1,6 +1,7 @@
 from aiogram import types, Bot, Dispatcher
 
 import settings
+from app.bot.utils import escape_tg_markdown
 from app.storage.db import User, DB
 from app.storage.user_role import UserRole, check_access_conditions
 
@@ -38,9 +39,11 @@ class UserRoleManager:
     def user_to_string(user):
         result = [f'*User Id*: {user.id}', f'*Telegram Id*: {user.telegram_id}']
         if user.full_name:
-            result.append(f'*Full name*: {user.full_name}')
+            full_name = escape_tg_markdown(user.full_name)
+            result.append(f'*Full name*: {full_name}')
         if user.username:
-            result.append(f'*Username*: @{user.username}')
+            username = escape_tg_markdown(user.username)
+            result.append(f'*Username*: @{username}')
         result.append(f'*Role*: {user.role.value}')
         return '\n'.join(result)
 

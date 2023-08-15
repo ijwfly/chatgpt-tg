@@ -87,3 +87,9 @@ def get_hide_button():
     keyboard = types.InlineKeyboardMarkup(1)
     keyboard.add(types.InlineKeyboardButton(text='Hide', callback_data='hide'))
     return keyboard
+
+
+def escape_tg_markdown(text):
+    escape_chars = '\*_`\['
+    return ''.join('\\' + char if char in escape_chars else char for char in text)
+
