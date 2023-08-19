@@ -3,7 +3,7 @@ import tempfile
 
 import settings
 from app.bot.chatgpt_manager import ChatGptManager
-from app.bot.dialog_manager import DialogUtils
+from app.context.dialog_manager import DialogUtils
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
@@ -23,7 +23,7 @@ from pydub import AudioSegment
 
 
 class TelegramBot:
-    def __init__(self, bot: Bot, dispatcher: Dispatcher, function_storage: FunctionStorage = None):
+    def __init__(self, bot: Bot, dispatcher: Dispatcher):
         self.db = None
         self.bot = bot
         self.dispatcher = dispatcher
@@ -34,8 +34,6 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.handler)
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data == 'hide')
-
-        self.function_storage = function_storage
 
         # initialized in on_startup
         self.settings = None
@@ -150,19 +148,23 @@ class TelegramBot:
         context_manager = await build_context_manager(self.db, user, message)
         context_dialog_messages = await context_manager.get_context_messages()
 
-        function_storage = self.function_storage if user.use_functions else None
+        function_storage = await context_manager.get_function_storage()
         chat_gpt_manager = ChatGptManager(ChatGPT(user.current_model, user.gpt_mode, function_storage), self.db)
 
         user_dialog_message = DialogUtils.prepare_user_message(message.text)
         response_dialog_message = await chat_gpt_manager.send_user_message(user, user_dialog_message, context_dialog_messages)
 
-        await self.handle_gpt_response(user, chat_gpt_manager, context_manager, message, user_dialog_message, response_dialog_message)
+        await self.handle_gpt_response(
+            user, chat_gpt_manager, context_manager, message, user_dialog_message,
+            response_dialog_message, function_storage
+        )
 
-    async def handle_gpt_response(self, user, chat_gpt_manager, context_manager, message, user_dialog_message, response_dialog_message):
+    async def handle_gpt_response(self, user, chat_gpt_manager, context_manager, message, user_dialog_message,
+                                  response_dialog_message, function_storage):
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
-            function_response_raw = await self.function_storage.run_function(function_name, function_args)
+            function_response_raw = await function_storage.run_function(function_name, function_args)
 
             context_dialog_messages = await context_manager.add_message(user_dialog_message, message.message_id)
 
@@ -176,7 +178,10 @@ class TelegramBot:
                 response = await self.send_telegram_message(message, response_dialog_message.content)
                 await context_manager.add_message(response_dialog_message, response.message_id)
             else:
-                await self.handle_gpt_response(user, chat_gpt_manager, context_manager, message, user_dialog_message, response_dialog_message)
+                await self.handle_gpt_response(
+                    user, chat_gpt_manager, context_manager, message, user_dialog_message,
+                    response_dialog_message, function_storage
+                )
         else:
             code_fragments = detect_and_extract_code(response_dialog_message.content)
             parse_mode = types.ParseMode.MARKDOWN if code_fragments else None
