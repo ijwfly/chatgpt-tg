@@ -47,7 +47,7 @@ class TelegramBot:
         self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
         self.dispatcher.middleware.setup(UserMiddleware(self.db))
 
-        # TODO: maybe should be changed to settings.USER_ROLE_DEFAULT
+        # all commands are added to global scope by default, except for admin commands
         commands = self.role_manager.get_role_commands(UserRole.ADVANCED)
         await self.bot.set_my_commands(commands)
 
