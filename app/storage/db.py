@@ -47,6 +47,12 @@ class DB:
     def __init__(self, connection_pool: asyncpg.Pool):
         self.connection_pool = connection_pool
 
+    async def iterate_users(self):
+        sql = 'SELECT * FROM chatgpttg.user'
+        records = await self.connection_pool.fetch(sql)
+        for record in records:
+            yield User(**record)
+
     async def get_or_create_user(self, telegram_user_id):
         user = await self.get_user(telegram_user_id)
         if user is None:

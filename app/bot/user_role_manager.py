@@ -48,8 +48,7 @@ class UserRoleManager:
         return '\n'.join(result)
 
     @classmethod
-    async def send_new_user_to_admin(cls, message: types.Message, user: User):
-        bot = message.bot
+    async def send_new_user_to_admin(cls, bot: Bot, user: User):
         text = cls.user_to_string(user)
         await bot.send_message(
             settings.USER_ROLE_MANAGER_CHAT_ID, text, reply_markup=cls.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN
@@ -59,6 +58,30 @@ class UserRoleManager:
         text = self.user_to_string(user)
         await message.edit_text(text, reply_markup=self.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN)
 
+    @staticmethod
+    def get_role_commands(user_role_value):
+        commands = [
+            types.BotCommand(command="/reset", description="reset current dialog"),
+        ]
+
+        if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role_value):
+            commands += [
+                types.BotCommand(command="/gpt3", description="set model to gpt-3.5-turbo"),
+                types.BotCommand(command="/gpt4", description="set model to gpt-4"),
+            ]
+
+        commands += [
+            types.BotCommand(command="/usage", description="show usage for current month"),
+            types.BotCommand(command="/settings", description="open settings menu"),
+        ]
+        return commands
+
+    async def set_user_commands(self, user: User, user_role=None):
+        if user_role is None:
+            user_role = user.role
+        commands = self.get_role_commands(user_role)
+        await self.bot.set_my_commands(commands, scope=types.BotCommandScopeChat(user.telegram_id))
+
     async def setrole_callback(self, callback_query: types.CallbackQuery):
         command, tg_user_id, role_value = callback_query.data.split('.')
         tg_user_id = int(tg_user_id)
@@ -67,6 +90,7 @@ class UserRoleManager:
         user.role = UserRole(role_value)
         await self.db.update_user(user)
         await self.bot.answer_callback_query(callback_query.id)
+        await self.set_user_commands(user, user.role)
         await self.update_message(callback_query.message, user)
         if check_access_conditions(settings.USER_ROLE_BOT_ACCESS, user.role) and not user_had_access:
             await self.bot.send_message(tg_user_id, f'You have been granted access to the bot.')

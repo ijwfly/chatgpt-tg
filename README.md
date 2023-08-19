@@ -6,7 +6,7 @@ This GitHub repository contains the implementation of a telegram bot, designed t
 
 1. **Dynamic Dialog Management**: The bot automatically manages the context of the conversation, eliminating the need for the user to manually reset the context using the /reset command. You still can reset dialog manually if needed.
 2. **Automatic Context Summarization**: In case the context size exceeds the model's maximum limit, the bot automatically summarizes the context to ensure the continuity of the conversation.
-3. **Functions Support**: You can embed functions within the bot. This allows the GPT to invoke these functions when needed, based on the context. The description of the function and its parameters are extracted from the function's docstring.
+3. **Functions Support**: You can embed functions within the bot. This allows the GPT to invoke these functions when needed, based on the context. The description of the function and its parameters are extracted from the function's docstring. See the `app/context/function_manager.py` file for more details.
 4. **Sub-dialogue Mechanism**: "Chat Thread Isolation" feature, where if a message is replied to within the bot, only the corresponding message chain is considered as context. This adds an extra level of context control for the users.
 5. **Voice Recognition**: The bot is capable of transcribing voice messages, allowing users to use speech as context or prompt for ChatGPT.
 6. **API Usage Tracking**: The bot includes a function that tracks and provides information about the current month's usage of the OpenAI API. This allows users to monitor and manage their API usage costs.

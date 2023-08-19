@@ -34,7 +34,8 @@ class UserMiddleware(BaseMiddleware):
             await self.db.update_user(user)
 
         if settings.ENABLE_USER_ROLE_MANAGER_CHAT and is_new_user:
-            await UserRoleManager.send_new_user_to_admin(message, user)
+            bot = message.bot
+            await UserRoleManager.send_new_user_to_admin(bot, user)
 
         user_have_access = check_access_conditions(settings.USER_ROLE_BOT_ACCESS, user.role)
         if not user_have_access:

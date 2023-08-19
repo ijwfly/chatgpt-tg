@@ -9,11 +9,10 @@ from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
 from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward, get_hide_button
 from app.context.context_manager import build_context_manager
-from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory, User
-from app.storage.user_role import check_access_conditions
+from app.storage.user_role import check_access_conditions, UserRole
 from app.openai_helpers.chatgpt import ChatGPT, GptModel
 
 from aiogram.utils.exceptions import CantParseEntities
@@ -40,7 +39,7 @@ class TelegramBot:
         self.role_manager = None
 
     async def on_startup(self, _):
-        self.db = await DBFactory().create_database(
+        self.db = await DBFactory.create_database(
             settings.POSTGRES_USER, settings.POSTGRES_PASSWORD,
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
         )
@@ -48,13 +47,8 @@ class TelegramBot:
         self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
         self.dispatcher.middleware.setup(UserMiddleware(self.db))
 
-        commands = [
-            types.BotCommand(command="/reset", description="reset current dialog"),
-            types.BotCommand(command="/gpt3", description="set model to gpt-3.5-turbo"),
-            types.BotCommand(command="/gpt4", description="set model to gpt-4"),
-            types.BotCommand(command="/usage", description="show usage for current month"),
-            types.BotCommand(command="/settings", description="open settings menu"),
-        ]
+        # TODO: maybe should be changed to settings.USER_ROLE_DEFAULT
+        commands = self.role_manager.get_role_commands(UserRole.ADVANCED)
         await self.bot.set_my_commands(commands)
 
     async def on_shutdown(self, _):
