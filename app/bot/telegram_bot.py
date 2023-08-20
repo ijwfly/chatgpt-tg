@@ -233,7 +233,9 @@ class TelegramBot:
                 )
             user_whisper_usage = whisper_usages.get(name, 0)
             user_usage_price += calculate_whisper_usage_price(user_whisper_usage)
-            result.append(f'{name}: ${user_usage_price}')
+            result.append((name, user_usage_price))
+        result.sort(key=lambda x: x[1], reverse=True)
+        result = [f'{name}: ${price}' for name, price in result]
         await self.send_telegram_message(
             message, '\n'.join(result), reply_markup=get_hide_button()
         )
