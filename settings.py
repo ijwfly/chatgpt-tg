@@ -26,7 +26,7 @@ TELEGRAM_BOT_TOKEN = 'YOUR_TOKEN'
 OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 
-# User access settings
+# User access settings, there are 4 levels of access, each: stranger, basic, advanced, admin
 # You can setup default role for new users and minimum role needed to access bot, see UserRole enum
 USER_ROLE_DEFAULT = UserRole.BASIC  # default role assigned to new users
 USER_ROLE_BOT_ACCESS = UserRole.BASIC  # minimum role needed to access bot

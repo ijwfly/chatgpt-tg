@@ -11,8 +11,13 @@ services:
       - ./:/usr/src/app/
     depends_on:
       - postgres
-    ports:
-    - "8080:8080"
+
+  update_keyboards:
+    restart: "no"
+    image: chatgpt-tg
+    entrypoint: python scripts/update_keyboards.py
+    depends_on:
+      - app
 
   postgres:
     image: postgres:15.3
