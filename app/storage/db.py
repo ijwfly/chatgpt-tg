@@ -190,9 +190,9 @@ class DB:
         records = await self.connection_pool.fetch(sql)
         result = defaultdict(list)
         for record in records:
-            full_name = record['full_name'] if record['full_name'] else ''
-            username = f"@{record['username']}" if record['username'] else ''
-            name = ' - '.join([full_name, username])
+            full_name = record['full_name'] if record['full_name'] else None
+            username = f"@{record['username']}" if record['username'] else None
+            name = ' - '.join([n for n in [full_name, username] if n is not None])
             result[name].append(CompletionUsage(**dict(record)))
         return result
 
