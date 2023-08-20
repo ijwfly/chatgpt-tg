@@ -178,7 +178,7 @@ class DB:
 
     async def get_all_users_completion_usage(self):
         sql = '''
-        SELECT u.username, u.full_name, cu.model, 
+        SELECT u.telegram_id, u.username, u.full_name, cu.model, 
            SUM(cu.prompt_tokens) AS prompt_tokens, 
            SUM(cu.completion_tokens) AS completion_tokens,
            SUM(cu.total_tokens) AS total_tokens
@@ -190,15 +190,17 @@ class DB:
         records = await self.connection_pool.fetch(sql)
         result = defaultdict(list)
         for record in records:
+            telegram_id = record['telegram_id']
             full_name = record['full_name'] if record['full_name'] else None
             username = f"@{record['username']}" if record['username'] else None
             name = ' - '.join([n for n in [full_name, username] if n is not None])
+            name = f'[{telegram_id}] {name}' if name else f'[{telegram_id}]'
             result[name].append(CompletionUsage(**dict(record)))
         return result
 
     async def get_all_users_whisper_usage(self):
         sql = '''
-        SELECT u.username, u.full_name, 
+        SELECT u.telegram_id, u.username, u.full_name, 
            SUM(wu.audio_seconds) AS audio_seconds
         FROM chatgpttg.whisper_usage wu
         JOIN chatgpttg.user u ON wu.user_id = u.id
@@ -208,9 +210,11 @@ class DB:
         records = await self.connection_pool.fetch(sql)
         result = {}
         for record in records:
+            telegram_id = record['telegram_id']
             full_name = record['full_name'] if record['full_name'] else ''
             username = f"@{record['username']}" if record['username'] else ''
             name = ' - '.join([full_name, username])
+            name = f'[{telegram_id}] {name}' if name else f'[{telegram_id}]'
             result[name] = record['audio_seconds']
         return result
 
