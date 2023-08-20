@@ -59,12 +59,12 @@ class UserRoleManager:
         await message.edit_text(text, reply_markup=self.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN)
 
     @staticmethod
-    def get_role_commands(user_role_value):
+    def get_role_commands(user_role: UserRole):
         commands = [
             types.BotCommand(command="/reset", description="reset current dialog"),
         ]
 
-        if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role_value):
+        if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):
             commands += [
                 types.BotCommand(command="/gpt3", description="set model to gpt-3.5-turbo"),
                 types.BotCommand(command="/gpt4", description="set model to gpt-4"),
@@ -74,6 +74,10 @@ class UserRoleManager:
             types.BotCommand(command="/usage", description="show usage for current month"),
             types.BotCommand(command="/settings", description="open settings menu"),
         ]
+        if check_access_conditions(UserRole.ADMIN, user_role):
+            commands += [
+                types.BotCommand(command="/usage_all", description="show usage for all users"),
+            ]
         return commands
 
     async def set_user_commands(self, user: User, user_role=None):

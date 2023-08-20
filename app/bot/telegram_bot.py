@@ -31,6 +31,7 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
         self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4'])
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
+        self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
         self.dispatcher.register_message_handler(self.handler)
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data == 'hide')
 
@@ -214,6 +215,31 @@ class TelegramBot:
         result.append(f'*Total:* ${total}')
         await self.send_telegram_message(
             message, '\n'.join(result), types.ParseMode.MARKDOWN, reply_markup=get_hide_button()
+        )
+
+    async def get_usage_all_users(self, message: types.Message, user: User):
+        if not check_access_conditions(UserRole.ADMIN, user.role):
+            return
+
+        await self.bot.delete_message(message.chat.id, message.message_id)
+        completion_usages = await self.db.get_all_users_completion_usage()
+        whisper_usages = await self.db.get_all_users_whisper_usage()
+        result = []
+        for name, user_completion_usages in completion_usages.items():
+            user_usage_price = 0
+            for usage in user_completion_usages:
+                user_usage_price += calculate_completion_usage_price(
+                    usage.prompt_tokens, usage.completion_tokens, usage.model
+                )
+            user_whisper_usage = whisper_usages.get(name, 0)
+            user_usage_price += calculate_whisper_usage_price(user_whisper_usage)
+            result.append((name, user_usage_price))
+        result.sort(key=lambda x: x[1], reverse=True)
+        total_price = sum([price for _, price in result])
+        result = [f'{name}: ${price}' for name, price in result]
+        result.append(f'Total: ${total_price}')
+        await self.send_telegram_message(
+            message, '\n'.join(result), reply_markup=get_hide_button()
         )
 
     async def open_settings(self, message: types.Message, user: User):
