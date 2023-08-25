@@ -31,7 +31,7 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
         self.dispatcher.register_message_handler(self.handler)
-        self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: c.data == 'hide')
+        self.dispatcher.register_callback_query_handler(self.process_hide_callback, lambda c: c.data == 'hide')
 
         # initialized in on_startup
         self.settings = None
@@ -57,13 +57,12 @@ class TelegramBot:
     def run(self):
         executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
 
-    async def process_callback(self, callback_query: types.CallbackQuery):
-        if callback_query.data == 'hide':
-            await self.bot.delete_message(
-                chat_id=callback_query.from_user.id,
-                message_id=callback_query.message.message_id
-            )
-            await self.bot.answer_callback_query(callback_query.id)
+    async def process_hide_callback(self, callback_query: types.CallbackQuery):
+        await self.bot.delete_message(
+            chat_id=callback_query.from_user.id,
+            message_id=callback_query.message.message_id
+        )
+        await self.bot.answer_callback_query(callback_query.id)
 
     async def handler(self, message: types.Message, user: User):
         if message.text is None:
