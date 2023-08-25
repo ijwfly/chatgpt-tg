@@ -16,10 +16,10 @@ class ContextConfiguration:
 
     # long term memory is based on embedding context search
     long_term_memory_tokens: int
-    # mid term memory is used for storing summaries of short term memory
-    mid_term_memory_tokens: int
     # short term memory is used for storing last messages
     short_term_memory_tokens: int
+
+    summary_length: int
 
     @staticmethod
     def get_config(model: str):
@@ -27,22 +27,22 @@ class ContextConfiguration:
             return ContextConfiguration(
                 model_name=model,
                 long_term_memory_tokens=512,
-                mid_term_memory_tokens=512,
                 short_term_memory_tokens=2560,
+                summary_length=512,
             )
         elif model == 'gpt-3.5-turbo-16k':
             return ContextConfiguration(
                 model_name=model,
                 long_term_memory_tokens=1024,
-                mid_term_memory_tokens=1024,
                 short_term_memory_tokens=4096,
+                summary_length=1024,
             )
         elif model == 'gpt-4':
             return ContextConfiguration(
                 model_name=model,
                 long_term_memory_tokens=512,
-                mid_term_memory_tokens=1024,
                 short_term_memory_tokens=2048,
+                summary_length=1024,
             )
         else:
             raise ValueError(f'Unknown model name: {model}')

@@ -3,6 +3,7 @@ import tempfile
 
 import settings
 from app.bot.chatgpt_manager import ChatGptManager
+from app.bot.message_processor import MessageProcessor
 from app.context.dialog_manager import DialogUtils
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
@@ -92,9 +93,8 @@ class TelegramBot:
             username = None
         forwarded_text = f'{username}:\n{message.text}' if username else message.text
 
-        context_manager = await build_context_manager(self.db, user, message)
-        forward_dialog_message = DialogUtils.prepare_user_message(forwarded_text)
-        await context_manager.add_message(forward_dialog_message, message.message_id)
+        message_processor = MessageProcessor(self.db, user, message)
+        await message_processor.add_text_as_context(forwarded_text, message.message_id)
 
     async def handle_voice(self, message: types.Message, user: User):
         file = await self.bot.get_file(message.voice.file_id)
@@ -122,9 +122,8 @@ class TelegramBot:
             await self.handler(message, user)
         else:
             # add voice message text as context to current dialog, not as prompt
-            context_manager = await build_context_manager(self.db, user, message)
-            speech_dialog_message = DialogUtils.prepare_user_message(speech_text)
-            await context_manager.add_message(speech_dialog_message, response.message_id)
+            message_processor = MessageProcessor(self.db, user, message)
+            await message_processor.add_text_as_context(speech_text, response.message_id)
 
     @staticmethod
     async def send_telegram_message(message: types.Message, text: str, parse_mode=None, reply_markup=None):
@@ -141,47 +140,38 @@ class TelegramBot:
 
     async def answer_text_message(self, message: types.Message, user: User):
         context_manager = await build_context_manager(self.db, user, message)
-        context_dialog_messages = await context_manager.get_context_messages()
 
         function_storage = await context_manager.get_function_storage()
         chat_gpt_manager = ChatGptManager(ChatGPT(user.current_model, user.gpt_mode, function_storage), self.db)
 
         user_dialog_message = DialogUtils.prepare_user_message(message.text)
-        response_dialog_message = await chat_gpt_manager.send_user_message(user, user_dialog_message, context_dialog_messages)
+        context_dialog_messages = await context_manager.add_message(user_dialog_message, message.message_id)
+        response_dialog_message = await chat_gpt_manager.send_user_message(user, context_dialog_messages)
 
         await self.handle_gpt_response(
-            user, chat_gpt_manager, context_manager, message, user_dialog_message,
-            response_dialog_message, function_storage
+            user, chat_gpt_manager, context_manager, message, response_dialog_message, function_storage
         )
 
-    async def handle_gpt_response(self, user, chat_gpt_manager, context_manager, message, user_dialog_message,
+    async def handle_gpt_response(self, user, chat_gpt_manager, context_manager, message,
                                   response_dialog_message, function_storage):
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
             function_response_raw = await function_storage.run_function(function_name, function_args)
 
-            context_dialog_messages = await context_manager.add_message(user_dialog_message, message.message_id)
-
             function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
-            response_dialog_message = await chat_gpt_manager.send_user_message(user, function_response, context_dialog_messages)
             function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
             function_response_tg_message = await self.send_telegram_message(message, function_response_text)
-            await context_manager.add_message(function_response, function_response_tg_message.message_id)
+            context_dialog_messages = await context_manager.add_message(function_response, function_response_tg_message.message_id)
+            response_dialog_message = await chat_gpt_manager.send_user_message(user, context_dialog_messages)
 
-            if response_dialog_message.content:
-                response = await self.send_telegram_message(message, response_dialog_message.content)
-                await context_manager.add_message(response_dialog_message, response.message_id)
-            else:
-                await self.handle_gpt_response(
-                    user, chat_gpt_manager, context_manager, message, user_dialog_message,
-                    response_dialog_message, function_storage
-                )
+            await self.handle_gpt_response(
+                user, chat_gpt_manager, context_manager, message, response_dialog_message, function_storage
+            )
         else:
             code_fragments = detect_and_extract_code(response_dialog_message.content)
             parse_mode = types.ParseMode.MARKDOWN if code_fragments else None
             response = await self.send_telegram_message(message, response_dialog_message.content, parse_mode)
-            await context_manager.add_message(user_dialog_message, message.message_id)
             await context_manager.add_message(response_dialog_message, response.message_id)
 
     async def reset_dialog(self, message: types.Message, user: User):

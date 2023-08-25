@@ -60,7 +60,7 @@ class ChatGPT:
             raise ValueError(f"Unknown GPT mode: {gpt_mode}")
         self.gpt_mode = gpt_mode
 
-    async def send_user_message(self, message_to_send: DialogMessage, previous_messages: List[DialogMessage] = None) -> (DialogMessage, CompletionUsage):
+    async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = {}
         if self.function_storage is not None:
             additional_fields.update({
@@ -68,10 +68,7 @@ class ChatGPT:
                 'function_call': 'auto',
             })
 
-        if previous_messages is None:
-            previous_messages = []
-
-        messages = self.create_context(message_to_send, previous_messages, self.gpt_mode)
+        messages = self.create_context(messages_to_send, self.gpt_mode)
         try:
             resp = await openai.ChatCompletion.acreate(
                 model=self.model,
@@ -88,15 +85,14 @@ class ChatGPT:
             raise
 
     @staticmethod
-    def create_context(message: DialogMessage, previous_messages: List[DialogMessage], gpt_mode) -> List[Any]:
+    def create_context(messages: List[DialogMessage], gpt_mode) -> List[Any]:
         system_prompt = settings.gpt_mode[gpt_mode]["system"]
 
-        messages = [{"role": "system", "content": system_prompt}]
-        for dialog_message in previous_messages:
-            messages.append(dialog_message.openai_message())
-        messages.append(message.openai_message())
+        result = [{"role": "system", "content": system_prompt}]
+        for dialog_message in messages:
+            result.append(dialog_message.openai_message())
 
-        return messages
+        return result
 
 
 async def summarize_messages(messages: List[DialogMessage], model: str, summary_max_length: int) -> (str, CompletionUsage):

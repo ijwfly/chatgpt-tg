@@ -1,5 +1,5 @@
 import datetime
-from typing import List
+from typing import List, Optional
 
 import settings
 from app.bot.utils import message_is_forward
@@ -14,7 +14,7 @@ class DialogManager:
     def __init__(self, db: DB, user: User, context_configuration):
         self.db = db
         self.user = user
-        self.dialog_messages = None
+        self.dialog_messages: Optional[List[Message]] = None
         self.chat_id = None
         self.context_configuration = context_configuration
 
@@ -75,7 +75,7 @@ class DialogManager:
 
     async def summarize_messages(self, messages: List[Message]):
         summarized, completion_usage = await summarize_messages(
-            [m.message for m in messages], self.user.current_model, self.context_configuration.mid_term_memory_tokens
+            [m.message for m in messages], self.user.current_model, self.context_configuration.summary_length
         )
         await self.db.create_completion_usage(
             self.user.id, completion_usage.prompt_tokens, completion_usage.completion_tokens,

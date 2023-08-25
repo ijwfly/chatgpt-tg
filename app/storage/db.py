@@ -4,6 +4,8 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
+from pgvector.asyncpg import register_vector
+
 import settings
 from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage
 from app.storage.user_role import UserRole
@@ -42,6 +44,7 @@ class Message(pydantic.BaseModel):
     tg_chat_id: int
     tg_message_id: int
     message_type: MessageType
+    embedding: Optional[List[float]]
 
 
 class DB:
@@ -226,7 +229,11 @@ class DBFactory:
     async def create_database(cls, user, password, host, port, database) -> DB:
         if cls.connection_pool is None:
             dsn = f'postgres://{user}:{password}@{host}:{port}/{database}'
-            cls.connection_pool = await asyncpg.create_pool(dsn=dsn)
+
+            async def init(conn):
+                await register_vector(conn)
+            cls.connection_pool = await asyncpg.create_pool(dsn, init=init)
+
         return DB(cls.connection_pool)
 
     @classmethod

@@ -12,15 +12,20 @@ class FunctionManager:
         self.user = user
         self.function_storage = None
 
-    async def process_functions(self) -> Optional[FunctionStorage]:
-        if not self.user.use_functions:
-            return None
-
+    @staticmethod
+    def get_static_functions():
         functions = []
 
         if settings.ENABLE_WOLFRAMALPHA:
             functions.append(query_wolframalpha)
 
+        return functions
+
+    async def process_functions(self) -> Optional[FunctionStorage]:
+        if not self.user.use_functions:
+            return None
+
+        functions = self.get_static_functions()
         if not functions:
             return None
 
