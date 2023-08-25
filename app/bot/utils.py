@@ -5,6 +5,7 @@ from typing import List
 from contextlib import asynccontextmanager
 
 from aiogram import types
+from aiogram.utils.exceptions import CantParseEntities
 
 TYPING_TIMEOUT = 180
 TYPING_DELAY = 2
@@ -93,3 +94,15 @@ def escape_tg_markdown(text):
     escape_chars = '\*_`\['
     return ''.join('\\' + char if char in escape_chars else char for char in text)
 
+
+async def send_telegram_message(message: types.Message, text: str, parse_mode=None, reply_markup=None):
+    if message.reply_to_message is None:
+        send_message = message.answer
+    else:
+        send_message = message.reply
+
+    try:
+        return await send_message(text, parse_mode=parse_mode, reply_markup=reply_markup)
+    except CantParseEntities:
+        # try to send message without parse_mode once
+        return await send_message(text, reply_markup=reply_markup)

@@ -2,21 +2,18 @@ import os.path
 import tempfile
 
 import settings
-from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.message_processor import MessageProcessor
-from app.context.dialog_manager import DialogUtils
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
-from app.bot.utils import TypingWorker, detect_and_extract_code, get_username, message_is_forward, get_hide_button
-from app.context.context_manager import build_context_manager
+from app.bot.utils import TypingWorker, get_username, message_is_forward, get_hide_button
+from app.bot.utils import send_telegram_message
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import DBFactory, User
 from app.storage.user_role import check_access_conditions, UserRole
-from app.openai_helpers.chatgpt import ChatGPT, GptModel
+from app.openai_helpers.chatgpt import GptModel
 
-from aiogram.utils.exceptions import CantParseEntities
 from aiogram import types, Bot, Dispatcher
 from aiogram.utils import executor
 from pydub import AudioSegment
@@ -125,54 +122,9 @@ class TelegramBot:
             message_processor = MessageProcessor(self.db, user, message)
             await message_processor.add_text_as_context(speech_text, response.message_id)
 
-    @staticmethod
-    async def send_telegram_message(message: types.Message, text: str, parse_mode=None, reply_markup=None):
-        if message.reply_to_message is None:
-            send_message = message.answer
-        else:
-            send_message = message.reply
-
-        try:
-            return await send_message(text, parse_mode=parse_mode, reply_markup=reply_markup)
-        except CantParseEntities:
-            # try to send message without parse_mode once
-            return await send_message(text, reply_markup=reply_markup)
-
     async def answer_text_message(self, message: types.Message, user: User):
-        context_manager = await build_context_manager(self.db, user, message)
-
-        function_storage = await context_manager.get_function_storage()
-        chat_gpt_manager = ChatGptManager(ChatGPT(user.current_model, user.gpt_mode, function_storage), self.db)
-
-        user_dialog_message = DialogUtils.prepare_user_message(message.text)
-        context_dialog_messages = await context_manager.add_message(user_dialog_message, message.message_id)
-        response_dialog_message = await chat_gpt_manager.send_user_message(user, context_dialog_messages)
-
-        await self.handle_gpt_response(
-            user, chat_gpt_manager, context_manager, message, response_dialog_message, function_storage
-        )
-
-    async def handle_gpt_response(self, user, chat_gpt_manager, context_manager, message,
-                                  response_dialog_message, function_storage):
-        if response_dialog_message.function_call:
-            function_name = response_dialog_message.function_call.name
-            function_args = response_dialog_message.function_call.arguments
-            function_response_raw = await function_storage.run_function(function_name, function_args)
-
-            function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
-            function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
-            function_response_tg_message = await self.send_telegram_message(message, function_response_text)
-            context_dialog_messages = await context_manager.add_message(function_response, function_response_tg_message.message_id)
-            response_dialog_message = await chat_gpt_manager.send_user_message(user, context_dialog_messages)
-
-            await self.handle_gpt_response(
-                user, chat_gpt_manager, context_manager, message, response_dialog_message, function_storage
-            )
-        else:
-            code_fragments = detect_and_extract_code(response_dialog_message.content)
-            parse_mode = types.ParseMode.MARKDOWN if code_fragments else None
-            response = await self.send_telegram_message(message, response_dialog_message.content, parse_mode)
-            await context_manager.add_message(response_dialog_message, response.message_id)
+        message_processor = MessageProcessor(self.db, user, message)
+        await message_processor.process_message()
 
     async def reset_dialog(self, message: types.Message, user: User):
         await self.db.create_reset_message(user.id, message.chat.id)
@@ -203,7 +155,7 @@ class TelegramBot:
         if whisper_price:
             result.append(f'*Speech2Text:* {whisper_usage} seconds, ${whisper_price}')
         result.append(f'*Total:* ${total}')
-        await self.send_telegram_message(
+        await send_telegram_message(
             message, '\n'.join(result), types.ParseMode.MARKDOWN, reply_markup=get_hide_button()
         )
 
@@ -228,7 +180,7 @@ class TelegramBot:
         total_price = sum([price for _, price in result])
         result = [f'{name}: ${price}' for name, price in result]
         result.append(f'Total: ${total_price}')
-        await self.send_telegram_message(
+        await send_telegram_message(
             message, '\n'.join(result), reply_markup=get_hide_button()
         )
 
