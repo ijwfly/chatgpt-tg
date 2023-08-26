@@ -115,6 +115,7 @@ class TelegramBot:
         if user.voice_as_prompt:
             # HACK: hack with aiogram.Message to process voice as text prompt
             message.text = speech_text
+            message.message_id = response.message_id
             await self.handler(message, user)
         else:
             # add voice message text as context to current dialog, not as prompt
