@@ -106,3 +106,19 @@ async def send_telegram_message(message: types.Message, text: str, parse_mode=No
     except CantParseEntities:
         # try to send message without parse_mode once
         return await send_message(text, reply_markup=reply_markup)
+
+
+def merge_dicts(dict_1, dict_2):
+    """
+    This function merge two dicts containing strings using plus operator on each key
+    """
+    result = dict_1.copy()
+    for key, value in dict_2.items():
+        if not isinstance(value, str):
+            ValueError("dicts must have strings as values")
+        if not key in result:
+            result[key] = "" if value is not None else None
+        if value is not None:
+            result[key] += value
+
+    return result

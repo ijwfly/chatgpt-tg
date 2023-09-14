@@ -20,7 +20,7 @@ services:
       - app
 
   postgres:
-    image: ankane/pgvector:latest
+    image: postgres:15.3
 #    ports:
 #      - "5432:5432"
     volumes:

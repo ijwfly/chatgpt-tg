@@ -31,6 +31,7 @@ MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 USER_ROLE_DEFAULT = UserRole.BASIC  # default role assigned to new users
 USER_ROLE_BOT_ACCESS = UserRole.BASIC  # minimum role needed to access bot
 USER_ROLE_CHOOSE_MODEL = UserRole.BASIC  # minimum role needed to choose model (gpt-3.5/gpt-4)
+USER_ROLE_STREAMING_ANSWERS = UserRole.BASIC  # minimum role needed to use streaming gpt responses
 
 # Enables chat for user role management
 # When enabled sends new user info to USER_ROLE_MANAGER_CHAT_ID with keyboard to choose user role

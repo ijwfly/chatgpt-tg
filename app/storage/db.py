@@ -26,6 +26,7 @@ class User(pydantic.BaseModel):
     full_name: Optional[str]
     username: Optional[str]
     role: Optional[UserRole]
+    streaming_answers: bool
 
 
 class MessageType(Enum):
@@ -44,7 +45,6 @@ class Message(pydantic.BaseModel):
     tg_chat_id: int
     tg_message_id: int
     message_type: MessageType
-    embedding: Optional[List[float]]
 
 
 class DB:
@@ -74,11 +74,11 @@ class DB:
         sql = '''UPDATE chatgpttg.user 
         SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
         voice_as_prompt = $4, use_functions = $5, auto_summarize = $6,
-        full_name = $7, username = $8, role = $9 WHERE id = $10 RETURNING *'''
+        full_name = $7, username = $8, role = $9, streaming_answers = $10 WHERE id = $11 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
             user.voice_as_prompt, user.use_functions, user.auto_summarize,
-            user.full_name, user.username, user.role.value, user.id,
+            user.full_name, user.username, user.role.value, user.streaming_answers, user.id,
         ))
 
     async def create_user(self, telegram_user_id: int, role: UserRole):
