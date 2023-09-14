@@ -4,8 +4,6 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pgvector.asyncpg import register_vector
-
 import settings
 from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage
 from app.storage.user_role import UserRole
@@ -229,10 +227,7 @@ class DBFactory:
     async def create_database(cls, user, password, host, port, database) -> DB:
         if cls.connection_pool is None:
             dsn = f'postgres://{user}:{password}@{host}:{port}/{database}'
-
-            async def init(conn):
-                await register_vector(conn)
-            cls.connection_pool = await asyncpg.create_pool(dsn, init=init)
+            cls.connection_pool = await asyncpg.create_pool(dsn)
 
         return DB(cls.connection_pool)
 
