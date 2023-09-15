@@ -40,9 +40,13 @@ class MessageProcessor:
             function_response_raw = await function_storage.run_function(function_name, function_args)
 
             function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
-            function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
-            function_response_tg_message = await send_telegram_message(self.message, function_response_text)
-            context_dialog_messages = await context_manager.add_message(function_response, function_response_tg_message.message_id)
+            if self.user.function_call_verbose:
+                function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
+                function_response_tg_message = await send_telegram_message(self.message, function_response_text)
+                function_response_message_id = function_response_tg_message.message_id
+            else:
+                function_response_message_id = -1
+            context_dialog_messages = await context_manager.add_message(function_response, function_response_message_id)
             response_dialog_message = await chat_gpt_manager.send_user_message(self.user, self.message, context_dialog_messages)
 
             await self.handle_gpt_response(chat_gpt_manager, context_manager, response_dialog_message, function_storage)
