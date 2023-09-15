@@ -91,11 +91,14 @@ class Settings:
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
             'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
+            'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
+            'function_call_verbose': OnOffSetting('Verbose func calls', 'function_call_verbose'),
             'auto_summarize': OnOffSetting('Auto summarize', 'auto_summarize'),
         }
         self.minimum_required_roles = {
             'current_model': settings.USER_ROLE_CHOOSE_MODEL,
+            'streaming_answers': settings.USER_ROLE_STREAMING_ANSWERS,
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: SETTINGS_PREFIX in c.data)
 

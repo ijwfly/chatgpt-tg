@@ -1,10 +1,10 @@
 import datetime
-from typing import List
+from typing import List, Optional
 
 import settings
 from app.bot.utils import message_is_forward
 from app.openai_helpers.chatgpt import DialogMessage, summarize_messages
-from app.openai_helpers.count_tokens import count_prompt_tokens
+from app.openai_helpers.count_tokens import count_dialog_messages_tokens
 from app.storage.db import User, DB, Message, MessageType
 
 from aiogram import types
@@ -14,7 +14,7 @@ class DialogManager:
     def __init__(self, db: DB, user: User, context_configuration):
         self.db = db
         self.user = user
-        self.dialog_messages = None
+        self.dialog_messages: Optional[List[Message]] = None
         self.chat_id = None
         self.context_configuration = context_configuration
 
@@ -46,7 +46,7 @@ class DialogManager:
                 self.dialog_messages = []
                 return []
 
-        if self.user.auto_summarize and count_prompt_tokens(m.message for m in dialog_messages) >= self.context_configuration.short_term_memory_tokens:
+        if self.user.auto_summarize and count_dialog_messages_tokens(m.message for m in dialog_messages) >= self.context_configuration.short_term_memory_tokens:
             to_summarize, to_process = self.split_context_by_token_length(dialog_messages)
             summarized_message = await self.summarize_messages(to_summarize)
             self.dialog_messages = [summarized_message] + to_process
@@ -67,7 +67,7 @@ class DialogManager:
         token_length = self.context_configuration.short_term_memory_tokens / 2
         for split_point in range(len(messages)):
             right_dialog_messages = (d.message for d in messages[split_point:])
-            right_length = count_prompt_tokens(right_dialog_messages)
+            right_length = count_dialog_messages_tokens(right_dialog_messages)
             if right_length <= token_length:
                 return messages[:split_point], messages[split_point:]
         else:
@@ -75,7 +75,7 @@ class DialogManager:
 
     async def summarize_messages(self, messages: List[Message]):
         summarized, completion_usage = await summarize_messages(
-            [m.message for m in messages], self.user.current_model, self.context_configuration.mid_term_memory_tokens
+            [m.message for m in messages], self.user.current_model, self.context_configuration.summary_length
         )
         await self.db.create_completion_usage(
             self.user.id, completion_usage.prompt_tokens, completion_usage.completion_tokens,

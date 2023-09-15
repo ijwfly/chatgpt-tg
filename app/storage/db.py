@@ -24,6 +24,8 @@ class User(pydantic.BaseModel):
     full_name: Optional[str]
     username: Optional[str]
     role: Optional[UserRole]
+    streaming_answers: bool
+    function_call_verbose: bool
 
 
 class MessageType(Enum):
@@ -71,11 +73,13 @@ class DB:
         sql = '''UPDATE chatgpttg.user 
         SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
         voice_as_prompt = $4, use_functions = $5, auto_summarize = $6,
-        full_name = $7, username = $8, role = $9 WHERE id = $10 RETURNING *'''
+        full_name = $7, username = $8, role = $9, streaming_answers = $10,
+        function_call_verbose = $11 WHERE id = $12 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
             user.voice_as_prompt, user.use_functions, user.auto_summarize,
-            user.full_name, user.username, user.role.value, user.id,
+            user.full_name, user.username, user.role.value, user.streaming_answers,
+            user.function_call_verbose, user.id,
         ))
 
     async def create_user(self, telegram_user_id: int, role: UserRole):
@@ -226,7 +230,8 @@ class DBFactory:
     async def create_database(cls, user, password, host, port, database) -> DB:
         if cls.connection_pool is None:
             dsn = f'postgres://{user}:{password}@{host}:{port}/{database}'
-            cls.connection_pool = await asyncpg.create_pool(dsn=dsn)
+            cls.connection_pool = await asyncpg.create_pool(dsn)
+
         return DB(cls.connection_pool)
 
     @classmethod

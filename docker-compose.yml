@@ -23,9 +23,12 @@ services:
     image: postgres:15.3
 #    ports:
 #      - "5432:5432"
+    entrypoint: [ "/docker-entrypoint-initdb.d/entrypoint.sh" ]
     volumes:
       - ./migrations/sql:/docker-entrypoint-initdb.d/migrations-1
       - ./migrations/pg_init.sh:/docker-entrypoint-initdb.d/pg_init.sh
+      - ./migrations/entrypoint.sh:/docker-entrypoint-initdb.d/entrypoint.sh
+      - ./migrations/wait-for-it.sh:/docker-entrypoint-initdb.d/wait-for-it.sh
       - db:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: postgres

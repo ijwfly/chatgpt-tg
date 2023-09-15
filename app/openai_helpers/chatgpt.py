@@ -1,11 +1,13 @@
+import json
 from typing import List, Any, Optional
 
 import settings
+from app.bot.utils import merge_dicts
+from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
+from app.openai_helpers.function_storage import FunctionStorage
 
 import pydantic
 import openai
-
-from app.openai_helpers.function_storage import FunctionStorage
 
 
 class GptModel:
@@ -60,7 +62,7 @@ class ChatGPT:
             raise ValueError(f"Unknown GPT mode: {gpt_mode}")
         self.gpt_mode = gpt_mode
 
-    async def send_user_message(self, message_to_send: DialogMessage, previous_messages: List[DialogMessage] = None) -> (DialogMessage, CompletionUsage):
+    async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = {}
         if self.function_storage is not None:
             additional_fields.update({
@@ -68,35 +70,79 @@ class ChatGPT:
                 'function_call': 'auto',
             })
 
-        if previous_messages is None:
-            previous_messages = []
+        messages = self.create_context(messages_to_send, self.gpt_mode)
+        resp = await openai.ChatCompletion.acreate(
+            model=self.model,
+            messages=messages,
+            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
+            **additional_fields,
+        )
+        completion_usage = CompletionUsage(model=self.model, **resp.usage)
+        message = resp.choices[0].message
+        response = DialogMessage(**message)
+        return response, completion_usage
 
-        messages = self.create_context(message_to_send, previous_messages, self.gpt_mode)
-        try:
-            resp = await openai.ChatCompletion.acreate(
+    async def send_messages_streaming(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
+        prompt_tokens = 0
+
+        additional_fields = {}
+        if self.function_storage is not None:
+            functions = self.function_storage.get_openai_prompt()
+            prompt_tokens += count_tokens_from_functions(functions, self.model)
+            additional_fields.update({
+                'functions': self.function_storage.get_openai_prompt(),
+                'function_call': 'auto',
+            })
+
+        messages = self.create_context(messages_to_send, self.gpt_mode)
+        resp_generator = await openai.ChatCompletion.acreate(
+            model=self.model,
+            messages=messages,
+            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
+            stream=True,
+            **additional_fields,
+        )
+
+        prompt_tokens += count_messages_tokens(messages, self.model)
+        result_dict = {}
+        async for resp_part in resp_generator:
+            delta = resp_part.choices[0].delta
+            if not delta:
+                continue
+
+            if 'content' in delta and delta.content is not None:
+                if not delta.content:
+                    continue
+                result_dict = merge_dicts(result_dict, dict(delta))
+                dialog_message = DialogMessage(**result_dict)
+                completion_tokens = count_messages_tokens([result_dict], model=self.model)
+            elif 'function_call' in delta and delta.function_call is not None:
+                result_dict = merge_dicts(result_dict, dict(delta.function_call))
+                dialog_message = DialogMessage(function_call=result_dict)
+                # TODO: find mode accurate way to calculate completion length for function calls
+                completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.model)
+            else:
+                raise ValueError('Unknown type of gpt response')
+
+            # openai doesn't return this field in streaming mode somewhy
+            dialog_message.role = 'assistant'
+            completion_usage = CompletionUsage(
                 model=self.model,
-                messages=messages,
-                temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
-                **additional_fields,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
             )
-            completion_usage = CompletionUsage(model=self.model, **resp.usage)
-            message = resp.choices[0].message
-            response = DialogMessage(**message)
-            return response, completion_usage
-        except openai.error.InvalidRequestError:
-            # TODO: check for error
-            raise
+            yield dialog_message, completion_usage
 
     @staticmethod
-    def create_context(message: DialogMessage, previous_messages: List[DialogMessage], gpt_mode) -> List[Any]:
+    def create_context(messages: List[DialogMessage], gpt_mode) -> List[Any]:
         system_prompt = settings.gpt_mode[gpt_mode]["system"]
 
-        messages = [{"role": "system", "content": system_prompt}]
-        for dialog_message in previous_messages:
-            messages.append(dialog_message.openai_message())
-        messages.append(message.openai_message())
+        result = [{"role": "system", "content": system_prompt}]
+        for dialog_message in messages:
+            result.append(dialog_message.openai_message())
 
-        return messages
+        return result
 
 
 async def summarize_messages(messages: List[DialogMessage], model: str, summary_max_length: int) -> (str, CompletionUsage):
