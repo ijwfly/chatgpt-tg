@@ -7,6 +7,9 @@ from app.storage.db import DB, User
 from aiogram.types import Message
 
 
+WAIT_BETWEEN_UPDATES = 2
+
+
 class ChatGptManager:
     def __init__(self, chatgpt, db):
         self.chatgpt = chatgpt
@@ -51,7 +54,7 @@ class ChatGptManager:
 
             # update message
             time_passed_seconds = (datetime.now() - previous_time).seconds
-            if previous_content != new_content and time_passed_seconds >= 1:
+            if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_UPDATES:
                 await tg_message.bot.edit_message_text(new_content, chat_id, message_id)
                 previous_content = new_content
                 previous_time = datetime.now()
