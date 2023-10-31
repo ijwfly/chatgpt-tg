@@ -30,7 +30,9 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4'])
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
-        self.dispatcher.register_message_handler(self.handler)
+        self.dispatcher.register_message_handler(
+            self.handler, content_types=[types.ContentType.TEXT, types.ContentType.VIDEO, types.ContentType.PHOTO]
+        )
         self.dispatcher.register_callback_query_handler(self.process_hide_callback, lambda c: c.data == 'hide')
 
         # initialized in on_startup
@@ -65,6 +67,9 @@ class TelegramBot:
         await self.bot.answer_callback_query(callback_query.id)
 
     async def handler(self, message: types.Message, user: User):
+        if message.caption and not message.text:
+            message.text = message.caption
+
         if message.text is None:
             return
 
@@ -85,6 +90,9 @@ class TelegramBot:
             username = get_username(message.forward_from)
         elif message.forward_sender_name:
             username = message.forward_sender_name
+        elif message.forward_from_chat:
+            username = message.forward_from_chat.full_name or message.forward_from_chat.title
+            username = f'Chat name "{username}"'
         else:
             username = None
         forwarded_text = f'{username}:\n{message.text}' if username else message.text
