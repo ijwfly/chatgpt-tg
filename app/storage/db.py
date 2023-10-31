@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 from typing import List, Optional
 
@@ -8,6 +8,7 @@ import settings
 from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage
 from app.storage.user_role import UserRole
 
+import pytz
 import asyncpg
 import pydantic
 
@@ -180,15 +181,20 @@ class DB:
             return []
         return [CompletionUsage(**dict(record)) for record in records]
 
-    async def get_all_users_completion_usage(self):
-        sql = '''
+    async def get_all_users_completion_usage(self, month_date: date = None):
+        if not month_date:
+            month_date = datetime.now(pytz.timezone('UTC')).date()
+
+        year, month = month_date.year, month_date.month
+
+        sql = f'''
         SELECT u.telegram_id, u.username, u.full_name, cu.model, 
            SUM(cu.prompt_tokens) AS prompt_tokens, 
            SUM(cu.completion_tokens) AS completion_tokens,
            SUM(cu.total_tokens) AS total_tokens
         FROM chatgpttg.completion_usage cu
         JOIN chatgpttg.user u ON cu.user_id = u.id
-        WHERE date_trunc('month', cu.cdate) = date_trunc('month', current_date)
+        WHERE EXTRACT(YEAR FROM cu.cdate) = {year} AND EXTRACT(MONTH FROM cu.cdate) = {month}
         GROUP BY u.id, cu.model;
         '''
         records = await self.connection_pool.fetch(sql)
@@ -202,13 +208,18 @@ class DB:
             result[name].append(CompletionUsage(**dict(record)))
         return result
 
-    async def get_all_users_whisper_usage(self):
-        sql = '''
+    async def get_all_users_whisper_usage(self, month_date: date = None):
+        if not month_date:
+            month_date = datetime.now(pytz.timezone('UTC')).date()
+
+        year, month = month_date.year, month_date.month
+
+        sql = f'''
         SELECT u.telegram_id, u.username, u.full_name, 
            SUM(wu.audio_seconds) AS audio_seconds
         FROM chatgpttg.whisper_usage wu
         JOIN chatgpttg.user u ON wu.user_id = u.id
-        WHERE date_trunc('month', wu.cdate) = date_trunc('month', current_date)
+        WHERE EXTRACT(YEAR FROM wu.cdate) = {year} AND EXTRACT(MONTH FROM wu.cdate) = {month}
         GROUP BY u.id;
         '''
         records = await self.connection_pool.fetch(sql)

@@ -1,3 +1,5 @@
+import logging
+
 import settings
 from app.bot.queued_dispatcher import QueuedDispatcher
 from app.bot.telegram_bot import TelegramBot
@@ -7,6 +9,8 @@ from aiogram import Bot
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 dp = QueuedDispatcher(bot)
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 if __name__ == '__main__':
