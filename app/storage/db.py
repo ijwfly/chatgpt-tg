@@ -8,7 +8,6 @@ import settings
 from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage
 from app.storage.user_role import UserRole
 
-import pytz
 import asyncpg
 import pydantic
 
@@ -183,7 +182,7 @@ class DB:
 
     async def get_all_users_completion_usage(self, month_date: date = None):
         if not month_date:
-            month_date = datetime.now(pytz.timezone('UTC')).date()
+            month_date = datetime.now(settings.POSTGRES_TIMEZONE).date()
 
         year, month = month_date.year, month_date.month
 
@@ -210,7 +209,7 @@ class DB:
 
     async def get_all_users_whisper_usage(self, month_date: date = None):
         if not month_date:
-            month_date = datetime.now(pytz.timezone('UTC')).date()
+            month_date = datetime.now(settings.POSTGRES_TIMEZONE).date()
 
         year, month = month_date.year, month_date.month
 

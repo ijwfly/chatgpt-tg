@@ -1,3 +1,5 @@
+import pytz
+
 from app.storage.user_role import UserRole
 
 # ChatGPT system prompts
@@ -25,6 +27,7 @@ TELEGRAM_BOT_TOKEN = 'YOUR_TOKEN'
 # Utility settings
 OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
+POSTGRES_TIMEZONE = pytz.timezone('UTC')
 
 # User access settings, there are 4 levels of access, each: stranger, basic, advanced, admin
 # You can setup default role for new users and minimum role needed to access bot, see UserRole enum

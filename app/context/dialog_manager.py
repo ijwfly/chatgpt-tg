@@ -27,6 +27,10 @@ class DialogManager:
         else:
             is_reply = False
             db_message = await self.db.get_last_message(self.user.id, self.chat_id)
+            message_expiration_dtime = datetime.datetime.now(settings.POSTGRES_TIMEZONE) - datetime.timedelta(minutes=settings.MESSAGE_EXPIRATION_WINDOW)
+            if db_message.activation_dtime < message_expiration_dtime:
+                # last message is too old, starting new dialog
+                db_message = None
 
         if not db_message or db_message.message_type == MessageType.RESET:
             self.dialog_messages = []
@@ -36,15 +40,8 @@ class DialogManager:
         dialog_messages.append(db_message)
 
         if is_reply:
-            # if it's a reply, we don't filter old messages
-            # instead we update activation time of all messages to be included in context
+            # if it's a reply, we need to update activation time of dialog messages to be included in context next time
             await self.db.update_activation_dtime([m.id for m in dialog_messages])
-        else:
-            # if it's not a reply, we filter old messages from context
-            dialog_messages = self.filter_old_messages(dialog_messages)
-            if not dialog_messages:
-                self.dialog_messages = []
-                return []
 
         if self.user.auto_summarize and count_dialog_messages_tokens(m.message for m in dialog_messages) >= self.context_configuration.short_term_memory_tokens:
             to_summarize, to_process = self.split_context_by_token_length(dialog_messages)
@@ -53,15 +50,6 @@ class DialogManager:
         else:
             self.dialog_messages = dialog_messages
         return self.get_dialog_messages()
-
-    @staticmethod
-    def filter_old_messages(messages: List[Message]):
-        """
-        Filter messages by activation_dtime
-        """
-        tz = datetime.datetime.now().astimezone().tzinfo
-        time_window = datetime.datetime.now(tz) - datetime.timedelta(seconds=settings.MESSAGE_EXPIRATION_WINDOW)
-        return list(filter(lambda m: m.activation_dtime >= time_window, messages))
 
     def split_context_by_token_length(self, messages: List[Message]):
         token_length = self.context_configuration.short_term_memory_tokens / 2

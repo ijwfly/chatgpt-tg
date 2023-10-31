@@ -2,7 +2,6 @@ import datetime
 import os.path
 import tempfile
 
-import pytz
 from dateutil.relativedelta import relativedelta
 
 import settings
@@ -63,7 +62,8 @@ class TelegramBot:
         await self.bot.set_my_commands(commands)
 
     async def on_shutdown(self, _):
-        await self.monthly_usage_task.stop()
+        if self.monthly_usage_task:
+            await self.monthly_usage_task.stop()
         await DBFactory().close_database()
         self.db = None
 
@@ -189,7 +189,7 @@ class TelegramBot:
         month = None
         if len(args) == 1 and args[0].replace('-', '').isdecimal():
             month_offset = int(args[0])
-            month = datetime.datetime.now(pytz.timezone('UTC')) + relativedelta(months=month_offset)
+            month = datetime.datetime.now(settings.POSTGRES_TIMEZONE) + relativedelta(months=month_offset)
             month = month.date()
 
         result = await get_completion_usage_response_all_users(self.db, month)
