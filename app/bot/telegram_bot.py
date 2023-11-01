@@ -1,12 +1,17 @@
+import datetime
 import os.path
 import tempfile
 
+from dateutil.relativedelta import relativedelta
+
 import settings
 from app.bot.message_processor import MessageProcessor
+from app.bot.scheduled_tasks import build_monthly_usage_task
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
-from app.bot.utils import TypingWorker, get_username, message_is_forward, get_hide_button
+from app.bot.utils import (TypingWorker, get_username, message_is_forward, get_hide_button,
+                           get_completion_usage_response_all_users)
 from app.bot.utils import send_telegram_message
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
@@ -38,6 +43,7 @@ class TelegramBot:
         # initialized in on_startup
         self.settings = None
         self.role_manager = None
+        self.monthly_usage_task = None
 
     async def on_startup(self, _):
         self.db = await DBFactory.create_database(
@@ -48,11 +54,16 @@ class TelegramBot:
         self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
         self.dispatcher.middleware.setup(UserMiddleware(self.db))
 
+        self.monthly_usage_task = build_monthly_usage_task(self.bot, self.db)
+        self.monthly_usage_task.start()
+
         # all commands are added to global scope by default, except for admin commands
         commands = self.role_manager.get_role_commands(UserRole.ADVANCED)
         await self.bot.set_my_commands(commands)
 
     async def on_shutdown(self, _):
+        if self.monthly_usage_task:
+            await self.monthly_usage_task.stop()
         await DBFactory().close_database()
         self.db = None
 
@@ -172,24 +183,18 @@ class TelegramBot:
             return
 
         await self.bot.delete_message(message.chat.id, message.message_id)
-        completion_usages = await self.db.get_all_users_completion_usage()
-        whisper_usages = await self.db.get_all_users_whisper_usage()
-        result = []
-        for name, user_completion_usages in completion_usages.items():
-            user_usage_price = 0
-            for usage in user_completion_usages:
-                user_usage_price += calculate_completion_usage_price(
-                    usage.prompt_tokens, usage.completion_tokens, usage.model
-                )
-            user_whisper_usage = whisper_usages.get(name, 0)
-            user_usage_price += calculate_whisper_usage_price(user_whisper_usage)
-            result.append((name, user_usage_price))
-        result.sort(key=lambda x: x[1], reverse=True)
-        total_price = sum([price for _, price in result])
-        result = [f'{name}: ${price}' for name, price in result]
-        result.append(f'Total: ${total_price}')
+
+        # parse command args
+        args = message.get_args().split(' ')
+        month = None
+        if len(args) == 1 and args[0].replace('-', '').isdecimal():
+            month_offset = int(args[0])
+            month = datetime.datetime.now(settings.POSTGRES_TIMEZONE) + relativedelta(months=month_offset)
+            month = month.date()
+
+        result = await get_completion_usage_response_all_users(self.db, month)
         await send_telegram_message(
-            message, '\n'.join(result), reply_markup=get_hide_button()
+            message, result, reply_markup=get_hide_button()
         )
 
     async def open_settings(self, message: types.Message, user: User):

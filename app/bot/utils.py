@@ -1,11 +1,14 @@
 import dataclasses
 import re
 import asyncio
+from datetime import date
 from typing import List
 from contextlib import asynccontextmanager
 
 from aiogram import types
 from aiogram.utils.exceptions import CantParseEntities
+
+from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
 
 TYPING_TIMEOUT = 180
 TYPING_DELAY = 2
@@ -121,4 +124,29 @@ def merge_dicts(dict_1, dict_2):
         if value is not None:
             result[key] += value
 
+    return result
+
+
+async def get_completion_usage_response_all_users(db, month_date: date = None) -> str:
+    completion_usages = await db.get_all_users_completion_usage(month_date)
+    whisper_usages = await db.get_all_users_whisper_usage(month_date)
+    result = []
+    for name, user_completion_usages in completion_usages.items():
+        user_usage_price = 0
+        for usage in user_completion_usages:
+            user_usage_price += calculate_completion_usage_price(
+                usage.prompt_tokens, usage.completion_tokens, usage.model
+            )
+        user_whisper_usage = whisper_usages.get(name, 0)
+        user_usage_price += calculate_whisper_usage_price(user_whisper_usage)
+        result.append((name, user_usage_price))
+    result.sort(key=lambda x: x[1], reverse=True)
+    total_price = sum([price for _, price in result])
+    result = [f'{name}: ${price}' for name, price in result]
+    result.append(f'Total: ${total_price}')
+    result = '\n'.join(result)
+    if month_date is None:
+        result = f'API usage for current month:\n{result}'
+    else:
+        result = f'API usage for month {month_date.month:02d}/{month_date.year}:\n{result}'
     return result
