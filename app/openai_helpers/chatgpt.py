@@ -1,4 +1,5 @@
 import json
+from contextlib import suppress
 from typing import List, Any, Optional, Callable
 
 import settings
@@ -134,8 +135,11 @@ class ChatGPT:
             )
             yield dialog_message, completion_usage
             if is_cancelled():
-                # some more tokens will be generated after cancellation
+                # some more tokens may be generated after cancellation
                 completion_usage.completion_tokens += 20
+                with suppress(BaseException):
+                    # sometimes this call throws an exception since python 3.8
+                    await resp_generator.aclose()
                 break
 
     @staticmethod
