@@ -1,5 +1,8 @@
 from datetime import datetime
 
+from aiogram import types
+
+from app.bot.cancellation_manager import get_cancel_button
 from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.utils import send_telegram_message, detect_and_extract_code, edit_telegram_message
 from app.context.context_manager import build_context_manager
@@ -23,7 +26,7 @@ class MessageProcessor:
         speech_dialog_message = DialogUtils.prepare_user_message(text)
         await context_manager.add_message(speech_dialog_message, message_id)
 
-    async def process_message(self):
+    async def process_message(self, is_cancelled):
         context_manager = await build_context_manager(self.db, self.user, self.message)
 
         function_storage = await context_manager.get_function_storage()
@@ -31,13 +34,13 @@ class MessageProcessor:
 
         user_dialog_message = DialogUtils.prepare_user_message(self.message.text)
         context_dialog_messages = await context_manager.add_message(user_dialog_message, self.message.message_id)
-        response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages)
+        response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
         await self.handle_gpt_response(
-            chat_gpt_manager, context_manager, response_generator, function_storage
+            chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled
         )
 
-    async def handle_gpt_response(self, chat_gpt_manager, context_manager, response_generator, function_storage):
+    async def handle_gpt_response(self, chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled):
         response_dialog_message, message_id = await self.handle_response_generator(response_generator)
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
@@ -52,9 +55,9 @@ class MessageProcessor:
             else:
                 function_response_message_id = -1
             context_dialog_messages = await context_manager.add_message(function_response, function_response_message_id)
-            response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages)
+            response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
-            await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage)
+            await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled)
         else:
             code_fragments = detect_and_extract_code(response_dialog_message.content)
             parse_mode = ParseMode.MARKDOWN if code_fragments else None
@@ -70,6 +73,9 @@ class MessageProcessor:
         chat_id = None
         previous_content = None
         previous_time = None
+
+        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(get_cancel_button())
 
         first_iteration = True
         async for dialog_message in response_generator:
@@ -87,7 +93,7 @@ class MessageProcessor:
 
             # send message
             if not message_id:
-                resp = await send_telegram_message(self.message, dialog_message.content)
+                resp = await send_telegram_message(self.message, dialog_message.content, reply_markup=keyboard)
                 chat_id = self.message.chat.id
                 # hack: most telegram clients remove "typing" status after receiving new message from bot
                 await self.message.bot.send_chat_action(chat_id, 'typing')
@@ -99,7 +105,7 @@ class MessageProcessor:
             # update message
             time_passed_seconds = (datetime.now() - previous_time).seconds
             if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES:
-                await self.message.bot.edit_message_text(new_content, chat_id, message_id)
+                await self.message.bot.edit_message_text(new_content, chat_id, message_id, reply_markup=keyboard)
                 previous_content = new_content
                 previous_time = datetime.now()
         return dialog_message, message_id

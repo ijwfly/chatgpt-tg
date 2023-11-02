@@ -1,5 +1,5 @@
 import json
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Callable
 
 import settings
 from app.bot.utils import merge_dicts
@@ -82,7 +82,7 @@ class ChatGPT:
         response = DialogMessage(**message)
         return response, completion_usage
 
-    async def send_messages_streaming(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
+    async def send_messages_streaming(self, messages_to_send: List[DialogMessage], is_cancelled: Callable[[], bool]) -> (DialogMessage, CompletionUsage):
         prompt_tokens = 0
 
         additional_fields = {}
@@ -133,6 +133,10 @@ class ChatGPT:
                 total_tokens=prompt_tokens + completion_tokens,
             )
             yield dialog_message, completion_usage
+            if is_cancelled():
+                # some more tokens will be generated after cancellation
+                completion_usage.completion_tokens += 20
+                break
 
     @staticmethod
     def create_context(messages: List[DialogMessage], gpt_mode) -> List[Any]:
