@@ -28,7 +28,7 @@ class DialogManager:
             is_reply = False
             db_message = await self.db.get_last_message(self.user.id, self.chat_id)
             message_expiration_dtime = datetime.datetime.now(settings.POSTGRES_TIMEZONE) - datetime.timedelta(seconds=settings.MESSAGE_EXPIRATION_WINDOW)
-            if db_message.activation_dtime < message_expiration_dtime:
+            if db_message is not None and db_message.activation_dtime < message_expiration_dtime:
                 # last message is too old, starting new dialog
                 db_message = None
 
