@@ -5,6 +5,7 @@ import tempfile
 from dateutil.relativedelta import relativedelta
 
 import settings
+from app.bot.cancellation_manager import CancellationManager
 from app.bot.message_processor import MessageProcessor
 from app.bot.scheduled_tasks import build_monthly_usage_task
 from app.bot.settings_menu import Settings
@@ -42,6 +43,7 @@ class TelegramBot:
 
         # initialized in on_startup
         self.settings = None
+        self.cancellation_manager = None
         self.role_manager = None
         self.monthly_usage_task = None
 
@@ -51,6 +53,7 @@ class TelegramBot:
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
         )
         self.settings = Settings(self.bot, self.dispatcher, self.db)
+        self.cancellation_manager = CancellationManager(self.bot, self.dispatcher)
         self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
         self.dispatcher.middleware.setup(UserMiddleware(self.db))
 
@@ -143,7 +146,8 @@ class TelegramBot:
 
     async def answer_text_message(self, message: types.Message, user: User):
         message_processor = MessageProcessor(self.db, user, message)
-        await message_processor.process_message()
+        is_cancelled = self.cancellation_manager.get_token(message.from_user.id)
+        await message_processor.process_message(is_cancelled)
 
     async def reset_dialog(self, message: types.Message, user: User):
         await self.db.create_reset_message(user.id, message.chat.id)

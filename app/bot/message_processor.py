@@ -1,11 +1,18 @@
-from aiogram.types import Message, ParseMode
+from datetime import datetime
 
+from aiogram import types
+
+from app.bot.cancellation_manager import get_cancel_button
 from app.bot.chatgpt_manager import ChatGptManager
-from app.bot.utils import send_telegram_message, detect_and_extract_code
+from app.bot.utils import send_telegram_message, detect_and_extract_code, edit_telegram_message
 from app.context.context_manager import build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.openai_helpers.chatgpt import ChatGPT
 from app.storage.db import DB, User
+
+from aiogram.types import Message, ParseMode
+
+WAIT_BETWEEN_MESSAGE_UPDATES = 2
 
 
 class MessageProcessor:
@@ -19,7 +26,7 @@ class MessageProcessor:
         speech_dialog_message = DialogUtils.prepare_user_message(text)
         await context_manager.add_message(speech_dialog_message, message_id)
 
-    async def process_message(self):
+    async def process_message(self, is_cancelled):
         context_manager = await build_context_manager(self.db, self.user, self.message)
 
         function_storage = await context_manager.get_function_storage()
@@ -27,13 +34,14 @@ class MessageProcessor:
 
         user_dialog_message = DialogUtils.prepare_user_message(self.message.text)
         context_dialog_messages = await context_manager.add_message(user_dialog_message, self.message.message_id)
-        response_dialog_message = await chat_gpt_manager.send_user_message(self.user, self.message, context_dialog_messages)
+        response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
         await self.handle_gpt_response(
-            chat_gpt_manager, context_manager, response_dialog_message, function_storage
+            chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled
         )
 
-    async def handle_gpt_response(self, chat_gpt_manager, context_manager, response_dialog_message, function_storage):
+    async def handle_gpt_response(self, chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled):
+        response_dialog_message, message_id = await self.handle_response_generator(response_generator)
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
@@ -47,11 +55,57 @@ class MessageProcessor:
             else:
                 function_response_message_id = -1
             context_dialog_messages = await context_manager.add_message(function_response, function_response_message_id)
-            response_dialog_message = await chat_gpt_manager.send_user_message(self.user, self.message, context_dialog_messages)
+            response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
-            await self.handle_gpt_response(chat_gpt_manager, context_manager, response_dialog_message, function_storage)
+            await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled)
         else:
             code_fragments = detect_and_extract_code(response_dialog_message.content)
             parse_mode = ParseMode.MARKDOWN if code_fragments else None
-            response = await send_telegram_message(self.message, response_dialog_message.content, parse_mode)
+            if message_id is not None:
+                response = await edit_telegram_message(self.message, response_dialog_message.content, message_id, parse_mode)
+            else:
+                response = await send_telegram_message(self.message, response_dialog_message.content, parse_mode)
             await context_manager.add_message(response_dialog_message, response.message_id)
+
+    async def handle_response_generator(self, response_generator):
+        dialog_message = None
+        message_id = None
+        chat_id = None
+        previous_content = None
+        previous_time = None
+
+        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(get_cancel_button())
+
+        first_iteration = True
+        async for dialog_message in response_generator:
+            if first_iteration:
+                # HACK: skip first iteration for case with full synchronous openai response
+                first_iteration = False
+                continue
+
+            if dialog_message.function_call is not None:
+                continue
+
+            new_content = ' '.join(dialog_message.content.strip().split(' ')[:-1]) if dialog_message.content else ''
+            if len(new_content) < 50:
+                continue
+
+            # send message
+            if not message_id:
+                resp = await send_telegram_message(self.message, dialog_message.content, reply_markup=keyboard)
+                chat_id = self.message.chat.id
+                # hack: most telegram clients remove "typing" status after receiving new message from bot
+                await self.message.bot.send_chat_action(chat_id, 'typing')
+                message_id = resp.message_id
+                previous_content = dialog_message.content
+                previous_time = datetime.now()
+                continue
+
+            # update message
+            time_passed_seconds = (datetime.now() - previous_time).seconds
+            if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES:
+                await self.message.bot.edit_message_text(new_content, chat_id, message_id, reply_markup=keyboard)
+                previous_content = new_content
+                previous_time = datetime.now()
+        return dialog_message, message_id

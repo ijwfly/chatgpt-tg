@@ -111,6 +111,15 @@ async def send_telegram_message(message: types.Message, text: str, parse_mode=No
         return await send_message(text, reply_markup=reply_markup)
 
 
+async def edit_telegram_message(message: types.Message, text: str, message_id, parse_mode=None):
+    chat_id = message.chat.id
+    try:
+        return await message.bot.edit_message_text(text, chat_id, message_id,  parse_mode=parse_mode)
+    except CantParseEntities:
+        # try to edit message without parse_mode once
+        return await message.bot.edit_message_text(text, chat_id, message_id)
+
+
 def merge_dicts(dict_1, dict_2):
     """
     This function merge two dicts containing strings using plus operator on each key
