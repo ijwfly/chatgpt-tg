@@ -44,6 +44,20 @@ class ContextConfiguration:
                 short_term_memory_tokens=2048,
                 summary_length=1024,
             )
+        elif model == 'gpt-4-1106-preview':
+            return ContextConfiguration(
+                model_name=model,
+                long_term_memory_tokens=512,
+                short_term_memory_tokens=4096,
+                summary_length=1536,
+            )
+        elif model == 'gpt-4-vision-preview':
+            return ContextConfiguration(
+                model_name=model,
+                long_term_memory_tokens=512,
+                short_term_memory_tokens=4096,
+                summary_length=1536,
+            )
         else:
             raise ValueError(f'Unknown model name: {model}')
 

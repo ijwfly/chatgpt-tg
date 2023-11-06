@@ -6,13 +6,11 @@ COMPLETION_PRICE = {
     'gpt-3.5-turbo': (Decimal('0.0015'), Decimal('0.002')),
     'gpt-3.5-turbo-16k': (Decimal('0.003'), Decimal('0.004')),
     'gpt-4': (Decimal('0.03'), Decimal('0.06')),
+    'gpt-4-1106-preview': (Decimal('0.01'), Decimal('0.03')),
+    'gpt-4-vision-preview': (Decimal('0.01'), Decimal('0.03')),
 }
 
 WHISPER_PRICE = Decimal('0.006')
-
-
-def set_openai_token(token):
-    openai.api_key = token
 
 
 def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int, model: str) -> Decimal:
@@ -25,3 +23,18 @@ def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int,
 
 def calculate_whisper_usage_price(audio_seconds: int) -> Decimal:
     return WHISPER_PRICE / 60 * audio_seconds
+
+
+class OpenAIAsync:
+    _key = None
+    _instance = None
+
+    @classmethod
+    def init(cls, api_key):
+        cls._key = api_key
+
+    @classmethod
+    def instance(cls):
+        if cls._instance is None:
+            cls._instance = openai.AsyncOpenAI(api_key=cls._key)
+        return cls._instance

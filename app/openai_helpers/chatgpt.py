@@ -8,16 +8,20 @@ from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_
 from app.openai_helpers.function_storage import FunctionStorage
 
 import pydantic
-import openai
+
+from app.openai_helpers.utils import OpenAIAsync
 
 
 class GptModel:
     GPT_35_TURBO = 'gpt-3.5-turbo'
     GPT_35_TURBO_16K = 'gpt-3.5-turbo-16k'
     GPT_4 = 'gpt-4'
+    GPT_4_TURBO_PREVIEW = 'gpt-4-1106-preview'
+    GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
 
 
-GPT_MODELS = {GptModel.GPT_35_TURBO, GptModel.GPT_35_TURBO_16K, GptModel.GPT_4}
+GPT_MODELS = {GptModel.GPT_35_TURBO, GptModel.GPT_35_TURBO_16K, GptModel.GPT_4,
+              GptModel.GPT_4_TURBO_PREVIEW, GptModel.GPT_4_VISION_PREVIEW}
 
 
 class FunctionCall(pydantic.BaseModel):
@@ -72,15 +76,15 @@ class ChatGPT:
             })
 
         messages = self.create_context(messages_to_send, self.gpt_mode)
-        resp = await openai.ChatCompletion.acreate(
+        resp = await OpenAIAsync.instance().chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             **additional_fields,
         )
-        completion_usage = CompletionUsage(model=self.model, **resp.usage)
+        completion_usage = CompletionUsage(model=self.model, **dict(resp.usage))
         message = resp.choices[0].message
-        response = DialogMessage(**message)
+        response = DialogMessage(**dict(message))
         return response, completion_usage
 
     async def send_messages_streaming(self, messages_to_send: List[DialogMessage], is_cancelled: Callable[[], bool]) -> (DialogMessage, CompletionUsage):
@@ -96,7 +100,7 @@ class ChatGPT:
             })
 
         messages = self.create_context(messages_to_send, self.gpt_mode)
-        resp_generator = await openai.ChatCompletion.acreate(
+        resp_generator = await OpenAIAsync.instance().chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
@@ -111,19 +115,20 @@ class ChatGPT:
             if not delta:
                 continue
 
-            if 'content' in delta and delta.content is not None:
+            if delta.content is not None:
                 if not delta.content:
                     continue
                 result_dict = merge_dicts(result_dict, dict(delta))
                 dialog_message = DialogMessage(**result_dict)
                 completion_tokens = count_messages_tokens([result_dict], model=self.model)
-            elif 'function_call' in delta and delta.function_call is not None:
+            elif delta.function_call is not None:
                 result_dict = merge_dicts(result_dict, dict(delta.function_call))
                 dialog_message = DialogMessage(function_call=result_dict)
                 # TODO: find mode accurate way to calculate completion length for function calls
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.model)
             else:
-                raise ValueError('Unknown type of gpt response')
+                continue
+                # raise ValueError('Unknown type of gpt response')
 
             # openai doesn't return this field in streaming mode somewhy
             dialog_message.role = 'assistant'
@@ -139,7 +144,7 @@ class ChatGPT:
                 completion_usage.completion_tokens += 20
                 with suppress(BaseException):
                     # sometimes this call throws an exception since python 3.8
-                    await resp_generator.aclose()
+                    await resp_generator.response.aclose()
                 break
 
     @staticmethod
@@ -159,7 +164,7 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
         "role": "user",
         "content": f"Summarize this conversation in {summary_max_length} characters or less. Divide different themes explicitly with new lines. Return only text of summary, nothing else.",
     }]
-    resp = await openai.ChatCompletion.acreate(
+    resp = await OpenAIAsync.instance().chat.completions.create(
         model=model,
         messages=prompt_messages,
         temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,

@@ -1,6 +1,8 @@
 # chatgpt-tg
 
-This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, state-of-the-art language models by OpenAI.
+This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, state-of-the-art language models by OpenAI.  
+
+🔥 **GPT-4 Turbo preview support (gpt-4-1106-preview)**  
 
 🔑 **Key Features**
 
@@ -27,7 +29,9 @@ To get this bot up and running, follow these steps:
 /reset - reset current dialog
 /gpt3 - set model to gpt-3.5-turbo
 /gpt4 - set model to gpt-4
+/gpt4turbo - set model to gpt-4-1106-preview
 /settings - open settings menu
 /usage - show usage for current month
+/usage_all - show usage for all users
 ```
 These commands will provide additional interaction control for the bot users.
