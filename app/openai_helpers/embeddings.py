@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from typing import List
 
 import numpy as np
-import openai
+
+from app.openai_helpers.utils import OpenAIAsync
 
 EMBEDDING_MODEL = 'text-embedding-ada-002'
 
@@ -18,7 +19,7 @@ class EmbeddedText:
 
 
 async def get_embeddings(strings: List[str]) -> List[EmbeddedText]:
-    response = await openai.Embedding.acreate(
+    response = await OpenAIAsync.instance().embeddings.create(
         model=EMBEDDING_MODEL,
         input=strings,
     )

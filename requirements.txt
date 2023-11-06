@@ -18,7 +18,7 @@ idna==3.4
 magic-filter==1.0.9
 multidict==6.0.4
 numpy==1.25.2
-openai==0.27.8
+openai==1.0.1
 pydantic==1.10.9
 pydub==0.25.1
 python-dateutil==2.8.2
