@@ -33,7 +33,7 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.handle_voice, content_types=types.ContentType.VOICE)
         self.dispatcher.register_message_handler(self.reset_dialog, commands=['reset'])
         self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
-        self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4'])
+        self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4', 'gpt4turbo'])
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
         self.dispatcher.register_message_handler(
@@ -158,7 +158,16 @@ class TelegramBot:
             await message.answer(f'Your model is {user.current_model}. You have no permissions to change model')
             return
 
-        model = GptModel.GPT_35_TURBO if message.get_command() == '/gpt3' else GptModel.GPT_4
+        command_to_model = {
+            'gpt3': GptModel.GPT_35_TURBO,
+            'gpt4': GptModel.GPT_4,
+            'gpt4turbo': GptModel.GPT_4_TURBO_PREVIEW,
+        }
+
+        command = message.get_command(pure=True)
+        model = command_to_model.get(command)
+        if model is None:
+            raise ValueError('Unknown model name')
         user.current_model = model
         await self.db.update_user(user)
         await message.answer('👌')

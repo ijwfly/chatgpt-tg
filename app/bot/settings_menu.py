@@ -7,8 +7,8 @@ from app.storage.user_role import check_access_conditions
 
 GPT_MODELS_OPTIONS = {
     'gpt-3.5-turbo': 'GPT-3.5',
-    # 'gpt-3.5-turbo-16k': 'GPT-3.5 16k',
     'gpt-4': 'GPT-4',
+    'gpt-4-1106-preview': 'GPT-4-turbo',
 }
 
 
