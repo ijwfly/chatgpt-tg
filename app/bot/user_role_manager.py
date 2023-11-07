@@ -78,6 +78,7 @@ class UserRoleManager:
         if check_access_conditions(UserRole.ADMIN, user_role):
             commands += [
                 types.BotCommand(command="/usage_all", description="show usage for all users"),
+                types.BotCommand(command="/gpt4vision", description="show usage for all users"),
             ]
         return commands
 
