@@ -87,6 +87,10 @@ class TelegramBot:
         if message.text is None and message.photo is None:
             return
 
+        if message.media_group_id is not None:
+            # HACK: add media group as context to process them at once
+            await MessageProcessor(self.db, user, message).add_message_as_context()
+
         if message_is_forward(message) and not user.forward_as_prompt:
             await self.handle_forwarded_message(message, user)
             return
