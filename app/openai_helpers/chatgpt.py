@@ -1,6 +1,6 @@
 import json
 from contextlib import suppress
-from typing import List, Any, Optional, Callable
+from typing import List, Any, Optional, Callable, Union
 
 import settings
 from app.bot.utils import merge_dicts
@@ -36,16 +36,29 @@ class CompletionUsage(pydantic.BaseModel):
     model: str
 
 
+class DialogMessageContentPart(pydantic.BaseModel):
+    type: str
+    text: Optional[str] = None
+    image_url: Optional[str] = None
+
+
 class DialogMessage(pydantic.BaseModel):
     role: Optional[str] = None
     name: Optional[str] = None
-    content: Optional[str] = None
+    content: Union[Optional[str], Optional[List[DialogMessageContentPart]]] = None
     function_call: Optional[FunctionCall] = None
 
     def openai_message(self):
+        if isinstance(self.content, str):
+            content = self.content
+        elif isinstance(self.content, list):
+            content = [part.dict(exclude_none=True) for part in self.content]
+        else:
+            raise ValueError('Unknown type of content')
+
         data = {
             'role': self.role,
-            'content': self.content,
+            'content': content
         }
         if self.name:
             data['name'] = self.name
@@ -75,6 +88,16 @@ class ChatGPT:
                 'function_call': 'auto',
             })
 
+        if self.model == GptModel.GPT_4_VISION_PREVIEW:
+            # TODO: somewhy by default it's 16 tokens for this model
+            additional_fields['max_tokens'] = 4096
+
+            # TODO: vision preview doesn't support function calls
+            if 'function_call' in additional_fields:
+                del additional_fields['function_call']
+            if 'functions' in additional_fields:
+                del additional_fields['functions']
+
         messages = self.create_context(messages_to_send, self.gpt_mode)
         resp = await OpenAIAsync.instance().chat.completions.create(
             model=self.model,
@@ -98,6 +121,16 @@ class ChatGPT:
                 'functions': self.function_storage.get_openai_prompt(),
                 'function_call': 'auto',
             })
+
+        if self.model == GptModel.GPT_4_VISION_PREVIEW:
+            # TODO: somewhy by default it's 16 tokens for this model
+            additional_fields['max_tokens'] = 4096
+
+            # TODO: vision preview doesn't support function calls
+            if 'function_call' in additional_fields:
+                del additional_fields['function_call']
+            if 'functions' in additional_fields:
+                del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.gpt_mode)
         resp_generator = await OpenAIAsync.instance().chat.completions.create(

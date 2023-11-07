@@ -33,7 +33,7 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.handle_voice, content_types=types.ContentType.VOICE)
         self.dispatcher.register_message_handler(self.reset_dialog, commands=['reset'])
         self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
-        self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4', 'gpt4turbo'])
+        self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4', 'gpt4turbo', 'gpt4vision'])
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
         self.dispatcher.register_message_handler(
@@ -84,21 +84,21 @@ class TelegramBot:
         if message.caption and not message.text:
             message.text = message.caption
 
-        if message.text is None:
+        if message.text is None and message.photo is None:
             return
 
         if message_is_forward(message) and not user.forward_as_prompt:
-            await self.handle_forward_text(message, user)
+            await self.handle_forwarded_message(message, user)
             return
 
         try:
             async with TypingWorker(self.bot, message.chat.id).typing_context():
-                await self.answer_text_message(message, user)
+                await self.answer_message(message, user)
         except Exception as e:
             await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
             raise
 
-    async def handle_forward_text(self, message: types.Message, user: User):
+    async def handle_forwarded_message(self, message: types.Message, user: User):
         # add forwarded text as context to current dialog, not as prompt
         if message.forward_from:
             username = get_username(message.forward_from)
@@ -110,9 +110,10 @@ class TelegramBot:
         else:
             username = None
         forwarded_text = f'{username}:\n{message.text}' if username else message.text
+        # HACK: hack with aiogram.Message to process forwarded message as context
+        message.text = forwarded_text
 
-        message_processor = MessageProcessor(self.db, user, message)
-        await message_processor.add_text_as_context(forwarded_text, message.message_id)
+        await MessageProcessor(self.db, user, message).add_message_as_context()
 
     async def handle_voice(self, message: types.Message, user: User):
         file = await self.bot.get_file(message.voice.file_id)
@@ -144,7 +145,7 @@ class TelegramBot:
             message_processor = MessageProcessor(self.db, user, message)
             await message_processor.add_text_as_context(speech_text, response.message_id)
 
-    async def answer_text_message(self, message: types.Message, user: User):
+    async def answer_message(self, message: types.Message, user: User):
         message_processor = MessageProcessor(self.db, user, message)
         is_cancelled = self.cancellation_manager.get_token(message.from_user.id)
         await message_processor.process_message(is_cancelled)
@@ -162,6 +163,7 @@ class TelegramBot:
             'gpt3': GptModel.GPT_35_TURBO,
             'gpt4': GptModel.GPT_4,
             'gpt4turbo': GptModel.GPT_4_TURBO_PREVIEW,
+            'gpt4vision': GptModel.GPT_4_VISION_PREVIEW,
         }
 
         command = message.get_command(pure=True)

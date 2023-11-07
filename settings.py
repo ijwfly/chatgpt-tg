@@ -52,4 +52,12 @@ POSTGRES_USER = 'postgres'
 POSTGRES_PASSWORD = 'password'
 POSTGRES_DATABASE = 'chatgpttg'
 
+# Image proxy settings
+# This proxy is used to send images to openai
+# bind host and port are used to run proxy locally
+IMAGE_PROXY_BIND_HOST = '0.0.0.0'
+IMAGE_PROXY_BIND_PORT = 8000
+# hostname and port are used to construct image url for openai
+IMAGE_PROXY_HOSTNAME = 'http://example.com'
+IMAGE_PROXY_PORT = 8000
 

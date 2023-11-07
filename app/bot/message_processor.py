@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from aiogram import types
-
+import settings
 from app.bot.cancellation_manager import get_cancel_button
 from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.utils import send_telegram_message, detect_and_extract_code, edit_telegram_message
@@ -10,7 +9,7 @@ from app.context.dialog_manager import DialogUtils
 from app.openai_helpers.chatgpt import ChatGPT
 from app.storage.db import DB, User
 
-from aiogram.types import Message, ParseMode
+from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
 
 WAIT_BETWEEN_MESSAGE_UPDATES = 2
 
@@ -23,8 +22,29 @@ class MessageProcessor:
 
     async def add_text_as_context(self, text: str, message_id: int):
         context_manager = await build_context_manager(self.db, self.user, self.message)
-        speech_dialog_message = DialogUtils.prepare_user_message(text)
-        await context_manager.add_message(speech_dialog_message, message_id)
+        dialog_message = DialogUtils.prepare_user_message(text)
+        await context_manager.add_message(dialog_message, message_id)
+
+    async def add_message_as_context(self, message_id: int = None):
+        if message_id is None:
+            message_id = self.message.message_id
+        context_manager = await build_context_manager(self.db, self.user, self.message)
+        dialog_message = await self.prepare_user_message(self.message)
+        await context_manager.add_message(dialog_message, message_id)
+
+    @staticmethod
+    async def prepare_user_message(message: Message):
+        content = []
+        if message.text:
+            content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_TEXT, message.text))
+
+        if message.photo:
+            # get largest photo
+            file_id = message.photo[-1].file_id
+            file_url = f'{settings.IMAGE_PROXY_HOSTNAME}/{file_id}.jpg'
+            content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_IMAGE_URL, file_url))
+
+        return DialogUtils.prepare_user_message(content)
 
     async def process_message(self, is_cancelled):
         context_manager = await build_context_manager(self.db, self.user, self.message)
@@ -32,7 +52,7 @@ class MessageProcessor:
         function_storage = await context_manager.get_function_storage()
         chat_gpt_manager = ChatGptManager(ChatGPT(self.user.current_model, self.user.gpt_mode, function_storage), self.db)
 
-        user_dialog_message = DialogUtils.prepare_user_message(self.message.text)
+        user_dialog_message = await self.prepare_user_message(self.message)
         context_dialog_messages = await context_manager.add_message(user_dialog_message, self.message.message_id)
         response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
@@ -74,7 +94,7 @@ class MessageProcessor:
         previous_content = None
         previous_time = None
 
-        keyboard = types.InlineKeyboardMarkup()
+        keyboard = InlineKeyboardMarkup()
         keyboard.add(get_cancel_button())
 
         first_iteration = True

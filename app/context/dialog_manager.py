@@ -1,9 +1,9 @@
 import datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import settings
 from app.bot.utils import message_is_forward
-from app.openai_helpers.chatgpt import DialogMessage, summarize_messages
+from app.openai_helpers.chatgpt import DialogMessage, summarize_messages, DialogMessageContentPart
 from app.openai_helpers.count_tokens import count_dialog_messages_tokens
 from app.storage.db import User, DB, Message, MessageType
 
@@ -92,9 +92,16 @@ class DialogManager:
 
 
 class DialogUtils:
+    CONTENT_TEXT = 'text'
+    CONTENT_IMAGE_URL = 'image_url'
+
     @staticmethod
-    def prepare_user_message(message_text: str) -> DialogMessage:
-        return DialogMessage(role="user", content=message_text)
+    def prepare_user_message(content: Union[str, List[DialogMessageContentPart]]) -> DialogMessage:
+        return DialogMessage(role="user", content=content)
+
+    @staticmethod
+    def construct_message_content_part(content_type: str, content: str):
+        return {"type": content_type, content_type: content}
 
     @staticmethod
     def prepare_function_response(function_name, function_response):
