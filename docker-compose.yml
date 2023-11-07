@@ -21,7 +21,6 @@ services:
 
   image_proxy:
     restart: always
-    build: .
     image: chatgpt-tg
     entrypoint: python main_image_proxy.py
     depends_on:

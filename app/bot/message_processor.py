@@ -41,7 +41,7 @@ class MessageProcessor:
         if message.photo:
             # get largest photo
             file_id = message.photo[-1].file_id
-            file_url = f'{settings.IMAGE_PROXY_HOSTNAME}/{file_id}.jpg'
+            file_url = f'{settings.IMAGE_PROXY_HOSTNAME}:{settings.IMAGE_PROXY_PORT}/{file_id}.jpg'
             content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_IMAGE_URL, file_url))
 
         return DialogUtils.prepare_user_message(content)
