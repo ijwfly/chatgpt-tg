@@ -3,6 +3,7 @@
 This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, state-of-the-art language models by OpenAI.  
 
 🔥 **GPT-4 Turbo preview support (gpt-4-1106-preview)**  
+🔥 **GPT-4 Vision preview support [is nearly here](https://github.com/ijwfly/chatgpt-tg/tree/feature/vision-support)**  
 
 🔑 **Key Features**
 
