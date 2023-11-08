@@ -200,6 +200,7 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
         model=model,
         messages=prompt_messages,
         temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
+        max_tokens=summary_max_length,
     )
     completion_usage = CompletionUsage(model=model, **dict(resp.usage))
     return resp.choices[0].message.content, completion_usage
