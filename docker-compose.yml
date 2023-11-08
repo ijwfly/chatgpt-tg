@@ -21,9 +21,9 @@ services:
 
   image_proxy:
     restart: always
-    image: chatgpt-tg
     ports:
       - "8000:8000"
+    image: chatgpt-tg
     entrypoint: python main_image_proxy.py
     depends_on:
       - app

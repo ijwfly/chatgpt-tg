@@ -7,6 +7,7 @@ from app.bot.utils import send_telegram_message, detect_and_extract_code, edit_t
 from app.context.context_manager import build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.openai_helpers.chatgpt import ChatGPT
+from app.openai_helpers.count_tokens import calculate_image_tokens
 from app.storage.db import DB, User
 
 from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
@@ -39,9 +40,14 @@ class MessageProcessor:
             content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_TEXT, message.text))
 
         if message.photo:
-            # get largest photo
-            file_id = message.photo[-1].file_id
-            file_url = f'{settings.IMAGE_PROXY_HOSTNAME}:{settings.IMAGE_PROXY_PORT}/{file_id}.jpg'
+            # largest photo
+            photo = message.photo[-1]
+            file_id = photo.file_id
+            # WILD HACK: add tokens count to the url to use it later for context size calculation
+            # it's the only place in code where we know image size
+            # maybe we should add it to DialogMessage as metadata?
+            tokens = calculate_image_tokens(photo.width, photo.height)
+            file_url = f'{settings.IMAGE_PROXY_HOSTNAME}:{settings.IMAGE_PROXY_PORT}/{file_id}_{tokens}.jpg'
             content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_IMAGE_URL, file_url))
 
         return DialogUtils.prepare_user_message(content)

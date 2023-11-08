@@ -161,7 +161,6 @@ class ChatGPT:
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.model)
             else:
                 continue
-                # raise ValueError('Unknown type of gpt response')
 
             # openai doesn't return this field in streaming mode somewhy
             dialog_message.role = 'assistant'
@@ -202,5 +201,5 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
         messages=prompt_messages,
         temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
     )
-    completion_usage = CompletionUsage(model=model, **resp.usage)
+    completion_usage = CompletionUsage(model=model, **dict(resp.usage))
     return resp.choices[0].message.content, completion_usage

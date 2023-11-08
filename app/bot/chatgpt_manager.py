@@ -10,10 +10,6 @@ class ChatGptManager:
         self.db: DB = db
 
     async def send_user_message(self, user: User, messages: List[DialogMessage], is_cancelled: Callable[[], bool]) -> AsyncGenerator[DialogMessage, None]:
-        if user.current_model == GptModel.GPT_4_VISION_PREVIEW:
-            # TODO: remove this after adding context length calculation for images
-            user.streaming_answers = False
-
         if user.streaming_answers:
             return self.send_user_message_streaming(user, messages, is_cancelled)
         else:
