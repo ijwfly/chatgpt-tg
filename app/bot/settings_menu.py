@@ -8,9 +8,12 @@ from app.storage.user_role import check_access_conditions
 GPT_MODELS_OPTIONS = {
     'gpt-3.5-turbo': 'GPT-3.5',
     'gpt-4': 'GPT-4',
-    'gpt-4-1106-preview': 'GPT-4-turbo',
 }
 
+GPT_MODELS_OPTIONS_PREVIEW = {
+    'gpt-4-1106-preview': 'GPT-4-Turbo',
+    'gpt-4-vision-preview': 'GPT-4-Vision',
+}
 
 SETTINGS_PREFIX = 'settings'
 HIDE_COMMAND = 'hide'
@@ -34,8 +37,12 @@ class VisibleOptionsSetting:
     def toggle(self, user: User):
         current_value = getattr(user, self.model_field)
         options_values = list(self.options.keys())
-        current_index = options_values.index(current_value)
-        new_index = (current_index + 1) % len(options_values)
+        try:
+            current_index = options_values.index(current_value)
+            new_index = (current_index + 1) % len(options_values)
+        except ValueError:
+            # current value is not in options, set first option
+            new_index = 0
         new_value = options_values[new_index]
         setattr(user, self.model_field, new_value)
         return user
@@ -88,16 +95,18 @@ class Settings:
         self.db = db
         self.settings = {
             'current_model': VisibleOptionsSetting('current_model', GPT_MODELS_OPTIONS),
-            'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
-            'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
+            'current_model_preview': VisibleOptionsSetting('current_model', GPT_MODELS_OPTIONS_PREVIEW),
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
-            'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
+            'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
-            'function_call_verbose': OnOffSetting('Verbose func calls', 'function_call_verbose'),
-            'auto_summarize': OnOffSetting('Auto summarize', 'auto_summarize'),
+            'function_call_verbose': OnOffSetting('Verbose function calls', 'function_call_verbose'),
+            'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
+            # 'auto_summarize': OnOffSetting('Auto summarize', 'auto_summarize'),
+            # 'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
         }
         self.minimum_required_roles = {
             'current_model': settings.USER_ROLE_CHOOSE_MODEL,
+            'current_model_preview': settings.USER_ROLE_CHOOSE_MODEL,
             'streaming_answers': settings.USER_ROLE_STREAMING_ANSWERS,
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: SETTINGS_PREFIX in c.data)
