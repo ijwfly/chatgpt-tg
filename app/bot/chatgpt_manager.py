@@ -1,6 +1,6 @@
 from typing import List, AsyncGenerator, Callable
 
-from app.openai_helpers.chatgpt import DialogMessage, GptModel
+from app.openai_helpers.chatgpt import DialogMessage
 from app.storage.db import DB, User
 
 

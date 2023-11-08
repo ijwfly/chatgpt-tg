@@ -124,7 +124,7 @@ class DB:
         await self.connection_pool.execute(sql, message_ids)
 
     async def create_message(self, user_id, tg_chat_id, tg_message_id, message: DialogMessage,
-                             previous_messages: List[DialogMessage] = None, message_type: MessageType = MessageType.MESSAGE):
+                             previous_messages: List[Message] = None, message_type: MessageType = MessageType.MESSAGE):
         if previous_messages is None:
             previous_messages = []
 
