@@ -48,15 +48,15 @@ class ContextConfiguration:
             return ContextConfiguration(
                 model_name=model,
                 long_term_memory_tokens=512,
-                short_term_memory_tokens=4096,
-                summary_length=1536,
+                short_term_memory_tokens=5120,
+                summary_length=2048,
             )
         elif model == 'gpt-4-vision-preview':
             return ContextConfiguration(
                 model_name=model,
                 long_term_memory_tokens=512,
-                short_term_memory_tokens=4096,
-                summary_length=1536,
+                short_term_memory_tokens=5120,
+                summary_length=2048,
             )
         else:
             raise ValueError(f'Unknown model name: {model}')
