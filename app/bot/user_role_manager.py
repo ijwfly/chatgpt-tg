@@ -61,9 +61,9 @@ class UserRoleManager:
     @staticmethod
     def get_role_commands(user_role: UserRole):
         commands = [
-            types.BotCommand(command="/settings", description="open settings menu"),
-            types.BotCommand(command="/usage", description="show usage for current month"),
             types.BotCommand(command="/reset", description="reset current dialog"),
+            types.BotCommand(command="/usage", description="show usage for current month"),
+            types.BotCommand(command="/settings", description="open settings menu"),
         ]
 
         if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):
