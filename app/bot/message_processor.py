@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import urljoin
 
 import settings
 from app.bot.cancellation_manager import get_cancel_button
@@ -47,7 +48,7 @@ class MessageProcessor:
             # it's the only place in code where we know image size
             # maybe we should add it to DialogMessage as metadata?
             tokens = calculate_image_tokens(photo.width, photo.height)
-            file_url = f'{settings.IMAGE_PROXY_HOSTNAME}:{settings.IMAGE_PROXY_PORT}/{file_id}_{tokens}.jpg'
+            file_url = urljoin(settings.IMAGE_PROXY_URL, f'{file_id}_{tokens}.jpg')
             content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_IMAGE_URL, file_url))
 
         return DialogUtils.prepare_user_message(content)

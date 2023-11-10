@@ -23,6 +23,7 @@ gpt_mode = {
 # Mandatory settings
 OPENAI_TOKEN = 'YOUR_TOKEN'
 TELEGRAM_BOT_TOKEN = 'YOUR_TOKEN'
+IMAGE_PROXY_URL = 'http://example.com'
 
 # Utility settings
 OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3
@@ -56,8 +57,7 @@ POSTGRES_DATABASE = 'chatgpttg'
 # This proxy is used to send images to openai
 # bind host and port are used to run proxy locally
 IMAGE_PROXY_BIND_HOST = '0.0.0.0'
-IMAGE_PROXY_BIND_PORT = 8000
+IMAGE_PROXY_BIND_PORT = 8321
 # hostname and port are used to construct image url for openai
-IMAGE_PROXY_HOSTNAME = 'http://example.com'
-IMAGE_PROXY_PORT = 8000
-
+# IMAGE_PROXY_URL = 'http://example.com'
+IMAGE_PROXY_PORT = 8321
