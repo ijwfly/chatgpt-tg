@@ -100,7 +100,7 @@ class MessageProcessor:
                     message_id = None
                 else:
                     response = await send_telegram_message(self.message, dialog_message.content, parse_mode)
-                await context_manager.add_message(response_dialog_message, response.message_id)
+                await context_manager.add_message(dialog_message, response.message_id)
 
     async def handle_response_generator(self, response_generator):
         dialog_message = None
