@@ -1,5 +1,8 @@
+from contextlib import suppress
 from datetime import datetime
 from urllib.parse import urljoin
+
+from aiogram.utils.exceptions import BadRequest
 
 import settings
 from app.bot.cancellation_manager import get_cancel_button
@@ -14,6 +17,7 @@ from app.storage.db import DB, User
 from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
 
 WAIT_BETWEEN_MESSAGE_UPDATES = 2
+TELEGRAM_MESSAGE_LENGTH_CUTOFF = 4080
 
 
 class MessageProcessor:
@@ -75,24 +79,28 @@ class MessageProcessor:
             function_response_raw = await function_storage.run_function(function_name, function_args)
 
             function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
+            function_response_message_id = -1
             if self.user.function_call_verbose:
-                function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
-                function_response_tg_message = await send_telegram_message(self.message, function_response_text)
-                function_response_message_id = function_response_tg_message.message_id
-            else:
-                function_response_message_id = -1
+                with suppress(BadRequest):
+                    # TODO: split function call message if it's too long
+                    function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
+                    function_response_tg_message = await send_telegram_message(self.message, function_response_text)
+                    function_response_message_id = function_response_tg_message.message_id
             context_dialog_messages = await context_manager.add_message(function_response, function_response_message_id)
             response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
             await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled)
         else:
-            code_fragments = detect_and_extract_code(response_dialog_message.content)
-            parse_mode = ParseMode.MARKDOWN if code_fragments else None
-            if message_id is not None:
-                response = await edit_telegram_message(self.message, response_dialog_message.content, message_id, parse_mode)
-            else:
-                response = await send_telegram_message(self.message, response_dialog_message.content, parse_mode)
-            await context_manager.add_message(response_dialog_message, response.message_id)
+            dialog_messages = self.split_dialog_message(response_dialog_message)
+            for dialog_message in dialog_messages:
+                code_fragments = detect_and_extract_code(dialog_message.content)
+                parse_mode = ParseMode.MARKDOWN if code_fragments else None
+                if message_id is not None:
+                    response = await edit_telegram_message(self.message, dialog_message.content, message_id, parse_mode)
+                    message_id = None
+                else:
+                    response = await send_telegram_message(self.message, dialog_message.content, parse_mode)
+                await context_manager.add_message(response_dialog_message, response.message_id)
 
     async def handle_response_generator(self, response_generator):
         dialog_message = None
@@ -104,6 +112,7 @@ class MessageProcessor:
         keyboard = InlineKeyboardMarkup()
         keyboard.add(get_cancel_button())
 
+        message_too_long_for_telegram = False
         first_iteration = True
         async for dialog_message in response_generator:
             if first_iteration:
@@ -131,8 +140,38 @@ class MessageProcessor:
 
             # update message
             time_passed_seconds = (datetime.now() - previous_time).seconds
-            if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES:
+            if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES and not message_too_long_for_telegram:
+                if len(new_content) > TELEGRAM_MESSAGE_LENGTH_CUTOFF:
+                    # stop updating message if it's too long
+                    message_too_long_for_telegram = True
+                    new_content = f'{new_content[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]} ⏳...'
                 await self.message.bot.edit_message_text(new_content, chat_id, message_id, reply_markup=keyboard)
                 previous_content = new_content
                 previous_time = datetime.now()
         return dialog_message, message_id
+
+    @staticmethod
+    def split_dialog_message(dialog_message, max_content_length=TELEGRAM_MESSAGE_LENGTH_CUTOFF):
+        """
+        Split dialog message into multiple messages if it's too long for telegram
+        """
+        content = dialog_message.content
+        if len(content) <= max_content_length:
+            return [dialog_message]
+
+        parts = []
+        while len(content) > max_content_length:
+            # find last space
+            for separator in ['\n', '.', ' ']:
+                last_space_index = content.rfind(separator, 0, max_content_length)
+                if last_space_index != -1:
+                    break
+            if last_space_index == -1:
+                # no spaces, just split by max_content_length
+                parts.append(content[:max_content_length])
+                content = content[max_content_length:]
+            else:
+                parts.append(content[:last_space_index])
+                content = content[last_space_index + 1:]
+        parts.append(content)
+        return [dialog_message.copy(update={"content": part}) for part in parts]
