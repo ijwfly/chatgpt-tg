@@ -120,6 +120,9 @@ class MessageProcessor:
                 first_iteration = False
                 continue
 
+            if message_too_long_for_telegram:
+                continue
+
             if dialog_message.function_call is not None:
                 continue
 
@@ -140,7 +143,7 @@ class MessageProcessor:
 
             # update message
             time_passed_seconds = (datetime.now() - previous_time).seconds
-            if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES and not message_too_long_for_telegram:
+            if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES:
                 if len(new_content) > TELEGRAM_MESSAGE_LENGTH_CUTOFF:
                     # stop updating message if it's too long
                     message_too_long_for_telegram = True
