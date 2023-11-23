@@ -52,6 +52,26 @@ class TypingWorker:
         self.typing_task = None
 
 
+class Timer:
+    """
+    Async timer with reset method
+    """
+    def __init__(self, timeout=0.2):
+        self.timeout = timeout
+        self._current_timeout = timeout
+        self.step = timeout / 10
+
+    async def sleep(self):
+        while True:
+            await asyncio.sleep(self.step)
+            self._current_timeout -= self.step
+            if self._current_timeout <= 0:
+                break
+
+    def reset(self):
+        self._current_timeout = self.timeout
+
+
 @dataclasses.dataclass
 class CodeFragment:
     language: str
