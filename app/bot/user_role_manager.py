@@ -60,11 +60,18 @@ class UserRoleManager:
 
     @staticmethod
     def get_role_commands(user_role: UserRole):
-        commands = [
+        commands = []
+
+        commands += [
             types.BotCommand(command="/reset", description="reset current dialog"),
             types.BotCommand(command="/usage", description="show usage for current month"),
             types.BotCommand(command="/settings", description="open settings menu"),
         ]
+
+        if check_access_conditions(UserRole.ADMIN, user_role):
+            commands += [
+                types.BotCommand(command="/tts", description="generate voice from last message"),
+            ]
 
         if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):
             commands += [
