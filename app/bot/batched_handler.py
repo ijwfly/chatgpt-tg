@@ -166,8 +166,9 @@ class BatchedHandler:
         else:
             username = None
         forwarded_text = f'{username}:\n{message.text}' if username else message.text
+        message.text = forwarded_text
 
-        await message_processor.add_text_as_context(forwarded_text, message.message_id)
+        await message_processor.add_message_as_context(message=message)
 
     async def answer_message(self, message: types.Message, user: User, message_processor: MessageProcessor):
         """
