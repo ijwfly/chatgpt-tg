@@ -12,7 +12,7 @@ from app.bot.scheduled_tasks import build_monthly_usage_task
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
-from app.bot.utils import (get_hide_button, get_completion_usage_response_all_users)
+from app.bot.utils import (get_hide_button, get_completion_usage_response_all_users, TypingWorker)
 from app.bot.utils import send_telegram_message
 from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price, OpenAIAsync
 from app.storage.db import DBFactory, User
@@ -156,17 +156,19 @@ class TelegramBot:
         if not text:
             await message.answer('No text to generate speech')
             return
-        response = await OpenAIAsync.instance().audio.speech.create(
-            model='tts-1',
-            voice='onyx',
-            input=text,
-        )
-        with tempfile.TemporaryDirectory() as temp_dir:
-            mp3_filename = os.path.join(temp_dir, f'voice_{message.message_id}.mp3')
-            response.stream_to_file(mp3_filename)
-            try:
-                await message.answer_voice(open(mp3_filename, 'rb'))
-            except BadRequest as e:
-                error_message = f'Error: {e}\nYou should probably try to enable voice messages in your ' \
-                                f'Telegram privacy settings'
-                await message.answer(error_message)
+        async with TypingWorker(self.bot, message.chat.id, TypingWorker.ACTION_RECORD_VOICE).typing_context():
+            response = await OpenAIAsync.instance().audio.speech.create(
+                model='tts-1',
+                voice='onyx',
+                input=text,
+            )
+            # TODO: refactor without saving to file
+            with tempfile.TemporaryDirectory() as temp_dir:
+                mp3_filename = os.path.join(temp_dir, f'voice_{message.message_id}.mp3')
+                response.stream_to_file(mp3_filename)
+                try:
+                    await message.answer_voice(open(mp3_filename, 'rb'))
+                except BadRequest as e:
+                    error_message = f'Error: {e}\nYou should probably try to enable voice messages in your ' \
+                                    f'Telegram privacy settings'
+                    await message.answer(error_message)
