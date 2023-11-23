@@ -61,10 +61,10 @@ class Timer:
     """
     Async timer with reset method
     """
-    def __init__(self, timeout=0.2):
+    def __init__(self, timeout=0.3):
         self.timeout = timeout
         self._current_timeout = timeout
-        self.step = timeout / 10
+        self.step = timeout / 100
 
     async def sleep(self):
         while True:
