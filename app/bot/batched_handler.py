@@ -62,12 +62,14 @@ class BatchedHandler:
 
         # If lock is already acquired, exit
         if not self.user_batch_locks[user.id].locked():
-            async with self.user_batch_locks[user.id]:
-                while not queue.empty():
-                    messages_batch = queue.get_nowait()
-                    await self.process_batch(messages_batch, user)
-
-            del self.user_batch_queues[user.id]
+            try:
+                async with self.user_batch_locks[user.id]:
+                    while not queue.empty():
+                        messages_batch = queue.get_nowait()
+                        await self.process_batch(messages_batch, user)
+            finally:
+                del self.user_batch_queues[user.id]
+                del self.user_batch_locks[user.id]
 
     @staticmethod
     def batch_is_prompt(messages_batch: List[types.Message], user: User):
