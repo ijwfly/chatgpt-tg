@@ -151,6 +151,11 @@ class TelegramBot:
         await self.settings.send_settings(message, user)
 
     async def generate_speech(self, message: types.Message, user: User):
+        # TODO: add reply handling
+        # TODO: add usage calculation
+        if not check_access_conditions(UserRole.ADMIN, user.role):
+            return
+
         last_message = await self.db.get_last_message(user.id, message.chat.id)
         text = last_message.message.get_text_content()
         if not text:
