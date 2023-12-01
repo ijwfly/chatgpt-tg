@@ -6,7 +6,7 @@ from aiogram.utils.exceptions import BadRequest
 from dateutil.relativedelta import relativedelta
 
 import settings
-from app.bot.batched_handler import BatchedHandler
+from app.bot.batched_input_handler import BatchedInputHandler
 from app.bot.cancellation_manager import CancellationManager
 from app.bot.scheduled_tasks import build_monthly_usage_task
 from app.bot.settings_menu import Settings
@@ -56,7 +56,7 @@ class TelegramBot:
         self.monthly_usage_task = build_monthly_usage_task(self.bot, self.db)
         self.monthly_usage_task.start()
 
-        self.batched_handler = BatchedHandler(self.bot, self.db, self.cancellation_manager)
+        self.batched_handler = BatchedInputHandler(self.bot, self.db, self.cancellation_manager)
         self.dispatcher.register_message_handler(self.batched_handler.handle, content_types=[
             types.ContentType.TEXT, types.ContentType.VIDEO, types.ContentType.PHOTO, types.ContentType.VOICE
         ])

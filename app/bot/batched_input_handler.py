@@ -16,7 +16,11 @@ from app.storage.db import User
 logger = logging.getLogger(__name__)
 
 
-class BatchedHandler:
+class BatchedInputHandler:
+    """
+    Handles input messages (context and prompt) in batches. If batch has prompt, sends it to OpenAI and sends response
+    to user. If batch has no prompt, adds it to context.
+    """
     def __init__(self, bot, db, cancellation_manager):
         self.bot = bot
         self.db = db
@@ -40,7 +44,7 @@ class BatchedHandler:
             self.user_batches[user.id].append(message)
             self.user_timers[user.id].reset()
 
-        # first coroutine for each user will handle batching process
+        # first coroutine for each user handle batching and input processing
         if len(self.user_batches[user.id]) == 1:
             await self.user_timers[user.id].sleep()
             async with self.user_locks[user.id]:
