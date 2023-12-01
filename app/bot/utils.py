@@ -16,9 +16,14 @@ TYPING_QUERIES_LIMIT = TYPING_TIMEOUT // TYPING_DELAY
 
 
 class TypingWorker:
-    def __init__(self, bot, chat_id):
+    ACTION_TYPING = 'typing'
+    ACTION_UPLOAD_PHOTO = 'upload_photo'
+    ACTION_RECORD_VOICE = 'record_voice'
+
+    def __init__(self, bot, chat_id, action='typing'):
         self.bot = bot
         self.chat_id = chat_id
+        self.action = action
         self.typing_task = None
         self.typing_queries_count = 0
 
@@ -33,7 +38,7 @@ class TypingWorker:
     async def start_typing(self):
         async def typing_worker():
             while self.typing_queries_count < TYPING_QUERIES_LIMIT:
-                await self.bot.send_chat_action(self.chat_id, 'typing')
+                await self.bot.send_chat_action(self.chat_id, self.action)
                 await asyncio.sleep(TYPING_DELAY)
                 self.typing_queries_count += 1
 
@@ -50,6 +55,26 @@ class TypingWorker:
         except asyncio.CancelledError:
             pass
         self.typing_task = None
+
+
+class Timer:
+    """
+    Async timer with reset method
+    """
+    def __init__(self, timeout=0.3):
+        self.timeout = timeout
+        self._current_timeout = timeout
+        self.step = timeout / 100
+
+    async def sleep(self):
+        while True:
+            await asyncio.sleep(self.step)
+            self._current_timeout -= self.step
+            if self._current_timeout <= 0:
+                break
+
+    def reset(self):
+        self._current_timeout = self.timeout
 
 
 @dataclasses.dataclass

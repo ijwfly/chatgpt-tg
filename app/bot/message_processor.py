@@ -25,17 +25,25 @@ class MessageProcessor:
         self.db = db
         self.user = user
         self.message = message
+        self._context_manager = None
+
+    async def context_manager(self):
+        if self._context_manager is None:
+            self._context_manager = await build_context_manager(self.db, self.user, self.message)
+        return self._context_manager
 
     async def add_text_as_context(self, text: str, message_id: int):
-        context_manager = await build_context_manager(self.db, self.user, self.message)
+        context_manager = await self.context_manager()
         dialog_message = DialogUtils.prepare_user_message(text)
         await context_manager.add_message(dialog_message, message_id)
 
-    async def add_message_as_context(self, message_id: int = None):
+    async def add_message_as_context(self, message_id: int = None, message: Message = None):
+        if message is None:
+            message = self.message
         if message_id is None:
-            message_id = self.message.message_id
-        context_manager = await build_context_manager(self.db, self.user, self.message)
-        dialog_message = await self.prepare_user_message(self.message)
+            message_id = message.message_id
+        context_manager = await self.context_manager()
+        dialog_message = await self.prepare_user_message(message)
         await context_manager.add_message(dialog_message, message_id)
 
     @staticmethod
@@ -57,14 +65,13 @@ class MessageProcessor:
 
         return DialogUtils.prepare_user_message(content)
 
-    async def process_message(self, is_cancelled):
-        context_manager = await build_context_manager(self.db, self.user, self.message)
+    async def process(self, is_cancelled):
+        context_manager = await self.context_manager()
 
         function_storage = await context_manager.get_function_storage()
         chat_gpt_manager = ChatGptManager(ChatGPT(self.user.current_model, self.user.gpt_mode, function_storage), self.db)
 
-        user_dialog_message = await self.prepare_user_message(self.message)
-        context_dialog_messages = await context_manager.add_message(user_dialog_message, self.message.message_id)
+        context_dialog_messages = await context_manager.get_context_messages()
         response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
         await self.handle_gpt_response(

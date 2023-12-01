@@ -27,7 +27,7 @@ class MonthlyTask:
                 try:
                     await self.task_function()
                 except Exception as e:
-                    logger.error(f"An error occurred while executing the task: {e}")
+                    logger.exception(f"An error occurred while executing the task: %s", e)
                     if self.fail_counter < FAIL_LIMIT:
                         await asyncio.sleep(WAIT_BETWEEN_RETRIES)
                         self.fail_counter += 1

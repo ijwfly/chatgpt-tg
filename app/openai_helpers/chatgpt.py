@@ -48,6 +48,14 @@ class DialogMessage(pydantic.BaseModel):
     content: Union[Optional[str], Optional[List[DialogMessageContentPart]]] = None
     function_call: Optional[FunctionCall] = None
 
+    def get_text_content(self):
+        if isinstance(self.content, str):
+            return self.content
+        elif isinstance(self.content, list):
+            return '\n'.join(part.text for part in self.content if part.text is not None)
+        else:
+            raise ValueError('Unknown type of content')
+
     def openai_message(self):
         if isinstance(self.content, str):
             content = self.content

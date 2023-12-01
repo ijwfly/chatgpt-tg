@@ -110,7 +110,7 @@ class DB:
         result = [Message(**record) for record in result]
         return result
 
-    async def get_last_message(self, user_id, tg_chat_id):
+    async def get_last_message(self, user_id, tg_chat_id) -> Message:
         sql = 'SELECT * FROM chatgpttg.message WHERE user_id = $1 AND tg_chat_id = $2 ORDER BY cdate DESC LIMIT 1'
         record = await self.connection_pool.fetchrow(sql, user_id, tg_chat_id)
         if record is None:

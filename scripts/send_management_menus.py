@@ -1,15 +1,14 @@
 import asyncio
 
 import settings
-from app.bot.queued_dispatcher import QueuedDispatcher
 from app.bot.user_role_manager import UserRoleManager
 
-from aiogram import Bot
+from aiogram import Bot, Dispatcher
 
 from app.storage.db import DBFactory
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
-dp = QueuedDispatcher(bot)
+dp = Dispatcher(bot)
 
 
 async def main():
