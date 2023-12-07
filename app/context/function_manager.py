@@ -5,6 +5,7 @@ from app.functions.dalle_3 import GenerateImageDalle3
 from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User
+from app.storage.user_role import check_access_conditions, UserRole
 
 
 class FunctionManager:
@@ -20,8 +21,6 @@ class FunctionManager:
         if settings.ENABLE_WOLFRAMALPHA:
             functions.append(QueryWolframAlpha)
 
-        functions.append(GenerateImageDalle3)
-
         return functions
 
     async def process_functions(self) -> Optional[FunctionStorage]:
@@ -29,6 +28,9 @@ class FunctionManager:
             return None
 
         functions = self.get_static_functions()
+        if check_access_conditions(UserRole.ADMIN, self.user.role):
+            functions.append(GenerateImageDalle3)
+
         if not functions:
             return None
 

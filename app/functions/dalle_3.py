@@ -1,8 +1,9 @@
 from typing import Optional
 
+import httpx
 from pydantic import Field
 
-from app.bot.utils import send_telegram_message
+from app.bot.utils import send_photo
 from app.context.dialog_manager import DialogUtils
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 from app.openai_helpers.utils import OpenAIAsync
@@ -15,6 +16,14 @@ class GenerateImageDalle3Params(OpenAIFunctionParams):
 class GenerateImageDalle3(OpenAIFunction):
     PARAMS_SCHEMA = GenerateImageDalle3Params
 
+    @staticmethod
+    async def download_image(url):
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                raise Exception(f'Image download failed with status code {resp.status_code}')
+            return resp.content
+
     async def run(self, params: GenerateImageDalle3Params) -> Optional[str]:
         try:
             resp = await OpenAIAsync.instance().images.generate(
@@ -24,13 +33,15 @@ class GenerateImageDalle3(OpenAIFunction):
                 quality="standard",
                 n=1,
             )
-            text = 'Image generated from prompt:\n'
-            text += params.image_prompt
-            text += '\n\n'
-            text += 'URL:\n'
-            text += resp.data[0].url
 
-            response = await send_telegram_message(self.message, text)
+            image_url = resp.data[0].url
+            image_bytes = await self.download_image(image_url)
+
+            caption = 'Image generated from prompt:\n'
+            caption += params.image_prompt
+
+            response = await send_photo(self.message, image_bytes, caption)
+            text = caption + '\n\nImage:\n<image.png>'
             dialog_message = DialogUtils.prepare_function_response(self.get_name(), text)
             await self.context_manager.add_message(dialog_message, response.message_id)
             return None

@@ -145,6 +145,15 @@ async def edit_telegram_message(message: types.Message, text: str, message_id, p
         return await message.bot.edit_message_text(text, chat_id, message_id)
 
 
+async def send_photo(message: types.Message, photo_bytes, caption=None, reply_markup=None):
+    if message.reply_to_message is None:
+        send_message = message.answer_photo
+    else:
+        send_message = message.reply_photo
+
+    return await send_message(photo_bytes, caption=caption, reply_markup=reply_markup)
+
+
 def merge_dicts(dict_1, dict_2):
     """
     This function merge two dicts containing strings using plus operator on each key
