@@ -83,7 +83,12 @@ class MessageProcessor:
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
-            function_response_raw = await function_storage.run_function(function_name, function_args)
+            function_class = function_storage.get_function_class(function_name)
+            function = function_class(self.user, self.db, context_manager, self.message)
+            function_response_raw = await function.run_str_args(function_args)
+            if function_response_raw is None:
+                # no need to pass response to GPT
+                return
 
             function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
             function_response_message_id = -1

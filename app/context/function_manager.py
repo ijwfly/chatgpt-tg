@@ -1,7 +1,8 @@
 from typing import Optional
 
 import settings
-from app.functions.wolframalpha import query_wolframalpha
+from app.functions.dalle_3 import GenerateImageDalle3
+from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User
 
@@ -17,7 +18,9 @@ class FunctionManager:
         functions = []
 
         if settings.ENABLE_WOLFRAMALPHA:
-            functions.append(query_wolframalpha)
+            functions.append(QueryWolframAlpha)
+
+        functions.append(GenerateImageDalle3)
 
         return functions
 
