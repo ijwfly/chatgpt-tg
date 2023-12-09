@@ -53,9 +53,9 @@ class GenerateImageDalle3(OpenAIFunction):
             caption += resp.data[0].revised_prompt
 
             # truncate caption to 1024 symbols, telegram limit
-            caption = caption[:1021] + '...' if len(caption) > 1024 else caption
+            tg_caption = caption[:1021] + '...' if len(caption) > 1024 else caption
 
-            response = await send_photo(self.message, image_bytes, caption)
+            response = await send_photo(self.message, image_bytes, tg_caption)
             text = caption + '\n\nImage:\n<image.png>'
             dialog_message = DialogUtils.prepare_function_response(self.get_name(), text)
             await self.context_manager.add_message(dialog_message, response.message_id)
