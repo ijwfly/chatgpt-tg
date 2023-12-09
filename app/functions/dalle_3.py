@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Optional
 
 import httpx
@@ -9,8 +10,15 @@ from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 from app.openai_helpers.utils import OpenAIAsync
 
 
+class ImageSize(str, Enum):
+    size_1024x1024 = "1024x1024"
+    size_1024x1792 = "1024x1792"
+    size_1792x1024 = "1792x1024"
+
+
 class GenerateImageDalle3Params(OpenAIFunctionParams):
     image_prompt: str = Field(..., description="detailed tailored prompt to generate image from (translated to english, if needed)")
+    image_size: ImageSize = Field(ImageSize.size_1024x1024, description="image size to generate")
 
 
 class GenerateImageDalle3(OpenAIFunction):
@@ -25,20 +33,27 @@ class GenerateImageDalle3(OpenAIFunction):
             return resp.content
 
     async def run(self, params: GenerateImageDalle3Params) -> Optional[str]:
+        model = "dall-e-3"
         try:
             resp = await OpenAIAsync.instance().images.generate(
-                model="dall-e-3",
+                model=model,
                 prompt=params.image_prompt,
-                size="1024x1024",
+                size=params.image_size,
                 quality="standard",
                 n=1,
             )
+            await self.db.create_image_generation_usage(self.user.id, model, params.image_size)
 
             image_url = resp.data[0].url
             image_bytes = await self.download_image(image_url)
 
             caption = 'Image generated from prompt:\n'
             caption += params.image_prompt
+            caption += '\n\nRevised prompt:\n'
+            caption += resp.data[0].revised_prompt
+
+            # truncate caption to 1024 symbols, telegram limit
+            caption = caption[:1021] + '...' if len(caption) > 1024 else caption
 
             response = await send_photo(self.message, image_bytes, caption)
             text = caption + '\n\nImage:\n<image.png>'

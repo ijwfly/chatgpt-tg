@@ -8,7 +8,8 @@ from contextlib import asynccontextmanager
 from aiogram import types
 from aiogram.utils.exceptions import CantParseEntities
 
-from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price
+from app.openai_helpers.utils import (calculate_completion_usage_price, calculate_whisper_usage_price,
+                                      calculate_image_generation_usage_price)
 
 TYPING_TIMEOUT = 180
 TYPING_DELAY = 2
@@ -170,15 +171,20 @@ def merge_dicts(dict_1, dict_2):
     return result
 
 
-async def get_completion_usage_response_all_users(db, month_date: date = None) -> str:
+async def get_usage_response_all_users(db, month_date: date = None) -> str:
     completion_usages = await db.get_all_users_completion_usage(month_date)
     whisper_usages = await db.get_all_users_whisper_usage(month_date)
+    image_generation_usages = await db.get_all_users_image_generation_usage(month_date)
     result = []
     for name, user_completion_usages in completion_usages.items():
         user_usage_price = 0
         for usage in user_completion_usages:
             user_usage_price += calculate_completion_usage_price(
                 usage.prompt_tokens, usage.completion_tokens, usage.model
+            )
+        for usage in image_generation_usages.get(name, []):
+            user_usage_price += calculate_image_generation_usage_price(
+                usage['model'], usage['resolution'], usage['usage_count']
             )
         user_whisper_usage = whisper_usages.get(name, 0)
         user_usage_price += calculate_whisper_usage_price(user_whisper_usage)

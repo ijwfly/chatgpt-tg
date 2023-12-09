@@ -12,9 +12,10 @@ from app.bot.scheduled_tasks import build_monthly_usage_task
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
-from app.bot.utils import (get_hide_button, get_completion_usage_response_all_users, TypingWorker)
+from app.bot.utils import (get_hide_button, get_usage_response_all_users, TypingWorker)
 from app.bot.utils import send_telegram_message
-from app.openai_helpers.utils import calculate_completion_usage_price, calculate_whisper_usage_price, OpenAIAsync
+from app.openai_helpers.utils import (calculate_completion_usage_price, calculate_whisper_usage_price, OpenAIAsync,
+                                      calculate_image_generation_usage_price)
 from app.storage.db import DBFactory, User
 from app.storage.user_role import check_access_conditions, UserRole
 from app.openai_helpers.chatgpt import GptModel
@@ -113,6 +114,15 @@ class TelegramBot:
         completion_usages = await self.db.get_user_current_month_completion_usage(user.id)
         result = []
         total = whisper_price
+
+        image_generation_usage = await self.db.get_user_current_month_image_generation_usage(user.id)
+        for usage in image_generation_usage:
+            price = calculate_image_generation_usage_price(
+                usage['model'], usage['resolution'], usage['usage_count']
+            )
+            total += price
+            result.append(f'*{usage["model"]}:* {usage["usage_count"]} images, {usage["resolution"]} resolution, ${price}')
+
         for usage in completion_usages:
             price = calculate_completion_usage_price(usage.prompt_tokens, usage.completion_tokens, usage.model)
             total += price
@@ -138,7 +148,7 @@ class TelegramBot:
             month = datetime.datetime.now(settings.POSTGRES_TIMEZONE) + relativedelta(months=month_offset)
             month = month.date()
 
-        result = await get_completion_usage_response_all_users(self.db, month)
+        result = await get_usage_response_all_users(self.db, month)
         await send_telegram_message(
             message, result, reply_markup=get_hide_button()
         )

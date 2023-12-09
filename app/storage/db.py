@@ -153,6 +153,10 @@ class DB:
         sql = 'INSERT INTO chatgpttg.whisper_usage (user_id, audio_seconds) VALUES ($1, $2)'
         await self.connection_pool.fetchrow(sql, user_id, audio_seconds)
 
+    async def create_image_generation_usage(self, user_id, model, resolution):
+        sql = 'INSERT INTO chatgpttg.image_generation_usage (user_id, model, resolution) VALUES ($1, $2, $3)'
+        await self.connection_pool.fetchrow(sql, user_id, model, resolution)
+
     async def get_user_current_month_whisper_usage(self, user_id):
         sql = '''SELECT SUM(audio_seconds) AS audio_seconds
             FROM chatgpttg.whisper_usage
@@ -179,6 +183,23 @@ class DB:
         if not records:
             return []
         return [CompletionUsage(**dict(record)) for record in records]
+
+    async def get_user_current_month_image_generation_usage(self, user_id):
+        sql = '''
+        SELECT model, resolution, COUNT(*) AS usage_count
+        FROM chatgpttg.image_generation_usage
+        WHERE user_id = $1 AND
+          date_trunc('month', cdate) = date_trunc('month', current_date)
+        GROUP BY model, resolution;
+        '''
+        records = await self.connection_pool.fetch(sql, user_id)
+        if not records:
+            return []
+        return [{
+            'model': record['model'],
+            'resolution': record['resolution'],
+            'usage_count': record['usage_count'],
+        } for record in records]
 
     async def get_all_users_completion_usage(self, month_date: date = None):
         if not month_date:
@@ -230,6 +251,35 @@ class DB:
             name = ' - '.join([full_name, username])
             name = f'[{telegram_id}] {name}' if name else f'[{telegram_id}]'
             result[name] = record['audio_seconds']
+        return result
+
+    async def get_all_users_image_generation_usage(self, month_date: date = None):
+        if not month_date:
+            month_date = datetime.now(settings.POSTGRES_TIMEZONE).date()
+
+        year, month = month_date.year, month_date.month
+
+        sql = f'''
+        SELECT u.telegram_id, u.username, u.full_name, COUNT(*) AS usage_count, igu.model, igu.resolution
+        FROM chatgpttg.user AS u
+        JOIN chatgpttg.image_generation_usage AS igu ON u.id = igu.user_id
+        WHERE EXTRACT(YEAR FROM igu.cdate) = {year} AND EXTRACT(MONTH FROM igu.cdate) = {month}
+        GROUP BY u.telegram_id, u.username, u.full_name, igu.model, igu.resolution
+        ORDER BY u.telegram_id, igu.model, igu.resolution;
+        '''
+        records = await self.connection_pool.fetch(sql)
+        result = defaultdict(list)
+        for record in records:
+            telegram_id = record['telegram_id']
+            full_name = record['full_name'] if record['full_name'] else ''
+            username = f"@{record['username']}" if record['username'] else ''
+            name = ' - '.join([full_name, username])
+            name = f'[{telegram_id}] {name}' if name else f'[{telegram_id}]'
+            result[name].append({
+                'model': record['model'],
+                'resolution': record['resolution'],
+                'usage_count': record['usage_count'],
+            })
         return result
 
 
