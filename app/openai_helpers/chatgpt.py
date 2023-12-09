@@ -90,7 +90,9 @@ class ChatGPT:
 
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = {}
+        system_prompt_addition = None
         if self.function_storage is not None:
+            system_prompt_addition = self.function_storage.get_system_prompt_addition()
             additional_fields.update({
                 'functions': self.function_storage.get_openai_prompt(),
                 'function_call': 'auto',
@@ -106,7 +108,7 @@ class ChatGPT:
             if 'functions' in additional_fields:
                 del additional_fields['functions']
 
-        messages = self.create_context(messages_to_send, self.gpt_mode)
+        messages = self.create_context(messages_to_send, self.gpt_mode, system_prompt_addition)
         resp = await OpenAIAsync.instance().chat.completions.create(
             model=self.model,
             messages=messages,
@@ -122,7 +124,9 @@ class ChatGPT:
         prompt_tokens = 0
 
         additional_fields = {}
+        system_prompt_addition = None
         if self.function_storage is not None:
+            system_prompt_addition = self.function_storage.get_system_prompt_addition()
             functions = self.function_storage.get_openai_prompt()
             prompt_tokens += count_tokens_from_functions(functions, self.model)
             additional_fields.update({
@@ -140,7 +144,7 @@ class ChatGPT:
             if 'functions' in additional_fields:
                 del additional_fields['functions']
 
-        messages = self.create_context(messages_to_send, self.gpt_mode)
+        messages = self.create_context(messages_to_send, self.gpt_mode, system_prompt_addition)
         resp_generator = await OpenAIAsync.instance().chat.completions.create(
             model=self.model,
             messages=messages,
@@ -188,8 +192,10 @@ class ChatGPT:
                 break
 
     @staticmethod
-    def create_context(messages: List[DialogMessage], gpt_mode) -> List[Any]:
+    def create_context(messages: List[DialogMessage], gpt_mode, system_prompt_addition) -> List[Any]:
         system_prompt = settings.gpt_mode[gpt_mode]["system"]
+        if system_prompt_addition:
+            system_prompt += '\n' + system_prompt_addition
 
         result = [{"role": "system", "content": system_prompt}]
         for dialog_message in messages:

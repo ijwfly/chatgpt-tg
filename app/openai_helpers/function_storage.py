@@ -29,6 +29,15 @@ class FunctionStorage:
 
         return functions
 
+    def get_system_prompt_addition(self) -> str:
+        result = []
+        for function in self.functions.values():
+            function_obj = function['obj']
+            addition = function_obj.get_system_prompt_addition()
+            if addition:
+                result.append(addition)
+        return '\n'.join(result)
+
     def get_function_class(self, function_name: str):
         function_obj = self.functions.get(function_name)
         if not function_obj:

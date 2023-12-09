@@ -70,3 +70,8 @@ class GenerateImageDalle3(OpenAIFunction):
     @classmethod
     def get_description(cls) -> str:
         return "Use dalle-3 to generate image from prompt. Image prompt must be in english. Generate tailored detailed prompt for user idea."
+
+    @classmethod
+    def get_system_prompt_addition(cls) -> Optional[str]:
+        return "If user asks you to generate image, use some imagination and write a long 500 symbols good tailored detailed prompt for Dall-E 3 model and call function. Don't generate image if user didn't ask you to do so directly."
+

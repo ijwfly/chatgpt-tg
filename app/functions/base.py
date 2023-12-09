@@ -49,3 +49,11 @@ class OpenAIFunction(ABC):
     def get_params_schema(cls) -> dict:
         params_schema = cls.PARAMS_SCHEMA.schema()
         return params_schema
+
+    @classmethod
+    def get_system_prompt_addition(cls) -> Optional[str]:
+        """
+        Returns text to add to system prompt when this function is added to context. You can use this to add
+        additional instructions about how to use this function.
+        """
+        return None
