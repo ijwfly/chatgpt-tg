@@ -3,18 +3,20 @@
 This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, state-of-the-art language models by OpenAI.  
 
 🔥 **GPT-4 Turbo + Vision preview support (gpt-4-1106-preview + gpt-4-vision-preview)**  
+🔥 **DALL-E 3 Image generation support**
 
 🔑 **Key Features**
 
-1. **Dynamic Dialog Management**: The bot automatically manages the context of the conversation, eliminating the need for the user to manually reset the context using the /reset command. You still can reset dialog manually if needed.
-2. **Automatic Context Summarization**: In case the context size exceeds the model's maximum limit, the bot automatically summarizes the context to ensure the continuity of the conversation.
-3. **Functions Support**: You can embed functions within the bot. This allows the GPT to invoke these functions when needed, based on the context. The description of the function and its parameters are extracted from the function's docstring. See the `app/context/function_manager.py` file for more details.
-4. **Sub-dialogue Mechanism**: "Chat Thread Isolation" feature, where if a message is replied to within the bot, only the corresponding message chain is considered as context. This adds an extra level of context control for the users.
-5. **Voice Recognition**: The bot is capable of transcribing voice messages, allowing users to use speech as context or prompt for ChatGPT.
-6. **API Usage Tracking**: The bot includes a function that tracks and provides information about the current month's usage of the OpenAI API. This allows users to monitor and manage their API usage costs.
-7. **Model Support**: The bot supports both gpt-3.5-turbo and gpt-4 models with the capability to switch between them on-the-fly.
-8. **Context Window Size Customization**: The bot provides a feature to customize the maximum context window size. This allows users to set the context size for gpt-3.5-turbo and gpt-4 models individually, enabling more granular control over usage costs. This feature is particularly useful for managing API usage and optimizing the balance between cost and performance.
-9. **Access Control**: The bot includes a feature for access control. Each user is assigned a role (stranger, basic, advanced, admin), and depending on the role, they gain access to the bot. Role management is carried out through a messaging mechanism, with inline buttons sent to the admin for role changes.
+1. **Model Support**: gpt-3.5-turbo, gpt-4, gpt-4-1106-preview, gpt-4-vision-preview.
+2. **Image Generation**: You can ask bot to generate images using DALL-E 3 model, use bot just like official chatgpt app.
+3. **Dynamic Dialog Management**: The bot automatically manages the context of the conversation, eliminating the need for the user to manually reset the context using the /reset command. You still can reset dialog manually if needed.
+4. **Automatic Context Summarization**: In case the context size exceeds the model's maximum limit, the bot automatically summarizes the context to ensure the continuity of the conversation.
+5. **Function calling support**: You can embed functions within the bot. This allows the GPT to invoke these functions when needed, based on the context. `app/context/function_manager.py` file for more details.
+6. **Sub-dialogue Mechanism**: When you reply to a message, the bot only looks at that specific conversation thread, making it easier to manage multiple discussions at once.
+7. **Voice Recognition**: The bot is capable of transcribing voice messages, allowing users to use speech as context or prompt for ChatGPT.
+8. **API Usage Tracking**: The bot includes a function that tracks and provides information about the usage of the OpenAI API. This allows users to monitor and manage their API usage costs.
+9. **Context Window Size Customization**: You can setup maximum context window size for each model in `app/context/context_manager.py` file. When context size exceeds this limit, bot will automatically summarize context.
+10. **Access Control**: The bot includes a feature for access control. Each user is assigned a role (stranger, basic, advanced, admin), and depending on the role, they gain access to the bot. Role management is carried out through a messaging mechanism, with inline buttons sent to the admin for role changes.
 
 🔧 **Installation**
 
@@ -36,3 +38,13 @@ To get this bot up and running, follow these steps:
 /usage_all - show usage for all users
 ```
 These commands will provide additional interaction control for the bot users.
+
+
+⚠️ **Troubleshooting**
+
+If you have any issues with the bot, please create an issue in this repository. I will try to help you as soon as possible.  
+
+Here are some typical issues and solutions:  
+- ```Error code: 400 - {'error': {'message': 'Invalid image.', 'type': 'invalid_request_error' ...}}``` - This error usually occurs when openai cannot access the image. Make sure you set up the `IMAGE_PROXY_URL` variable correctly with your server IP / hostname. 
+You can try to open this url in your browser to check if it works. Also you can debug the setup by looking at `chatgpttg.message` table in postgres, there will be message with image url. You can try to open this url in your browser to check if it works.
+- ```Error code: 400 - {'error': {'message': 'Invalid content type. image_url is only supported by certain models.', 'type': 'invalid_request_error' ...}}``` - This error usually occurs when you have image in your context, but current model doesn't support vision. You can try to change model to gpt-4-vision-preview or reset your context with /reset command.
