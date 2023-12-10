@@ -24,7 +24,12 @@ To get this bot up and running, follow these steps:
 
 1. Set the `TELEGRAM_BOT_TOKEN` and `OPENAI_TOKEN` variables in the `settings.py` file.
 2. Set the `IMAGE_PROXY_URL` to your server IP / hostname in the `settings.py` file.
-3. Run `docker-compose up -d` in the root directory of the project.
+3. Optional: Set the `USER_ROLE_MANAGER_CHAT_ID` variable in the `settings.py` file to your telegram id. This is required for access control.
+4. Optional: Set the `ENABLE_USER_ROLE_MANAGER_CHAT` variable in the `settings.py` file to `True`. This is required for access control.
+5. Optional: Set the `USER_ROLE_*` variables in the `settings.py` file to desired roles.
+6. Run `docker-compose up -d` in the root directory of the project.
+
+If you've done optional steps, when you send your first message to the bot, you will get a management message with your telegram id and info. You can use this message to setup your role as admin.
 
 🤖 **Commands**
 ```
