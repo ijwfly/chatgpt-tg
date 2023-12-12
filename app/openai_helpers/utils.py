@@ -13,6 +13,15 @@ COMPLETION_PRICE = {
 WHISPER_PRICE = Decimal('0.006')
 
 
+IMAGE_GENERATION_PRICE = {
+    'dall-e-3': {
+        '1024x1024': Decimal('0.04'),
+        '1792x1024': Decimal('0.08'),
+        '1024x1792': Decimal('0.08'),
+    }
+}
+
+
 def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int, model: str) -> Decimal:
     price = COMPLETION_PRICE.get(model)
     if not price:
@@ -23,6 +32,13 @@ def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int,
 
 def calculate_whisper_usage_price(audio_seconds: int) -> Decimal:
     return WHISPER_PRICE / 60 * audio_seconds
+
+
+def calculate_image_generation_usage_price(model, resolution, num_images):
+    price = IMAGE_GENERATION_PRICE.get(model)
+    if not price:
+        raise ValueError(f"Unknown model: {model}")
+    return price[resolution] * num_images
 
 
 class OpenAIAsync:

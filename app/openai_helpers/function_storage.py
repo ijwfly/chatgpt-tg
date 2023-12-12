@@ -1,12 +1,4 @@
-import inspect
-import json
 from typing import Any, Dict
-from docstring_parser import parse
-
-TYPE_MAPPING = {
-    int: "integer",
-    str: "string",
-}
 
 
 class FunctionStorage:
@@ -14,82 +6,40 @@ class FunctionStorage:
         self.functions = {}
 
     def register(self, func):
-        self.functions[func.__name__] = {
+        func_name = func.get_name()
+        self.functions[func_name] = {
             'obj': func,
-            'info': self.extract_function_info(func)
+            'info': self.extract_function_info(func),
         }
         return func
 
     @staticmethod
     def extract_function_info(function) -> Dict[str, Any]:
-        signature = inspect.signature(function)
-        params = []
-        for name, param in signature.parameters.items():
-            is_required = param.default == inspect.Parameter.empty
-            params.append((name, param.annotation, is_required, ""))
-
-        function_info = {
-            "name": function.__name__,
-            "description": "",
-            "parameters": params
+        return {
+            "name": function.get_name(),
+            "description": function.get_description(),
+            "parameters": function.get_params_schema(),
         }
-
-        docstring = inspect.getdoc(function)
-        if docstring:
-            parsed_docstring = parse(docstring)
-            function_info["description"] = parsed_docstring.short_description
-
-            for param in parsed_docstring.params:
-                for i, (name, type_, is_required, _) in enumerate(params):
-                    if param.arg_name == name:
-                        params[i] = (name, type_, is_required, param.description)
-
-        return function_info
 
     def get_openai_prompt(self):
         functions = []
         for function in self.functions.values():
-            parameters_dict = {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            }
-            for name, type, is_required, description in function['info']['parameters']:
-                mapped_type = TYPE_MAPPING.get(type)
-                if not mapped_type:
-                    raise ValueError(f"Unknown type: {type}")
-                parameters_dict['properties'][name] = {
-                    "type": mapped_type,
-                    "description": description or name,
-                }
-                if is_required:
-                    parameters_dict['required'].append(name)
-            function_info = {
-                'name': function['info']['name'],
-                'description': function['info']['description'],
-                'parameters': parameters_dict
-            }
+            function_info = function['info']
             functions.append(function_info)
 
         return functions
 
-    @staticmethod
-    def parse_function_args(function_arguments):
-        try:
-            return json.loads(function_arguments)
-        except json.JSONDecodeError:
-            return function_arguments
+    def get_system_prompt_addition(self) -> str:
+        result = []
+        for function in self.functions.values():
+            function_obj = function['obj']
+            addition = function_obj.get_system_prompt_addition()
+            if addition:
+                result.append(addition)
+        return '\n'.join(result)
 
-    async def run_function(self, function_name: str, parameters: str):
-        function = self.functions[function_name]['obj']
-        parsed_parameters = self.parse_function_args(parameters)
-        try:
-            if isinstance(parsed_parameters, str):
-                result = await function(parsed_parameters)
-            else:
-                result = await function(**parsed_parameters)
-            if not result:
-                return 'Function returned nothing'
-            return str(result)
-        except Exception as e:
-            return f'Function raised an exception: {e}'
+    def get_function_class(self, function_name: str):
+        function_obj = self.functions.get(function_name)
+        if not function_obj:
+            raise ValueError(f"Unknown function: {function_name}")
+        return function_obj['obj']

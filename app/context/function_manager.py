@@ -1,9 +1,12 @@
 from typing import Optional
 
 import settings
-from app.functions.wolframalpha import query_wolframalpha
+from app.functions.dalle_3 import GenerateImageDalle3
+from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User
+from app.storage.user_role import check_access_conditions
+from settings import USER_ROLE_IMAGE_GENERATION
 
 
 class FunctionManager:
@@ -17,7 +20,15 @@ class FunctionManager:
         functions = []
 
         if settings.ENABLE_WOLFRAMALPHA:
-            functions.append(query_wolframalpha)
+            functions.append(QueryWolframAlpha)
+
+        return functions
+
+    def get_conditional_functions(self):
+        functions = []
+
+        if self.user.image_generation and check_access_conditions(USER_ROLE_IMAGE_GENERATION, self.user.role):
+            functions.append(GenerateImageDalle3)
 
         return functions
 
@@ -26,6 +37,8 @@ class FunctionManager:
             return None
 
         functions = self.get_static_functions()
+        functions += self.get_conditional_functions()
+
         if not functions:
             return None
 

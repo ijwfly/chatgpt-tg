@@ -4,7 +4,7 @@ import pytz
 import logging
 
 import settings
-from app.bot.utils import get_completion_usage_response_all_users
+from app.bot.utils import get_usage_response_all_users
 
 FAIL_LIMIT = 5
 WAIT_BETWEEN_RETRIES = 5
@@ -66,7 +66,7 @@ def build_monthly_usage_task(bot, db) -> MonthlyTask:
 
         previous_month = datetime.datetime.now(settings.POSTGRES_TIMEZONE).replace(day=1) - datetime.timedelta(days=1)
         previous_month = previous_month.date()
-        result = await get_completion_usage_response_all_users(db, previous_month)
+        result = await get_usage_response_all_users(db, previous_month)
         await bot.send_message(
             settings.USER_ROLE_MANAGER_CHAT_ID, result
         )

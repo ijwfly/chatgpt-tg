@@ -83,16 +83,23 @@ class MessageProcessor:
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
-            function_response_raw = await function_storage.run_function(function_name, function_args)
+            function_class = function_storage.get_function_class(function_name)
+            function = function_class(self.user, self.db, context_manager, self.message)
+            function_response_raw = await function.run_str_args(function_args)
 
-            function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
             function_response_message_id = -1
             if self.user.function_call_verbose:
                 with suppress(BadRequest):
                     # TODO: split function call message if it's too long
-                    function_response_text = f'Function call: {function_name}({function_args})\n\n{function_response_raw}'
+                    function_response_text = f'Function call: {function_name}({function_args})\n\nResponse: {function_response_raw}'
                     function_response_tg_message = await send_telegram_message(self.message, function_response_text)
                     function_response_message_id = function_response_tg_message.message_id
+
+            if function_response_raw is None:
+                # None means there is no need to pass response to GPT or add it to context
+                return
+
+            function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
             context_dialog_messages = await context_manager.add_message(function_response, function_response_message_id)
             response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 

@@ -26,6 +26,7 @@ class User(pydantic.BaseModel):
     role: Optional[UserRole]
     streaming_answers: bool
     function_call_verbose: bool
+    image_generation: bool
 
 
 class MessageType(Enum):
@@ -74,12 +75,12 @@ class DB:
         SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
         voice_as_prompt = $4, use_functions = $5, auto_summarize = $6,
         full_name = $7, username = $8, role = $9, streaming_answers = $10,
-        function_call_verbose = $11 WHERE id = $12 RETURNING *'''
+        function_call_verbose = $11, image_generation = $12 WHERE id = $13 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
             user.voice_as_prompt, user.use_functions, user.auto_summarize,
             user.full_name, user.username, user.role.value, user.streaming_answers,
-            user.function_call_verbose, user.id,
+            user.function_call_verbose, user.image_generation, user.id,
         ))
 
     async def create_user(self, telegram_user_id: int, role: UserRole):
@@ -153,6 +154,10 @@ class DB:
         sql = 'INSERT INTO chatgpttg.whisper_usage (user_id, audio_seconds) VALUES ($1, $2)'
         await self.connection_pool.fetchrow(sql, user_id, audio_seconds)
 
+    async def create_image_generation_usage(self, user_id, model, resolution):
+        sql = 'INSERT INTO chatgpttg.image_generation_usage (user_id, model, resolution) VALUES ($1, $2, $3)'
+        await self.connection_pool.fetchrow(sql, user_id, model, resolution)
+
     async def get_user_current_month_whisper_usage(self, user_id):
         sql = '''SELECT SUM(audio_seconds) AS audio_seconds
             FROM chatgpttg.whisper_usage
@@ -179,6 +184,23 @@ class DB:
         if not records:
             return []
         return [CompletionUsage(**dict(record)) for record in records]
+
+    async def get_user_current_month_image_generation_usage(self, user_id):
+        sql = '''
+        SELECT model, resolution, COUNT(*) AS usage_count
+        FROM chatgpttg.image_generation_usage
+        WHERE user_id = $1 AND
+          date_trunc('month', cdate) = date_trunc('month', current_date)
+        GROUP BY model, resolution;
+        '''
+        records = await self.connection_pool.fetch(sql, user_id)
+        if not records:
+            return []
+        return [{
+            'model': record['model'],
+            'resolution': record['resolution'],
+            'usage_count': record['usage_count'],
+        } for record in records]
 
     async def get_all_users_completion_usage(self, month_date: date = None):
         if not month_date:
@@ -230,6 +252,35 @@ class DB:
             name = ' - '.join([full_name, username])
             name = f'[{telegram_id}] {name}' if name else f'[{telegram_id}]'
             result[name] = record['audio_seconds']
+        return result
+
+    async def get_all_users_image_generation_usage(self, month_date: date = None):
+        if not month_date:
+            month_date = datetime.now(settings.POSTGRES_TIMEZONE).date()
+
+        year, month = month_date.year, month_date.month
+
+        sql = f'''
+        SELECT u.telegram_id, u.username, u.full_name, COUNT(*) AS usage_count, igu.model, igu.resolution
+        FROM chatgpttg.user AS u
+        JOIN chatgpttg.image_generation_usage AS igu ON u.id = igu.user_id
+        WHERE EXTRACT(YEAR FROM igu.cdate) = {year} AND EXTRACT(MONTH FROM igu.cdate) = {month}
+        GROUP BY u.telegram_id, u.username, u.full_name, igu.model, igu.resolution
+        ORDER BY u.telegram_id, igu.model, igu.resolution;
+        '''
+        records = await self.connection_pool.fetch(sql)
+        result = defaultdict(list)
+        for record in records:
+            telegram_id = record['telegram_id']
+            full_name = record['full_name'] if record['full_name'] else ''
+            username = f"@{record['username']}" if record['username'] else ''
+            name = ' - '.join([full_name, username])
+            name = f'[{telegram_id}] {name}' if name else f'[{telegram_id}]'
+            result[name].append({
+                'model': record['model'],
+                'resolution': record['resolution'],
+                'usage_count': record['usage_count'],
+            })
         return result
 
 
