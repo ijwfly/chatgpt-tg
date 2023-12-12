@@ -27,7 +27,7 @@ class FunctionManager:
     def get_conditional_functions(self):
         functions = []
 
-        if check_access_conditions(USER_ROLE_IMAGE_GENERATION, self.user.role):
+        if self.user.image_generation and check_access_conditions(USER_ROLE_IMAGE_GENERATION, self.user.role):
             functions.append(GenerateImageDalle3)
 
         return functions
