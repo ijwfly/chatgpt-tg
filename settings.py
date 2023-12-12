@@ -4,7 +4,7 @@ from app.storage.user_role import UserRole
 
 # ChatGPT system prompts
 gpt_mode = {
-    'assistant': {
+    'assistant': { # required, please consider to add an additional mode setup name instead of overwriging this one.
         'system': 'As an advanced chatbot Assistant, your primary goal is to assist users to the best of your ability.'
                   'This may involve answering questions, providing helpful information, or completing tasks based on user input. '
                   'In order to effectively assist users, it is important to be detailed and thorough in your responses. '
@@ -12,7 +12,7 @@ gpt_mode = {
                   'Remember to always prioritize the needs and satisfaction of the user. '
                   'Your ultimate goal is to provide a helpful and enjoyable experience for the user.',
     },
-    'coach': {
+    'coach': { # free to be deleted
         'system': 'You\'re a business coach, your main task is to conduct high-quality coaching sessions, '
                   'and assist users to the best of your abilities. Listen carefully to what they say, ask questions, '
                   'and help in any way you can. Avoid giving advices, your ultimate goal is to help the user to find the right solution by himself. '
@@ -23,7 +23,10 @@ gpt_mode = {
 # Mandatory settings
 OPENAI_TOKEN = 'YOUR_TOKEN'
 TELEGRAM_BOT_TOKEN = 'YOUR_TOKEN'
-IMAGE_PROXY_URL = 'http://example.com'
+
+# hostname and port are used to construct image url for openai
+IMAGE_PROXY_URL = 'http://example.com' # http:// is required
+IMAGE_PROXY_PORT = 8321
 
 # Utility settings
 OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3
@@ -47,6 +50,7 @@ ENABLE_WOLFRAMALPHA = False
 WOLFRAMALPHA_APPID = 'YOUR_TOKEN'
 
 # Database settings
+# DO NOT CHANGE THESE
 POSTGRES_HOST = 'postgres'
 POSTGRES_PORT = 5432
 POSTGRES_USER = 'postgres'
@@ -56,8 +60,6 @@ POSTGRES_DATABASE = 'chatgpttg'
 # Image proxy settings
 # This proxy is used to send images to openai
 # bind host and port are used to run proxy locally
+# DO NOT CHANGE THESE
 IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
-# hostname and port are used to construct image url for openai
-# IMAGE_PROXY_URL = 'http://example.com'
-IMAGE_PROXY_PORT = 8321
