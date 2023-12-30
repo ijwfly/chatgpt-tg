@@ -50,6 +50,7 @@ class UserRoleManager:
     @classmethod
     async def send_new_user_to_admin(cls, bot: Bot, user: User):
         text = cls.user_to_string(user)
+        text = '#admin\n' + text
         await bot.send_message(
             settings.USER_ROLE_MANAGER_CHAT_ID, text, reply_markup=cls.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN
         )
