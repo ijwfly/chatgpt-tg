@@ -92,6 +92,7 @@ class MessageProcessor:
                 with suppress(BadRequest):
                     # TODO: split function call message if it's too long
                     function_response_text = f'Function call: {function_name}({function_args})\n\nResponse: {function_response_raw}'
+                    function_response_text = function_response_text[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]
                     function_response_tg_message = await send_telegram_message(self.message, function_response_text)
                     function_response_message_id = function_response_tg_message.message_id
 
