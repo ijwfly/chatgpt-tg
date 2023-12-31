@@ -69,9 +69,9 @@ class UserRoleManager:
             types.BotCommand(command="/settings", description="open settings menu"),
         ]
 
-        if check_access_conditions(UserRole.ADMIN, user_role):
+        if check_access_conditions(settings.USER_ROLE_TTS, user_role):
             commands += [
-                types.BotCommand(command="/tts", description="generate voice from last message"),
+                types.BotCommand(command="/tts", description="generate voice from message"),
             ]
 
         if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):

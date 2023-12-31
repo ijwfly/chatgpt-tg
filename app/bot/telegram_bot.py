@@ -15,7 +15,7 @@ from app.bot.user_role_manager import UserRoleManager
 from app.bot.utils import (get_hide_button, get_usage_response_all_users, TypingWorker)
 from app.bot.utils import send_telegram_message
 from app.openai_helpers.utils import (calculate_completion_usage_price, calculate_whisper_usage_price, OpenAIAsync,
-                                      calculate_image_generation_usage_price)
+                                      calculate_image_generation_usage_price, calculate_tts_usage_price)
 from app.storage.db import DBFactory, User
 from app.storage.user_role import check_access_conditions, UserRole
 from app.openai_helpers.chatgpt import GptModel
@@ -108,12 +108,21 @@ class TelegramBot:
 
     async def get_usage(self, message: types.Message, user: User):
         await self.bot.delete_message(message.chat.id, message.message_id)
-        whisper_usage = await self.db.get_user_current_month_whisper_usage(user.id)
-        whisper_price = calculate_whisper_usage_price(whisper_usage)
+
+        total = 0
+        result = []
 
         completion_usages = await self.db.get_user_current_month_completion_usage(user.id)
-        result = []
-        total = whisper_price
+        for usage in completion_usages:
+            price = calculate_completion_usage_price(usage.prompt_tokens, usage.completion_tokens, usage.model)
+            total += price
+            result.append(f'*{usage.model}:* {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${price}')
+
+        whisper_usage = await self.db.get_user_current_month_whisper_usage(user.id)
+        whisper_price = calculate_whisper_usage_price(whisper_usage)
+        total += whisper_price
+        if whisper_price:
+            result.append(f'*Speech2Text:* {whisper_usage} seconds, ${whisper_price}')
 
         image_generation_usage = await self.db.get_user_current_month_image_generation_usage(user.id)
         for usage in image_generation_usage:
@@ -123,12 +132,12 @@ class TelegramBot:
             total += price
             result.append(f'*{usage["model"]}:* {usage["usage_count"]} images, {usage["resolution"]} resolution, ${price}')
 
-        for usage in completion_usages:
-            price = calculate_completion_usage_price(usage.prompt_tokens, usage.completion_tokens, usage.model)
+        tts_usages = await self.db.get_user_current_month_tts_usage(user.id)
+        for tts_usage in tts_usages:
+            price = calculate_tts_usage_price(tts_usage['characters_count'], tts_usage['model'])
             total += price
-            result.append(f'*{usage.model}:* {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${price}')
-        if whisper_price:
-            result.append(f'*Speech2Text:* {whisper_usage} seconds, ${whisper_price}')
+            result.append(f'*{tts_usage["model"]}:* {tts_usage["characters_count"]} characters, ${price}')
+
         result.append(f'*Total:* ${total}')
         await send_telegram_message(
             message, '\n'.join(result), types.ParseMode.MARKDOWN, reply_markup=get_hide_button()
@@ -163,24 +172,35 @@ class TelegramBot:
     async def generate_speech(self, message: types.Message, user: User):
         # TODO: add reply handling
         # TODO: add usage calculation
-        if not check_access_conditions(UserRole.ADMIN, user.role):
+        if not check_access_conditions(settings.USER_ROLE_TTS, user.role):
             return
 
-        last_message = await self.db.get_last_message(user.id, message.chat.id)
-        text = last_message.message.get_text_content()
-        if not text:
+        chat_id = message.chat.id
+
+        if message.reply_to_message:
+            db_message = await self.db.get_telegram_message(chat_id, message.reply_to_message.message_id)
+        else:
+            db_message = await self.db.get_last_message(user.id, chat_id)
+
+        if not db_message:
             await message.answer('No text to generate speech')
             return
+
+        text = db_message.message.get_text_content()
         async with TypingWorker(self.bot, message.chat.id, TypingWorker.ACTION_RECORD_VOICE).typing_context():
+            # TODO: decide if tts-1-hd is needed in user settings
+            model = 'tts-1'
             response = await OpenAIAsync.instance().audio.speech.create(
-                model='tts-1',
-                voice='onyx',
+                model=model,
+                voice=user.tts_voice,
                 input=text,
             )
+            await self.db.create_tts_usage(user.id, model, len(text))
+
             # TODO: refactor without saving to file
             with tempfile.TemporaryDirectory() as temp_dir:
                 mp3_filename = os.path.join(temp_dir, f'voice_{message.message_id}.mp3')
-                response.stream_to_file(mp3_filename)
+                await response.astream_to_file(mp3_filename)
                 try:
                     await message.answer_voice(open(mp3_filename, 'rb'))
                 except BadRequest as e:
