@@ -71,7 +71,7 @@ class UserRoleManager:
 
         if check_access_conditions(settings.USER_ROLE_TTS, user_role):
             commands += [
-                types.BotCommand(command="/tts", description="generate voice from message"),
+                types.BotCommand(command="/text2speech", description="generate voice from message"),
             ]
 
         if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):

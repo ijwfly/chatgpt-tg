@@ -34,7 +34,7 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
         self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4', 'gpt4turbo', 'gpt4vision'])
         self.dispatcher.register_message_handler(self.reset_dialog, commands=['reset'])
-        self.dispatcher.register_message_handler(self.generate_speech, commands=['tts'])
+        self.dispatcher.register_message_handler(self.generate_speech, commands=['text2speech'])
         self.dispatcher.register_callback_query_handler(self.process_hide_callback, lambda c: c.data == 'hide')
 
         # initialized in on_startup
