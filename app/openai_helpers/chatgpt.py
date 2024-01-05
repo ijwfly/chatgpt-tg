@@ -79,20 +79,16 @@ class DialogMessage(pydantic.BaseModel):
 
 
 class ChatGPT:
-    def __init__(self, model="gpt-3.5-turbo", gpt_mode="assistant", function_storage: FunctionStorage = None):
+    def __init__(self, model, system_prompt: str, function_storage: FunctionStorage = None):
         self.function_storage = function_storage
         if model not in GPT_MODELS:
             raise ValueError(f"Unknown model: {model}")
         self.model = model
-        if gpt_mode not in settings.gpt_mode:
-            raise ValueError(f"Unknown GPT mode: {gpt_mode}")
-        self.gpt_mode = gpt_mode
+        self.system_prompt = system_prompt
 
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = {}
-        system_prompt_addition = None
         if self.function_storage is not None:
-            system_prompt_addition = self.function_storage.get_system_prompt_addition()
             additional_fields.update({
                 'functions': self.function_storage.get_openai_prompt(),
                 'function_call': 'auto',
@@ -108,7 +104,7 @@ class ChatGPT:
             if 'functions' in additional_fields:
                 del additional_fields['functions']
 
-        messages = self.create_context(messages_to_send, self.gpt_mode, system_prompt_addition)
+        messages = self.create_context(messages_to_send, self.system_prompt)
         resp = await OpenAIAsync.instance().chat.completions.create(
             model=self.model,
             messages=messages,
@@ -144,7 +140,7 @@ class ChatGPT:
             if 'functions' in additional_fields:
                 del additional_fields['functions']
 
-        messages = self.create_context(messages_to_send, self.gpt_mode, system_prompt_addition)
+        messages = self.create_context(messages_to_send, self.system_prompt)
         resp_generator = await OpenAIAsync.instance().chat.completions.create(
             model=self.model,
             messages=messages,
@@ -192,15 +188,9 @@ class ChatGPT:
                 break
 
     @staticmethod
-    def create_context(messages: List[DialogMessage], gpt_mode, system_prompt_addition) -> List[Any]:
-        system_prompt = settings.gpt_mode[gpt_mode]["system"]
-        if system_prompt_addition:
-            system_prompt += '\n' + system_prompt_addition
-
+    def create_context(messages: List[DialogMessage], system_prompt: str) -> List[Any]:
         result = [{"role": "system", "content": system_prompt}]
-        for dialog_message in messages:
-            result.append(dialog_message.openai_message())
-
+        result += [dialog_message.openai_message() for dialog_message in messages]
         return result
 
 

@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from aiogram import types
 
+import settings
 from app.context.dialog_manager import DialogManager
 from app.context.function_manager import FunctionManager
 from app.openai_helpers.chatgpt import DialogMessage
@@ -94,6 +95,20 @@ class ContextManager:
     async def add_message(self, dialog_message: DialogMessage, tg_message_id: id) -> List[DialogMessage]:
         dialog_messages = await self.dialog_manager.add_message_to_dialog(dialog_message, tg_message_id)
         return dialog_messages
+
+    async def get_system_prompt(self):
+        gpt_mode = settings.gpt_mode.get(self.user.gpt_mode)
+        if not gpt_mode:
+            raise ValueError(f"Unknown GPT mode: {self.user.gpt_mode}")
+        system_prompt = gpt_mode["system"]
+
+        function_storage = await self.get_function_storage()
+        if function_storage is not None:
+            system_prompt_addition = function_storage.get_system_prompt_addition()
+            if system_prompt_addition:
+                system_prompt += '\n' + system_prompt_addition
+
+        return system_prompt
 
     async def get_context_messages(self) -> List[DialogMessage]:
         dialog_messages = self.dialog_manager.get_dialog_messages()
