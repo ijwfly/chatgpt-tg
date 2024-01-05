@@ -36,6 +36,7 @@ If you've done optional steps, when you send your first message to the bot, you 
 /reset - reset current dialog
 /usage - show usage for current month
 /settings - open settings menu
+/text2speech - generate voice message from message (last message or replied)
 /gpt3 - set model to gpt-3.5-turbo
 /gpt4 - set model to gpt-4
 /gpt4turbo - set model to gpt-4-1106-preview

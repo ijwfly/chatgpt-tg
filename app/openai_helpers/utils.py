@@ -12,6 +12,10 @@ COMPLETION_PRICE = {
 
 WHISPER_PRICE = Decimal('0.006')
 
+TTS_PRICE = {
+    'tts-1': Decimal('0.015'),
+    'tts-1-hd': Decimal('0.030')
+}
 
 IMAGE_GENERATION_PRICE = {
     'dall-e-3': {
@@ -32,6 +36,11 @@ def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int,
 
 def calculate_whisper_usage_price(audio_seconds: int) -> Decimal:
     return WHISPER_PRICE / 60 * audio_seconds
+
+
+def calculate_tts_usage_price(characters_count: int, model: str) -> Decimal:
+    model_price = TTS_PRICE.get(model, 0)
+    return model_price * characters_count / 1000
 
 
 def calculate_image_generation_usage_price(model, resolution, num_images):

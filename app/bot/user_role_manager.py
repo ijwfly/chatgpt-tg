@@ -50,6 +50,7 @@ class UserRoleManager:
     @classmethod
     async def send_new_user_to_admin(cls, bot: Bot, user: User):
         text = cls.user_to_string(user)
+        text = '#admin\n' + text
         await bot.send_message(
             settings.USER_ROLE_MANAGER_CHAT_ID, text, reply_markup=cls.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN
         )
@@ -68,9 +69,9 @@ class UserRoleManager:
             types.BotCommand(command="/settings", description="open settings menu"),
         ]
 
-        if check_access_conditions(UserRole.ADMIN, user_role):
+        if check_access_conditions(settings.USER_ROLE_TTS, user_role):
             commands += [
-                types.BotCommand(command="/tts", description="generate voice from last message"),
+                types.BotCommand(command="/text2speech", description="generate voice from message"),
             ]
 
         if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):

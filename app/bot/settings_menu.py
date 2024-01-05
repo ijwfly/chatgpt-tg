@@ -15,6 +15,8 @@ GPT_MODELS_OPTIONS_PREVIEW = {
     'gpt-4-vision-preview': 'GPT-4-Vision',
 }
 
+TTS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+
 SETTINGS_PREFIX = 'settings'
 HIDE_COMMAND = 'hide'
 
@@ -99,6 +101,7 @@ class Settings:
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
             'image_generation': OnOffSetting('Image generation', 'image_generation'),
+            'tts-voice': ChoiceSetting('TTS voice', 'tts_voice', TTS_VOICES),
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
             'function_call_verbose': OnOffSetting('Verbose function calls', 'function_call_verbose'),
             'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
@@ -109,6 +112,7 @@ class Settings:
             'current_model': settings.USER_ROLE_CHOOSE_MODEL,
             'current_model_preview': settings.USER_ROLE_CHOOSE_MODEL,
             'image_generation': settings.USER_ROLE_IMAGE_GENERATION,
+            'tts-voice': settings.USER_ROLE_TTS,
             'streaming_answers': settings.USER_ROLE_STREAMING_ANSWERS,
         }
         self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: SETTINGS_PREFIX in c.data)
