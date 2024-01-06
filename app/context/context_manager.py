@@ -108,6 +108,10 @@ class ContextManager:
             if system_prompt_addition:
                 system_prompt += '\n' + system_prompt_addition
 
+        user_system_prompt_settings = self.user.system_prompt_settings.strip() if self.user.system_prompt_settings else None
+        if user_system_prompt_settings:
+            system_prompt += f'\n\n<UserSettings>\n{user_system_prompt_settings}\n</UserSettings>'
+
         return system_prompt
 
     async def get_context_messages(self) -> List[DialogMessage]:

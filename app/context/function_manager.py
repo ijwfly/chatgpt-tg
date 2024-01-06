@@ -2,6 +2,7 @@ from typing import Optional
 
 import settings
 from app.functions.dalle_3 import GenerateImageDalle3
+from app.functions.save_user_settings import SaveUserSettings
 from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User
@@ -29,6 +30,9 @@ class FunctionManager:
 
         if self.user.image_generation and check_access_conditions(USER_ROLE_IMAGE_GENERATION, self.user.role):
             functions.append(GenerateImageDalle3)
+
+        # TODO: add setting to disable this feature
+        functions.append(SaveUserSettings)
 
         return functions
 
