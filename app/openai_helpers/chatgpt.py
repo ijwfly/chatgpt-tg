@@ -61,6 +61,8 @@ class DialogMessage(pydantic.BaseModel):
             content = self.content
         elif isinstance(self.content, list):
             content = [part.dict(exclude_none=True) for part in self.content]
+        elif self.content is None:
+            content = None
         else:
             raise ValueError('Unknown type of content')
 

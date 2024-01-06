@@ -36,7 +36,7 @@ class FunctionStorage:
             addition = function_obj.get_system_prompt_addition()
             if addition:
                 result.append(addition)
-        return '\n'.join(result)
+        return '\n' + '\n\n'.join(result)
 
     def get_function_class(self, function_name: str):
         function_obj = self.functions.get(function_name)

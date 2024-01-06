@@ -86,6 +86,7 @@ class MessageProcessor:
 
         response_dialog_message, message_id = await self.handle_response_generator(response_generator)
         if response_dialog_message.function_call:
+            await context_manager.add_message(response_dialog_message, -1)
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
             function_class = function_storage.get_function_class(function_name)
