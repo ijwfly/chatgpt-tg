@@ -43,12 +43,7 @@ class DialogManager:
             # if it's a reply, we need to update activation time of dialog messages to be included in context next time
             await self.db.update_activation_dtime([m.id for m in dialog_messages])
 
-        if self.user.auto_summarize and count_dialog_messages_tokens(m.message for m in dialog_messages) >= self.context_configuration.short_term_memory_tokens:
-            to_summarize, to_process = self.split_context_by_token_length(dialog_messages)
-            summarized_message = await self.summarize_messages(to_summarize)
-            self.dialog_messages = [summarized_message] + to_process
-        else:
-            self.dialog_messages = dialog_messages
+        self.dialog_messages = await self.summarize_messages_if_needed(dialog_messages)
         return self.get_dialog_messages()
 
     def split_context_by_token_length(self, messages: List[Message]):
@@ -60,6 +55,20 @@ class DialogManager:
                 return messages[:split_point], messages[split_point:]
         else:
             return messages, []
+
+    async def summarize_messages_if_needed(self, messages: List[Message]):
+        message_tokens_count = count_dialog_messages_tokens(m.message for m in messages)
+        if message_tokens_count > self.context_configuration.hard_max_context_size:
+            # this is safety measure, we should never get here
+            # if hard limit is exceeded, the context is too big to summarize or to process
+            raise ValueError(f'Hard context size is exceeded: {message_tokens_count}')
+
+        if self.user.auto_summarize and message_tokens_count >= self.context_configuration.short_term_memory_tokens:
+            to_summarize, to_process = self.split_context_by_token_length(messages)
+            summarized_message = await self.summarize_messages(to_summarize)
+            return [summarized_message] + to_process
+        else:
+            return messages
 
     async def summarize_messages(self, messages: List[Message]):
         summarized, completion_usage = await summarize_messages(
@@ -82,6 +91,7 @@ class DialogManager:
             self.user.id, self.chat_id, tg_message_id, dialog_message, self.dialog_messages
         )
         self.dialog_messages.append(dialog_message)
+        self.dialog_messages = await self.summarize_messages_if_needed(self.dialog_messages)
         return self.get_dialog_messages()
 
     def get_dialog_messages(self) -> List[DialogMessage]:

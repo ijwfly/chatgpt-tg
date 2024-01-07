@@ -18,8 +18,11 @@ class ContextConfiguration:
     long_term_memory_tokens: int
     # short term memory is used for storing last messages
     short_term_memory_tokens: int
-
+    # length of summary to be generated when context is too long
     summary_length: int
+    # hard limit for context size, when this limit is reached, processing is being stopped,
+    # summarization also cannot be done
+    hard_max_context_size: int
 
     @staticmethod
     def get_config(model: str):
@@ -29,6 +32,7 @@ class ContextConfiguration:
                 long_term_memory_tokens=512,
                 short_term_memory_tokens=2560,
                 summary_length=512,
+                hard_max_context_size=5*1024,
             )
         elif model == 'gpt-3.5-turbo-16k':
             return ContextConfiguration(
@@ -36,6 +40,7 @@ class ContextConfiguration:
                 long_term_memory_tokens=1024,
                 short_term_memory_tokens=4096,
                 summary_length=1024,
+                hard_max_context_size=17*1024,
             )
         elif model == 'gpt-4':
             return ContextConfiguration(
@@ -43,6 +48,7 @@ class ContextConfiguration:
                 long_term_memory_tokens=512,
                 short_term_memory_tokens=2048,
                 summary_length=1024,
+                hard_max_context_size=9*1024,
             )
         elif model == 'gpt-4-1106-preview':
             return ContextConfiguration(
@@ -50,6 +56,7 @@ class ContextConfiguration:
                 long_term_memory_tokens=512,
                 short_term_memory_tokens=5120,
                 summary_length=2048,
+                hard_max_context_size=13*1024,
             )
         elif model == 'gpt-4-vision-preview':
             return ContextConfiguration(
@@ -57,6 +64,7 @@ class ContextConfiguration:
                 long_term_memory_tokens=512,
                 short_term_memory_tokens=5120,
                 summary_length=2048,
+                hard_max_context_size=13*1024,
             )
         else:
             raise ValueError(f'Unknown model name: {model}')
