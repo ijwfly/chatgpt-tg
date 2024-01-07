@@ -19,6 +19,7 @@ TYPING_QUERIES_LIMIT = TYPING_TIMEOUT // TYPING_DELAY
 class TypingWorker:
     ACTION_TYPING = 'typing'
     ACTION_UPLOAD_PHOTO = 'upload_photo'
+    ACTION_UPLOAD_DOCUMENT = 'upload_document'
     ACTION_RECORD_VOICE = 'record_voice'
 
     def __init__(self, bot, chat_id, action='typing'):
@@ -208,3 +209,7 @@ async def get_usage_response_all_users(db, month_date: date = None) -> str:
     else:
         result = f'API usage for month {month_date.month:02d}/{month_date.year}:\n{result}'
     return result
+
+
+def generate_document_id(chat_id, message_id):
+    return f'{chat_id}_{message_id}'

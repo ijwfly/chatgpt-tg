@@ -12,7 +12,7 @@ from app.context.context_manager import build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.openai_helpers.chatgpt import ChatGPT
 from app.openai_helpers.count_tokens import calculate_image_tokens
-from app.storage.db import DB, User
+from app.storage.db import DB, User, MessageType
 
 from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
 
@@ -32,10 +32,10 @@ class MessageProcessor:
             self._context_manager = await build_context_manager(self.db, self.user, self.message)
         return self._context_manager
 
-    async def add_text_as_context(self, text: str, message_id: int):
+    async def add_text_as_context(self, text: str, message_id: int, message_type: MessageType = MessageType.MESSAGE):
         context_manager = await self.context_manager()
         dialog_message = DialogUtils.prepare_user_message(text)
-        await context_manager.add_message(dialog_message, message_id)
+        await context_manager.add_message(dialog_message, message_id, message_type)
 
     async def add_message_as_context(self, message_id: int = None, message: Message = None):
         if message is None:

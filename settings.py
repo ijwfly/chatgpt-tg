@@ -67,3 +67,8 @@ POSTGRES_DATABASE = 'chatgpttg'
 # Change these if you know what you're doing
 IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
+
+# Vectara
+VECTARA_CUSTOMER_ID = -1
+VECTARA_API_KEY = 'YOUR KEY'
+VECTARA_CORPUS_ID = -1

@@ -1,20 +1,23 @@
 from typing import Optional
 
 import settings
+from app.context.dialog_manager import DialogManager
 from app.functions.dalle_3 import GenerateImageDalle3
 from app.functions.save_user_settings import SaveUserSettings
+from app.functions.vectara_search import VectorSearch
 from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
-from app.storage.db import DB, User
+from app.storage.db import DB, User, MessageType
 from app.storage.user_role import check_access_conditions
 from settings import USER_ROLE_IMAGE_GENERATION
 
 
 class FunctionManager:
-    def __init__(self, db: DB, user: User):
+    def __init__(self, db: DB, user: User, dialog_manager: DialogManager):
         self.db = db
         self.user = user
         self.function_storage = None
+        self.dialog_manager = dialog_manager
 
     @staticmethod
     def get_static_functions():
@@ -33,6 +36,11 @@ class FunctionManager:
 
         if self.user.system_prompt_settings_enabled:
             functions.append(SaveUserSettings)
+
+        messages = self.dialog_manager.messages
+        context_has_documents = any(m.message_type == MessageType.DOCUMENT for m in messages)
+        if context_has_documents:
+            functions.append(VectorSearch)
 
         return functions
 

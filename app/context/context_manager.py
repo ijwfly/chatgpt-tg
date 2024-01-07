@@ -8,7 +8,7 @@ from app.context.dialog_manager import DialogManager
 from app.context.function_manager import FunctionManager
 from app.openai_helpers.chatgpt import DialogMessage
 from app.openai_helpers.function_storage import FunctionStorage
-from app.storage.db import DB, User
+from app.storage.db import DB, User, MessageType
 
 
 @dataclasses.dataclass
@@ -85,15 +85,15 @@ class ContextManager:
         await self.dialog_manager.process_dialog(self.message)
 
     async def process_functions(self):
-        self.function_manager = FunctionManager(self.db, self.user)
+        self.function_manager = FunctionManager(self.db, self.user, self.dialog_manager)
         await self.function_manager.process_functions()
 
     async def process(self):
         await self.process_dialog()
         await self.process_functions()
 
-    async def add_message(self, dialog_message: DialogMessage, tg_message_id: id) -> List[DialogMessage]:
-        dialog_messages = await self.dialog_manager.add_message_to_dialog(dialog_message, tg_message_id)
+    async def add_message(self, dialog_message: DialogMessage, tg_message_id: id, message_type: MessageType = MessageType.MESSAGE) -> List[DialogMessage]:
+        dialog_messages = await self.dialog_manager.add_message_to_dialog(dialog_message, tg_message_id, message_type)
         return dialog_messages
 
     async def get_system_prompt(self):

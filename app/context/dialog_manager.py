@@ -14,7 +14,7 @@ class DialogManager:
     def __init__(self, db: DB, user: User, context_configuration):
         self.db = db
         self.user = user
-        self.dialog_messages: Optional[List[Message]] = None
+        self.messages: Optional[List[Message]] = None
         self.chat_id = None
         self.context_configuration = context_configuration
 
@@ -33,7 +33,7 @@ class DialogManager:
                 db_message = None
 
         if not db_message or db_message.message_type == MessageType.RESET:
-            self.dialog_messages = []
+            self.messages = []
             return []
 
         dialog_messages = await self.db.get_messages_by_ids(db_message.previous_message_ids)
@@ -43,7 +43,7 @@ class DialogManager:
             # if it's a reply, we need to update activation time of dialog messages to be included in context next time
             await self.db.update_activation_dtime([m.id for m in dialog_messages])
 
-        self.dialog_messages = await self.summarize_messages_if_needed(dialog_messages)
+        self.messages = await self.summarize_messages_if_needed(dialog_messages)
         return self.get_dialog_messages()
 
     def split_context_by_token_length(self, messages: List[Message]):
@@ -86,18 +86,19 @@ class DialogManager:
         )
         return message
 
-    async def add_message_to_dialog(self, dialog_message: DialogMessage, tg_message_id: id) -> List[DialogMessage]:
-        dialog_message = await self.db.create_message(
-            self.user.id, self.chat_id, tg_message_id, dialog_message, self.dialog_messages
+    async def add_message_to_dialog(self, message: DialogMessage, tg_message_id: id,
+                                    message_type: MessageType = MessageType.MESSAGE) -> List[DialogMessage]:
+        message = await self.db.create_message(
+            self.user.id, self.chat_id, tg_message_id, message, self.messages, message_type
         )
-        self.dialog_messages.append(dialog_message)
-        self.dialog_messages = await self.summarize_messages_if_needed(self.dialog_messages)
+        self.messages.append(message)
+        self.messages = await self.summarize_messages_if_needed(self.messages)
         return self.get_dialog_messages()
 
     def get_dialog_messages(self) -> List[DialogMessage]:
-        if self.dialog_messages is None:
+        if self.messages is None:
             raise ValueError('You must call process_dialog first')
-        dialog_messages = [d.message for d in self.dialog_messages]
+        dialog_messages = [d.message for d in self.messages]
         return dialog_messages
 
 
