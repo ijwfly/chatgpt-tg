@@ -78,7 +78,11 @@ class MessageProcessor:
             chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled
         )
 
-    async def handle_gpt_response(self, chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled):
+    async def handle_gpt_response(self, chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled, recursive_count=0):
+        if recursive_count >= settings.SUCCESSIVE_FUNCTION_CALLS_LIMIT:
+            # sometimes model starts to make function call retries indefinitely, this is safety measure
+            raise ValueError('Model makes too many successive function calls')
+
         response_dialog_message, message_id = await self.handle_response_generator(response_generator)
         if response_dialog_message.function_call:
             function_name = response_dialog_message.function_call.name
@@ -104,7 +108,7 @@ class MessageProcessor:
             context_dialog_messages = await context_manager.add_message(function_response, function_response_message_id)
             response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
-            await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled)
+            await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled, recursive_count + 1)
         else:
             dialog_messages = self.split_dialog_message(response_dialog_message)
             for dialog_message in dialog_messages:
