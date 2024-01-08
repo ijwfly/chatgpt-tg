@@ -53,6 +53,7 @@ WOLFRAMALPHA_APPID = 'YOUR_TOKEN'
 OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 POSTGRES_TIMEZONE = pytz.timezone('UTC')
+SUCCESSIVE_FUNCTION_CALLS_LIMIT = 12  # limit of successive function calls that model can make
 
 # Database settings
 # Change these if you know what you're doing
