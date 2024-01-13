@@ -65,8 +65,8 @@ class UserRoleManager:
 
         commands += [
             types.BotCommand(command="/reset", description="reset current dialog"),
-            types.BotCommand(command="/usage", description="show usage for current month"),
             types.BotCommand(command="/settings", description="open settings menu"),
+            types.BotCommand(command="/usage", description="show usage for current month"),
         ]
 
         if check_access_conditions(settings.USER_ROLE_TTS, user_role):
@@ -74,13 +74,13 @@ class UserRoleManager:
                 types.BotCommand(command="/text2speech", description="generate voice from message"),
             ]
 
-        if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):
-            commands += [
-                types.BotCommand(command="/gpt3", description="set model to gpt-3.5-turbo"),
-                types.BotCommand(command="/gpt4", description="set model to gpt-4"),
-                types.BotCommand(command="/gpt4turbo", description="set model to gpt-4-1106-preview"),
-                types.BotCommand(command="/gpt4vision", description="set model to gpt-4-vision-preview"),
-            ]
+        # if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):
+        #     commands += [
+        #         types.BotCommand(command="/gpt3", description="set model to gpt-3.5-turbo"),
+        #         types.BotCommand(command="/gpt4", description="set model to gpt-4"),
+        #         types.BotCommand(command="/gpt4turbo", description="set model to gpt-4-1106-preview"),
+        #         types.BotCommand(command="/gpt4vision", description="set model to gpt-4-vision-preview"),
+        #     ]
 
         if check_access_conditions(UserRole.ADMIN, user_role):
             commands += [
