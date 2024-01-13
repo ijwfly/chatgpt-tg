@@ -37,10 +37,11 @@ class FunctionManager:
         if self.user.system_prompt_settings_enabled:
             functions.append(SaveUserSettings)
 
-        messages = self.dialog_manager.messages
-        context_has_documents = any(m.message_type == MessageType.DOCUMENT for m in messages)
-        if context_has_documents:
-            functions.append(VectorSearch)
+        if settings.VECTARA_RAG_ENABLED:
+            messages = self.dialog_manager.messages
+            context_has_documents = any(m.message_type == MessageType.DOCUMENT for m in messages)
+            if context_has_documents:
+                functions.append(VectorSearch)
 
         return functions
 

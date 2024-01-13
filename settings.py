@@ -44,6 +44,7 @@ USER_ROLE_CHOOSE_MODEL = UserRole.BASIC  # minimum role needed to choose model (
 USER_ROLE_STREAMING_ANSWERS = UserRole.BASIC  # minimum role needed to use streaming gpt responses
 USER_ROLE_IMAGE_GENERATION = UserRole.BASIC  # minimum role needed to generate images
 USER_ROLE_TTS = UserRole.BASIC  # minimum role needed to use text-to-speech
+USER_ROLE_RAG = UserRole.BASIC  # minimum role needed to use RAG
 
 # Plugins settings
 ENABLE_WOLFRAMALPHA = False
@@ -69,6 +70,7 @@ IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
 
 # Vectara
+VECTARA_RAG_ENABLED = False
 VECTARA_CUSTOMER_ID = -1
 VECTARA_API_KEY = 'YOUR KEY'
 VECTARA_CORPUS_ID = -1

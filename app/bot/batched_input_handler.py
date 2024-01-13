@@ -13,6 +13,7 @@ from app.bot.message_processor import MessageProcessor
 from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer, generate_document_id
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import User, MessageType
+from app.storage.user_role import check_access_conditions
 from app.storage.vectara import VectaraCorpusClient
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,13 @@ class BatchedInputHandler:
             raise
 
     async def handle_document(self, message: types.Message, user: User, message_processor: MessageProcessor):
+        if not settings.VECTARA_RAG_ENABLED:
+            await message.reply('Documents are not supported')
+            return
+        if not check_access_conditions(settings.USER_ROLE_RAG, user.role):
+            await message.reply('You do not have access to this feature')
+            return
+
         file = await self.bot.get_file(message.document.file_id)
         if file.file_size > 25 * 1024 * 1024:
             await message.reply('Document file is too big')
