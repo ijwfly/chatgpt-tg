@@ -31,8 +31,8 @@ class FunctionManager:
         if self.user.image_generation and check_access_conditions(USER_ROLE_IMAGE_GENERATION, self.user.role):
             functions.append(GenerateImageDalle3)
 
-        # TODO: add setting to disable this feature
-        functions.append(SaveUserSettings)
+        if self.user.system_prompt_settings_enabled:
+            functions.append(SaveUserSettings)
 
         return functions
 
