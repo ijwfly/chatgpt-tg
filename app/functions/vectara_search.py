@@ -1,8 +1,10 @@
+import logging
 from typing import List
 
 from pydantic import Field
 
 import settings
+from app.bot.utils import send_telegram_message
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 from app.storage.vectara import VectaraCorpusClient
 
@@ -10,6 +12,9 @@ from app.storage.vectara import VectaraCorpusClient
 # more results from vectara are useful for lexical interpolation
 VECTARA_NUM_RESULTS = 10
 VECTOR_SEARCH_NUM_RESULTS = 5
+
+
+logger = logging.getLogger(__name__)
 
 
 class VectorSearchParams(OpenAIFunctionParams):
@@ -28,6 +33,10 @@ class VectorSearch(OpenAIFunction):
         return await corpus_client.query_corpus(query, num_results=VECTARA_NUM_RESULTS, metadata_filters=filters)
 
     async def run(self, params: VectorSearchParams):
+        if not params.query.strip():
+            logger.error("Model is trying to search for an empty query: %s", params.query)
+            await send_telegram_message(self.message, "Model is trying to do vector search for an empty query. Stopping.")
+            return None
         search_results = await self.get_search_results(params.query, params.documents_ids)
         search_results = search_results[:VECTOR_SEARCH_NUM_RESULTS]
         texts = [r.text for r in search_results]
