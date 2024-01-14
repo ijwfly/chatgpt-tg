@@ -8,6 +8,9 @@ import pydantic
 VECTARA_BASE_URL = 'https://api.vectara.io/v1'
 
 
+VECTARA_SUPPORTED_EXTENSIONS = ['md', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'txt', 'html', 'lxml', 'rtf', 'epub', 'eml']
+
+
 class SearchResult(pydantic.BaseModel):
     text: str
     score: float

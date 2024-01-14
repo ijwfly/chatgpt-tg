@@ -14,7 +14,7 @@ from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer,
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import User, MessageType
 from app.storage.user_role import check_access_conditions
-from app.storage.vectara import VectaraCorpusClient
+from app.storage.vectara import VectaraCorpusClient, VECTARA_SUPPORTED_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +84,8 @@ class BatchedInputHandler:
         Batch is prompt if one message in batch is prompt
         """
         for message in messages_batch:
-            if not message_is_forward(message) and not message.voice:
-                # not voice and not forward - it's a prompt
+            if not message_is_forward(message) and not message.voice and not message.document:
+                # not voice and not forward and not document - it's a prompt
                 return True
             elif message_is_forward(message) and user.forward_as_prompt:
                 # forward and forward_as_prompt - it's a prompt
@@ -127,6 +127,12 @@ class BatchedInputHandler:
             return
         if not check_access_conditions(settings.USER_ROLE_RAG, user.role):
             await message.reply('You do not have access to this feature')
+            return
+
+        _, file_extension = os.path.splitext(message.document.file_name)
+        if file_extension[1:] not in VECTARA_SUPPORTED_EXTENSIONS:
+            await message.reply(f'Skipping unsupported document format: {file_extension}\n'
+                                f'Supported formats: {", ".join(VECTARA_SUPPORTED_EXTENSIONS)}')
             return
 
         file = await self.bot.get_file(message.document.file_id)
