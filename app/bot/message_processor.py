@@ -69,7 +69,8 @@ class MessageProcessor:
         context_manager = await self.context_manager()
 
         function_storage = await context_manager.get_function_storage()
-        chat_gpt_manager = ChatGptManager(ChatGPT(self.user.current_model, self.user.gpt_mode, function_storage), self.db)
+        system_prompt = await context_manager.get_system_prompt()
+        chat_gpt_manager = ChatGptManager(ChatGPT(self.user.current_model, system_prompt, function_storage), self.db)
 
         context_dialog_messages = await context_manager.get_context_messages()
         response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
@@ -85,6 +86,7 @@ class MessageProcessor:
 
         response_dialog_message, message_id = await self.handle_response_generator(response_generator)
         if response_dialog_message.function_call:
+            await context_manager.add_message(response_dialog_message, -1)
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
             function_class = function_storage.get_function_class(function_name)

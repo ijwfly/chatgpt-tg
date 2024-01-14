@@ -101,10 +101,11 @@ class Settings:
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
             'image_generation': OnOffSetting('Image generation', 'image_generation'),
+            'system_prompt_settings_enabled': OnOffSetting('User info saving', 'system_prompt_settings_enabled'),
             'tts-voice': ChoiceSetting('TTS voice', 'tts_voice', TTS_VOICES),
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
             'function_call_verbose': OnOffSetting('Verbose function calls', 'function_call_verbose'),
-            'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
+            # 'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
             # 'auto_summarize': OnOffSetting('Auto summarize', 'auto_summarize'),
             # 'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
         }
