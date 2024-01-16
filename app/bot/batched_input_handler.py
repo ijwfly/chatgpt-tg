@@ -85,11 +85,16 @@ class BatchedInputHandler:
         """
         for message in messages_batch:
             if not message_is_forward(message) and not message.voice and not message.document:
-                # not voice and not forward and not document - it's a prompt
+                # not voice and not forward and not document - it's a prompt no matter what settings
                 return True
-            elif message_is_forward(message) and user.forward_as_prompt:
-                # forward and forward_as_prompt - it's a prompt
-                return True
+            elif message_is_forward(message):
+                # if it's a forward, we need to check forward_as_prompt setting
+                if user.forward_as_prompt:
+                    # forward and forward_as_prompt - it's a prompt
+                    return True
+                else:
+                    # forward and not forward_as_prompt - it's a context, no matter what content it has
+                    continue
             elif message.voice and user.voice_as_prompt:
                 # voice and voice_as_prompt - it's a prompt
                 return True
