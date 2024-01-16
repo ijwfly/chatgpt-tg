@@ -69,7 +69,10 @@ POSTGRES_DATABASE = 'chatgpttg'
 IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
 
-# Vectara
+# Vectara RAG settings
+# this feature is highly experimental and not recommended to be used in it's current state
+# currently it even doesn't have instructions on how to setup, use it only if you feel experimenalish
+# maybe it will be removed or redone in the future
 VECTARA_RAG_ENABLED = False
 VECTARA_CUSTOMER_ID = -1
 VECTARA_API_KEY = 'YOUR KEY'
