@@ -36,6 +36,7 @@ class MessageType(Enum):
     MESSAGE = 'message'
     SUMMARY = 'summary'
     RESET = 'reset'
+    DOCUMENT = 'document'
 
 
 class Message(pydantic.BaseModel):

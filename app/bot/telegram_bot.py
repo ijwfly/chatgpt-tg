@@ -59,7 +59,8 @@ class TelegramBot:
 
         self.batched_handler = BatchedInputHandler(self.bot, self.db, self.cancellation_manager)
         self.dispatcher.register_message_handler(self.batched_handler.handle, content_types=[
-            types.ContentType.TEXT, types.ContentType.VIDEO, types.ContentType.PHOTO, types.ContentType.VOICE
+            types.ContentType.TEXT, types.ContentType.VIDEO, types.ContentType.PHOTO, types.ContentType.VOICE,
+            types.ContentType.DOCUMENT,
         ])
 
         # all commands are added to global scope by default, except for admin commands
