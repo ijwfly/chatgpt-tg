@@ -105,21 +105,24 @@ class BatchedInputHandler:
         """
         Processes batch of messages. If batch has prompt, sends it to OpenAI and sends response to user.
         """
-        messages_batch = sorted(messages_batch, key=lambda m: m.message_id)
-        first_message = messages_batch[0]
-        message_processor = MessageProcessor(self.db, user, first_message)
-        for message in messages_batch:
-            if message.voice:
-                await self.handle_voice(message, user, message_processor)
-            if message.document:
-                await self.handle_document(message, user, message_processor)
-            else:
-                await self.handle_message(message, user, message_processor)
-
-        if not self.batch_is_prompt(messages_batch, user):
-            return
-
         try:
+            messages_batch = sorted(messages_batch, key=lambda m: m.message_id)
+            first_message = messages_batch[0]
+            message_processor = MessageProcessor(self.db, user, first_message)
+            for message in messages_batch:
+                if message.audio:
+                    # HACK
+                    message.voice = message.audio
+                if message.voice:
+                    await self.handle_voice(message, user, message_processor)
+                if message.document:
+                    await self.handle_document(message, user, message_processor)
+                else:
+                    await self.handle_message(message, user, message_processor)
+
+            if not self.batch_is_prompt(messages_batch, user):
+                return
+
             async with TypingWorker(self.bot, first_message.chat.id).typing_context():
                 await self.answer_message(message, user, message_processor)
         except Exception as e:
@@ -174,10 +177,10 @@ class BatchedInputHandler:
 
         async with TypingWorker(self.bot, message.chat.id).typing_context():
             with tempfile.TemporaryDirectory() as temp_dir:
-                ogg_filepath = os.path.join(temp_dir, f'voice_{message.voice.file_id}.ogg')
+                voice_filepath = os.path.join(temp_dir, f'voice_{message.voice.file_id}')
                 mp3_filename = os.path.join(temp_dir, f'voice_{message.voice.file_id}.mp3')
-                await self.bot.download_file(file.file_path, destination=ogg_filepath)
-                audio = AudioSegment.from_ogg(ogg_filepath)
+                await self.bot.download_file(file.file_path, destination=voice_filepath)
+                audio = AudioSegment.from_file(voice_filepath)
                 audio_length_seconds = len(audio) // 1000 + 1
                 await self.db.create_whisper_usage(user.id, audio_length_seconds)
                 audio.export(mp3_filename, format="mp3")
