@@ -111,8 +111,7 @@ class BatchedInputHandler:
             message_processor = MessageProcessor(self.db, user, first_message)
             for message in messages_batch:
                 if message.audio:
-                    # HACK
-                    message.voice = message.audio
+                    await self.handle_voice(message, user, message_processor)
                 if message.voice:
                     await self.handle_voice(message, user, message_processor)
                 if message.document:
@@ -167,18 +166,26 @@ class BatchedInputHandler:
 
     async def handle_voice(self, message: types.Message, user: User, message_processor: MessageProcessor):
         """
-        Handles voice message. Downloads voice file, converts it to mp3, sends it to whisper, sends response to user,
-        adds response to context.
+        Handles voice message or audio file with voice. Downloads voice file, converts it to mp3, sends it to whisper,
+        sends response to user, adds response to context.
         """
-        file = await self.bot.get_file(message.voice.file_id)
+        if message.voice:
+            audio_file = message.voice
+        elif message.audio:
+            audio_file = message.audio
+        else:
+            raise ValueError('Message has no voice or audio')
+
+        file_id = audio_file.file_id
+        file = await self.bot.get_file(file_id)
         if file.file_size > 25 * 1024 * 1024:
             await message.reply('Voice file is too big')
             return
 
         async with TypingWorker(self.bot, message.chat.id).typing_context():
             with tempfile.TemporaryDirectory() as temp_dir:
-                voice_filepath = os.path.join(temp_dir, f'voice_{message.voice.file_id}')
-                mp3_filename = os.path.join(temp_dir, f'voice_{message.voice.file_id}.mp3')
+                voice_filepath = os.path.join(temp_dir, f'voice_{file_id}')
+                mp3_filename = os.path.join(temp_dir, f'voice_{file_id}.mp3')
                 await self.bot.download_file(file.file_path, destination=voice_filepath)
                 audio = AudioSegment.from_file(voice_filepath)
                 audio_length_seconds = len(audio) // 1000 + 1
