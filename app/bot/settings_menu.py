@@ -11,7 +11,7 @@ GPT_MODELS_OPTIONS = {
 }
 
 GPT_MODELS_OPTIONS_PREVIEW = {
-    'gpt-4-1106-preview': 'GPT-4-Turbo',
+    'gpt-4-turbo-preview': 'GPT-4-Turbo',
     'gpt-4-vision-preview': 'GPT-4-Vision',
 }
 
