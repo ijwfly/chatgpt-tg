@@ -105,21 +105,23 @@ class BatchedInputHandler:
         """
         Processes batch of messages. If batch has prompt, sends it to OpenAI and sends response to user.
         """
-        messages_batch = sorted(messages_batch, key=lambda m: m.message_id)
-        first_message = messages_batch[0]
-        message_processor = MessageProcessor(self.db, user, first_message)
-        for message in messages_batch:
-            if message.voice:
-                await self.handle_voice(message, user, message_processor)
-            if message.document:
-                await self.handle_document(message, user, message_processor)
-            else:
-                await self.handle_message(message, user, message_processor)
-
-        if not self.batch_is_prompt(messages_batch, user):
-            return
-
         try:
+            messages_batch = sorted(messages_batch, key=lambda m: m.message_id)
+            first_message = messages_batch[0]
+            message_processor = MessageProcessor(self.db, user, first_message)
+            for message in messages_batch:
+                if message.audio:
+                    await self.handle_voice(message, user, message_processor)
+                if message.voice:
+                    await self.handle_voice(message, user, message_processor)
+                if message.document:
+                    await self.handle_document(message, user, message_processor)
+                else:
+                    await self.handle_message(message, user, message_processor)
+
+            if not self.batch_is_prompt(messages_batch, user):
+                return
+
             async with TypingWorker(self.bot, first_message.chat.id).typing_context():
                 await self.answer_message(message, user, message_processor)
         except Exception as e:
@@ -164,20 +166,28 @@ class BatchedInputHandler:
 
     async def handle_voice(self, message: types.Message, user: User, message_processor: MessageProcessor):
         """
-        Handles voice message. Downloads voice file, converts it to mp3, sends it to whisper, sends response to user,
-        adds response to context.
+        Handles voice message or audio file with voice. Downloads voice file, converts it to mp3, sends it to whisper,
+        sends response to user, adds response to context.
         """
-        file = await self.bot.get_file(message.voice.file_id)
+        if message.voice:
+            audio_file = message.voice
+        elif message.audio:
+            audio_file = message.audio
+        else:
+            raise ValueError('Message has no voice or audio')
+
+        file_id = audio_file.file_id
+        file = await self.bot.get_file(file_id)
         if file.file_size > 25 * 1024 * 1024:
             await message.reply('Voice file is too big')
             return
 
         async with TypingWorker(self.bot, message.chat.id).typing_context():
             with tempfile.TemporaryDirectory() as temp_dir:
-                ogg_filepath = os.path.join(temp_dir, f'voice_{message.voice.file_id}.ogg')
-                mp3_filename = os.path.join(temp_dir, f'voice_{message.voice.file_id}.mp3')
-                await self.bot.download_file(file.file_path, destination=ogg_filepath)
-                audio = AudioSegment.from_ogg(ogg_filepath)
+                voice_filepath = os.path.join(temp_dir, f'voice_{file_id}')
+                mp3_filename = os.path.join(temp_dir, f'voice_{file_id}.mp3')
+                await self.bot.download_file(file.file_path, destination=voice_filepath)
+                audio = AudioSegment.from_file(voice_filepath)
                 audio_length_seconds = len(audio) // 1000 + 1
                 await self.db.create_whisper_usage(user.id, audio_length_seconds)
                 audio.export(mp3_filename, format="mp3")
