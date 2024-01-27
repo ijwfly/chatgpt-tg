@@ -78,7 +78,7 @@ class UserRoleManager:
         #     commands += [
         #         types.BotCommand(command="/gpt3", description="set model to gpt-3.5-turbo"),
         #         types.BotCommand(command="/gpt4", description="set model to gpt-4"),
-        #         types.BotCommand(command="/gpt4turbo", description="set model to gpt-4-1106-preview"),
+        #         types.BotCommand(command="/gpt4turbo", description="set model to gpt-4-turbo-preview"),
         #         types.BotCommand(command="/gpt4vision", description="set model to gpt-4-vision-preview"),
         #     ]
 

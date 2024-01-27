@@ -51,7 +51,7 @@ class ContextConfiguration:
                 summary_length=1024,
                 hard_max_context_size=9*1024,
             )
-        elif model == 'gpt-4-1106-preview':
+        elif model == 'gpt-4-turbo-preview':
             return ContextConfiguration(
                 model_name=model,
                 long_term_memory_tokens=512,
