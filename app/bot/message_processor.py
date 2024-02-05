@@ -114,8 +114,9 @@ class MessageProcessor:
         else:
             dialog_messages = self.split_dialog_message(response_dialog_message)
             for dialog_message in dialog_messages:
-                code_fragments = detect_and_extract_code(dialog_message.content)
-                parse_mode = ParseMode.MARKDOWN if code_fragments else None
+                # code_fragments = detect_and_extract_code(dialog_message.content)
+                # parse_mode = ParseMode.MARKDOWN if code_fragments else None
+                parse_mode = ParseMode.MARKDOWN
                 if message_id is not None:
                     response = await edit_telegram_message(self.message, dialog_message.content, message_id, parse_mode)
                     message_id = None
