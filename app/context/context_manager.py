@@ -67,6 +67,14 @@ class ContextConfiguration:
                 summary_length=2048,
                 hard_max_context_size=13*1024,
             )
+        elif model == 'gpt-4-turbo':
+            return ContextConfiguration(
+                model_name=model,
+                long_term_memory_tokens=512,
+                short_term_memory_tokens=5120,
+                summary_length=2048,
+                hard_max_context_size=13 * 1024,
+            )
         else:
             raise ValueError(f'Unknown model name: {model}')
 
