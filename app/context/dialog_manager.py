@@ -111,7 +111,14 @@ class DialogUtils:
         return DialogMessage(role="user", content=content)
 
     @staticmethod
-    def construct_message_content_part(content_type: str, content: str):
+    def construct_image_url(image_url: str):
+        return {"url": image_url}
+
+    @classmethod
+    def construct_message_content_part(cls, content_type: str, content: str):
+        if content_type == cls.CONTENT_IMAGE_URL:
+            content = cls.construct_image_url(content)
+
         return {"type": content_type, content_type: content}
 
     @staticmethod

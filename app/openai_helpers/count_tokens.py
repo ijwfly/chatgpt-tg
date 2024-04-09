@@ -57,7 +57,7 @@ def count_messages_tokens(messages: List[dict], model="gpt-3.5-turbo") -> int:
                     if part['type'] == 'text':
                         num_tokens += len(encoding.encode(part['text']))
                     elif part['type'] == 'image_url':
-                        num_tokens += extract_tokens_count_from_image_url(part['image_url'])
+                        num_tokens += extract_tokens_count_from_image_url(part['image_url']['url'])
                     else:
                         ValueError('Unknown content type')
 

@@ -37,10 +37,14 @@ class CompletionUsage(pydantic.BaseModel):
     model: str
 
 
+class DialogMessageImageUrl(pydantic.BaseModel):
+    url: str
+
+
 class DialogMessageContentPart(pydantic.BaseModel):
     type: str
     text: Optional[str] = None
-    image_url: Optional[str] = None
+    image_url: Optional[DialogMessageImageUrl] = None
 
 
 class DialogMessage(pydantic.BaseModel):
