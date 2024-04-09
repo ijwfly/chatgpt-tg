@@ -21,7 +21,7 @@ class GptModel:
     GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
 
 
-GPT_MODELS = {GptModel.GPT_35_TURBO, GptModel.GPT_35_TURBO_16K, GptModel.GPT_4,
+GPT_MODELS = {GptModel.GPT_35_TURBO, GptModel.GPT_35_TURBO_16K, GptModel.GPT_4, GptModel.GPT_4_TURBO,
               GptModel.GPT_4_TURBO_PREVIEW, GptModel.GPT_4_VISION_PREVIEW}
 
 
