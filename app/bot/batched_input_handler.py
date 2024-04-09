@@ -194,8 +194,12 @@ class BatchedInputHandler:
                 speech_text = await get_audio_speech_to_text(mp3_filename)
                 speech_text = f'speech2text:\n{speech_text}'
 
-        response = await message.reply(speech_text)
-        await message_processor.add_text_as_context(speech_text, response.message_id)
+        # split speech_text to chunks of 4080 symbols
+        chunk_size = 4080
+        speech_text_chunks = [speech_text[i:i + chunk_size] for i in range(0, len(speech_text), chunk_size)]
+        for chunk in speech_text_chunks:
+            response = await message.reply(chunk)
+            await message_processor.add_text_as_context(chunk, response.message_id)
 
     async def handle_message(self, message: types.Message, user: User, message_processor: MessageProcessor):
         """
