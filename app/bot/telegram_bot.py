@@ -32,7 +32,6 @@ class TelegramBot:
         self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
-        self.dispatcher.register_message_handler(self.set_current_model, commands=['gpt3', 'gpt4', 'gpt4turbo', 'gpt4vision'])
         self.dispatcher.register_message_handler(self.reset_dialog, commands=['reset'])
         self.dispatcher.register_message_handler(self.generate_speech, commands=['text2speech'])
         self.dispatcher.register_callback_query_handler(self.process_hide_callback, lambda c: c.data == 'hide')
@@ -85,26 +84,6 @@ class TelegramBot:
 
     async def reset_dialog(self, message: types.Message, user: User):
         await self.db.create_reset_message(user.id, message.chat.id)
-        await message.answer('👌')
-
-    async def set_current_model(self, message: types.Message, user: User):
-        if not check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user.role):
-            await message.answer(f'Your model is {user.current_model}. You have no permissions to change model')
-            return
-
-        command_to_model = {
-            'gpt3': GptModel.GPT_35_TURBO,
-            'gpt4': GptModel.GPT_4,
-            'gpt4turbo': GptModel.GPT_4_TURBO_PREVIEW,
-            'gpt4vision': GptModel.GPT_4_VISION_PREVIEW,
-        }
-
-        command = message.get_command(pure=True)
-        model = command_to_model.get(command)
-        if model is None:
-            raise ValueError('Unknown model name')
-        user.current_model = model
-        await self.db.update_user(user)
         await message.answer('👌')
 
     async def get_usage(self, message: types.Message, user: User):
