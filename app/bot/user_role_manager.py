@@ -74,14 +74,6 @@ class UserRoleManager:
                 types.BotCommand(command="/text2speech", description="generate voice from message"),
             ]
 
-        # if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):
-        #     commands += [
-        #         types.BotCommand(command="/gpt3", description="set model to gpt-3.5-turbo"),
-        #         types.BotCommand(command="/gpt4", description="set model to gpt-4"),
-        #         types.BotCommand(command="/gpt4turbo", description="set model to gpt-4-turbo-preview"),
-        #         types.BotCommand(command="/gpt4vision", description="set model to gpt-4-vision-preview"),
-        #     ]
-
         if check_access_conditions(UserRole.ADMIN, user_role):
             commands += [
                 types.BotCommand(command="/usage_all", description="show usage for all users"),

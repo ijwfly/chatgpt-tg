@@ -9,6 +9,7 @@ COMPLETION_PRICE = {
     'gpt-4-1106-preview': (Decimal('0.01'), Decimal('0.03')),
     'gpt-4-vision-preview': (Decimal('0.01'), Decimal('0.03')),
     'gpt-4-turbo-preview': (Decimal('0.01'), Decimal('0.03')),
+    'gpt-4-turbo': (Decimal('0.01'), Decimal('0.03')),
 }
 
 WHISPER_PRICE = Decimal('0.006')

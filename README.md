@@ -2,12 +2,12 @@
 
 This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, state-of-the-art language models by OpenAI.  
 
-🔥 **GPT-4 Turbo + Vision preview support (gpt-4-1106-preview + gpt-4-vision-preview)**  
+🔥 **GPT-4 Turbo support (with vision)**  
 🔥 **DALL-E 3 Image generation support**
 
 🔑 **Key Features**
 
-1. **Model Support**: gpt-3.5-turbo, gpt-4, gpt-4-1106-preview, gpt-4-vision-preview.
+1. **Model Support**: gpt-3.5-turbo, gpt-4-turbo, gpt-4, gpt-4-turbo-preview, gpt-4-vision-preview.
 2. **Image Generation**: You can ask bot to generate images using DALL-E 3 model, use bot just like official chatgpt app.
 3. **Dynamic Dialog Management**: The bot automatically manages the context of the conversation, eliminating the need for the user to manually reset the context using the /reset command. You still can reset dialog manually if needed.
 4. **Automatic Context Summarization**: In case the context size exceeds the model's maximum limit, the bot automatically summarizes the context to ensure the continuity of the conversation.
@@ -37,10 +37,6 @@ If you've done optional steps, when you send your first message to the bot, you 
 /usage - show usage for current month
 /settings - open settings menu
 /text2speech - generate voice message from message (last message or replied)
-/gpt3 - set model to gpt-3.5-turbo
-/gpt4 - set model to gpt-4
-/gpt4turbo - set model to gpt-4-1106-preview
-/gpt4vision - set model to gpt-4-vision-preview
 /usage_all - show usage for all users
 ```
 These commands will provide additional interaction control for the bot users. You can find most settings in settings menu, commands are just shortcuts for them.
