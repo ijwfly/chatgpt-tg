@@ -10,6 +10,7 @@ COMPLETION_PRICE = {
     'gpt-4-vision-preview': (Decimal('0.01'), Decimal('0.03')),
     'gpt-4-turbo-preview': (Decimal('0.01'), Decimal('0.03')),
     'gpt-4-turbo': (Decimal('0.01'), Decimal('0.03')),
+    'llama3': (Decimal('0'), Decimal('0')),
 }
 
 WHISPER_PRICE = Decimal('0.006')
@@ -54,14 +55,23 @@ def calculate_image_generation_usage_price(model, resolution, num_images):
 
 class OpenAIAsync:
     _key = None
+    _base_url = None
     _instance = None
 
     @classmethod
-    def init(cls, api_key):
+    def init(cls, api_key, base_url=None):
         cls._key = api_key
+        cls._base_url = base_url
 
     @classmethod
     def instance(cls):
+        params = {}
+        if cls._base_url:
+            params['base_url'] = cls._base_url
+
+        if cls._key is None:
+            raise ValueError("OpenAIAsync is not initialized")
+
         if cls._instance is None:
-            cls._instance = openai.AsyncOpenAI(api_key=cls._key)
+            cls._instance = openai.AsyncOpenAI(**params)
         return cls._instance

@@ -2,6 +2,8 @@ import json
 from contextlib import suppress
 from typing import List, Any, Optional, Callable, Union
 
+from openai import BadRequestError
+
 import settings
 from app.bot.utils import merge_dicts
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
@@ -19,6 +21,7 @@ class GptModel:
     GPT_4_TURBO = 'gpt-4-turbo'
     GPT_4_TURBO_PREVIEW = 'gpt-4-turbo-preview'
     GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
+    LLAMA3 = 'llama3'
 
 
 GPT_MODELS = {GptModel.GPT_35_TURBO, GptModel.GPT_35_TURBO_16K, GptModel.GPT_4, GptModel.GPT_4_TURBO,
@@ -148,13 +151,16 @@ class ChatGPT:
                 del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.system_prompt)
-        resp_generator = await OpenAIAsync.instance().chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
-            stream=True,
-            **additional_fields,
-        )
+        try:
+            resp_generator = await OpenAIAsync.instance().chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
+                stream=True,
+                **additional_fields,
+            )
+        except BadRequestError as e:
+            print(e)
 
         prompt_tokens += count_messages_tokens(messages, self.model)
         result_dict = {}

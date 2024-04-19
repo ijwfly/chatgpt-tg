@@ -13,6 +13,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 
 if __name__ == '__main__':
-    OpenAIAsync.init(settings.OPENAI_TOKEN)
+    OpenAIAsync.init(settings.OLLAMA_API_KEY, settings.OLLAMA_BASE_URL)
     telegram_bot = TelegramBot(bot, dp)
     telegram_bot.run()
