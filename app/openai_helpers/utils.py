@@ -72,6 +72,8 @@ class OpenAIAsync:
         if cls._key is None:
             raise ValueError("OpenAIAsync is not initialized")
 
+        params['api_key'] = cls._key
+
         if cls._instance is None:
             cls._instance = openai.AsyncOpenAI(**params)
         return cls._instance

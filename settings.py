@@ -17,7 +17,10 @@ gpt_mode = {
                   'and assist users to the best of your abilities. Listen carefully to what they say, ask questions, '
                   'and help in any way you can. Avoid giving advices, your ultimate goal is to help the user to find the right solution by himself. '
                   'Ask only one question a time.',
-    }
+    },
+    'ai dungeon': {  # free to be deleted, also you can add new ones
+        'system': 'You are the AI Dungeon game. Your task is to entertain user with role play. User creates a setup and you play role of the world and characters in it.',
+     },
 }
 
 # Mandatory settings

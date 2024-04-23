@@ -48,11 +48,13 @@ class MessageProcessor:
 
     @staticmethod
     async def prepare_user_message(message: Message):
-        content = []
-        if message.text:
-            content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_TEXT, message.text))
 
         if message.photo:
+            content = []
+
+            if message.text:
+                content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_TEXT, message.text))
+
             # largest photo
             photo = message.photo[-1]
             file_id = photo.file_id
@@ -63,7 +65,9 @@ class MessageProcessor:
             file_url = urljoin(f'{settings.IMAGE_PROXY_URL}:{settings.IMAGE_PROXY_PORT}', f'{file_id}_{tokens}.jpg')
             content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_IMAGE_URL, file_url))
 
-        return DialogUtils.prepare_user_message(content)
+            return DialogUtils.prepare_user_message(content)
+        else:
+            return DialogUtils.prepare_user_message(message.text)
 
     async def process(self, is_cancelled):
         context_manager = await self.context_manager()
