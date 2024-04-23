@@ -1,4 +1,3 @@
-import dataclasses
 from typing import List, Optional
 
 from aiogram import types
@@ -6,85 +5,10 @@ from aiogram import types
 import settings
 from app.context.dialog_manager import DialogManager
 from app.context.function_manager import FunctionManager
+from app.llm_models import get_models
 from app.openai_helpers.chatgpt import DialogMessage
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User, MessageType
-
-
-@dataclasses.dataclass
-class ContextConfiguration:
-    model_name: str
-
-    # long term memory is based on embedding context search
-    long_term_memory_tokens: int
-    # short term memory is used for storing last messages
-    short_term_memory_tokens: int
-    # length of summary to be generated when context is too long
-    summary_length: int
-    # hard limit for context size, when this limit is reached, processing is being stopped,
-    # summarization also cannot be done
-    hard_max_context_size: int
-
-    @staticmethod
-    def get_config(model: str):
-        if model == 'gpt-3.5-turbo':
-            return ContextConfiguration(
-                model_name=model,
-                long_term_memory_tokens=512,
-                short_term_memory_tokens=2560,
-                summary_length=512,
-                hard_max_context_size=5*1024,
-            )
-        elif model == 'gpt-3.5-turbo-16k':
-            return ContextConfiguration(
-                model_name=model,
-                long_term_memory_tokens=1024,
-                short_term_memory_tokens=4096,
-                summary_length=1024,
-                hard_max_context_size=17*1024,
-            )
-        elif model == 'gpt-4':
-            return ContextConfiguration(
-                model_name=model,
-                long_term_memory_tokens=512,
-                short_term_memory_tokens=2048,
-                summary_length=1024,
-                hard_max_context_size=9*1024,
-            )
-        elif model == 'gpt-4-turbo-preview':
-            return ContextConfiguration(
-                model_name=model,
-                long_term_memory_tokens=512,
-                short_term_memory_tokens=5120,
-                summary_length=2048,
-                hard_max_context_size=13*1024,
-            )
-        elif model == 'gpt-4-vision-preview':
-            return ContextConfiguration(
-                model_name=model,
-                long_term_memory_tokens=512,
-                short_term_memory_tokens=5120,
-                summary_length=2048,
-                hard_max_context_size=13*1024,
-            )
-        elif model == 'gpt-4-turbo':
-            return ContextConfiguration(
-                model_name=model,
-                long_term_memory_tokens=512,
-                short_term_memory_tokens=5120,
-                summary_length=2048,
-                hard_max_context_size=13 * 1024,
-            )
-        elif model == 'llama3':
-            return ContextConfiguration(
-                model_name=model,
-                long_term_memory_tokens=512,
-                short_term_memory_tokens=2048,
-                summary_length=512,
-                hard_max_context_size=13 * 1024,
-            )
-        else:
-            raise ValueError(f'Unknown model name: {model}')
 
 
 class ContextManager:
@@ -96,7 +20,11 @@ class ContextManager:
         self.function_manager = None
 
     async def process_dialog(self):
-        context_configuration = ContextConfiguration.get_config(self.user.current_model)
+        models = get_models()
+        llm_model = models.get(self.user.current_model)
+        if not llm_model:
+            raise ValueError(f"Unknown model: {self.user.current_model}")
+        context_configuration = llm_model.context_configuration
         self.dialog_manager = DialogManager(self.db, self.user, context_configuration)
         await self.dialog_manager.process_dialog(self.message)
 

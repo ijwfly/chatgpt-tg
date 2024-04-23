@@ -18,7 +18,6 @@ from app.openai_helpers.utils import (calculate_completion_usage_price, calculat
                                       calculate_image_generation_usage_price, calculate_tts_usage_price)
 from app.storage.db import DBFactory, User
 from app.storage.user_role import check_access_conditions, UserRole
-from app.openai_helpers.chatgpt import GptModel
 
 from aiogram import types, Bot, Dispatcher
 from aiogram.utils import executor

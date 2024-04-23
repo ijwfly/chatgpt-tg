@@ -1,17 +1,7 @@
 from decimal import Decimal
 import openai
 
-
-COMPLETION_PRICE = {
-    'gpt-3.5-turbo': (Decimal('0.0005'), Decimal('0.0015')),
-    'gpt-3.5-turbo-16k': (Decimal('0.003'), Decimal('0.004')),
-    'gpt-4': (Decimal('0.03'), Decimal('0.06')),
-    'gpt-4-1106-preview': (Decimal('0.01'), Decimal('0.03')),
-    'gpt-4-vision-preview': (Decimal('0.01'), Decimal('0.03')),
-    'gpt-4-turbo-preview': (Decimal('0.01'), Decimal('0.03')),
-    'gpt-4-turbo': (Decimal('0.01'), Decimal('0.03')),
-    'llama3': (Decimal('0'), Decimal('0')),
-}
+from app.llm_models import get_models
 
 WHISPER_PRICE = Decimal('0.006')
 
@@ -30,7 +20,11 @@ IMAGE_GENERATION_PRICE = {
 
 
 def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int, model: str) -> Decimal:
-    price = COMPLETION_PRICE.get(model)
+    llm_model = get_models().get(model)
+    if not llm_model:
+        raise ValueError(f"Unknown model: {model}")
+
+    price = llm_model.model_price
     if not price:
         raise ValueError(f"Unknown model: {model}")
     prompt_price, completion_price = price

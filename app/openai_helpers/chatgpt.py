@@ -2,30 +2,15 @@ import json
 from contextlib import suppress
 from typing import List, Any, Optional, Callable, Union
 
-from openai import BadRequestError
-
 import settings
 from app.bot.utils import merge_dicts
+from app.llm_models import get_models, LLMModels
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
 
 import pydantic
 
-from app.openai_helpers.utils import OpenAIAsync
-
-
-class GptModel:
-    GPT_35_TURBO = 'gpt-3.5-turbo'
-    GPT_35_TURBO_16K = 'gpt-3.5-turbo-16k'
-    GPT_4 = 'gpt-4'
-    GPT_4_TURBO = 'gpt-4-turbo'
-    GPT_4_TURBO_PREVIEW = 'gpt-4-turbo-preview'
-    GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
-    LLAMA3 = 'llama3'
-
-
-GPT_MODELS = {GptModel.GPT_35_TURBO, GptModel.GPT_35_TURBO_16K, GptModel.GPT_4, GptModel.GPT_4_TURBO,
-              GptModel.GPT_4_TURBO_PREVIEW, GptModel.GPT_4_VISION_PREVIEW, GptModel.LLAMA3}
+from app.openai_helpers.llm_client import OpenAILLMClient
 
 
 class FunctionCall(pydantic.BaseModel):
@@ -91,7 +76,7 @@ class DialogMessage(pydantic.BaseModel):
 class ChatGPT:
     def __init__(self, model, system_prompt: str, function_storage: FunctionStorage = None):
         self.function_storage = function_storage
-        if model not in GPT_MODELS:
+        if model not in get_models():
             raise ValueError(f"Unknown model: {model}")
         self.model = model
         self.system_prompt = system_prompt
@@ -104,7 +89,7 @@ class ChatGPT:
                 'function_call': 'auto',
             })
 
-        if self.model == GptModel.GPT_4_VISION_PREVIEW:
+        if self.model == LLMModels.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
             additional_fields['max_tokens'] = 4096
 
@@ -115,7 +100,7 @@ class ChatGPT:
                 del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.system_prompt)
-        resp = await OpenAIAsync.instance().chat.completions.create(
+        resp = await OpenAILLMClient.get_client(self.model).chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
@@ -130,9 +115,7 @@ class ChatGPT:
         prompt_tokens = 0
 
         additional_fields = {}
-        system_prompt_addition = None
         if self.function_storage is not None:
-            system_prompt_addition = self.function_storage.get_system_prompt_addition()
             functions = self.function_storage.get_openai_prompt()
             prompt_tokens += count_tokens_from_functions(functions, self.model)
             additional_fields.update({
@@ -140,7 +123,7 @@ class ChatGPT:
                 'function_call': 'auto',
             })
 
-        if self.model == GptModel.GPT_4_VISION_PREVIEW:
+        if self.model == LLMModels.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
             additional_fields['max_tokens'] = 4096
 
@@ -151,16 +134,13 @@ class ChatGPT:
                 del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.system_prompt)
-        try:
-            resp_generator = await OpenAIAsync.instance().chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
-                stream=True,
-                **additional_fields,
-            )
-        except BadRequestError as e:
-            print(e)
+        resp_generator = await OpenAILLMClient.get_client(self.model).chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
+            stream=True,
+            **additional_fields,
+        )
 
         prompt_tokens += count_messages_tokens(messages, self.model)
         result_dict = {}
@@ -213,7 +193,7 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
         "role": "user",
         "content": f"Summarize this conversation in {summary_max_length} characters or less. Divide different themes explicitly with new lines. Return only text of summary, nothing else.",
     }]
-    resp = await OpenAIAsync.instance().chat.completions.create(
+    resp = await OpenAILLMClient.get_client(model).chat.completions.create(
         model=model,
         messages=prompt_messages,
         temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,

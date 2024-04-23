@@ -24,7 +24,7 @@ gpt_mode = {
 }
 
 # Mandatory settings
-OPENAI_TOKEN = 'YOUR_TOKEN'
+OPENAI_TOKEN = ''
 TELEGRAM_BOT_TOKEN = 'YOUR_TOKEN'
 # Image proxy settings
 # This proxy is used to send images to openai for GPT-4-Vision
@@ -73,7 +73,6 @@ IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
 
 OLLAMA_BASE_URL = ''
-OLLAMA_MODEL = 'llama3'
 OLLAMA_API_KEY = 'ollama'
 
 # Vectara RAG settings
