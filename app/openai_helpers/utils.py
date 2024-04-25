@@ -27,7 +27,7 @@ def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int,
     price = llm_model.model_price
     if not price:
         raise ValueError(f"Unknown model: {model}")
-    prompt_price, completion_price = price
+    prompt_price, completion_price = price.input_tokens_price, price.output_tokens_price
     return prompt_price * prompt_tokens / 1000 + completion_price * completion_tokens / 1000
 
 
