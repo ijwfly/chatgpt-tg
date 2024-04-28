@@ -11,6 +11,7 @@ from pydub import AudioSegment
 import settings
 from app.bot.message_processor import MessageProcessor
 from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer, generate_document_id
+from app.llm_models import get_model_by_name
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import User, MessageType
 from app.storage.user_role import check_access_conditions
@@ -116,6 +117,14 @@ class BatchedInputHandler:
                     await self.handle_voice(message, user, message_processor)
                 elif message.document:
                     await self.handle_document(message, user, message_processor)
+                elif message.photo:
+                    # handling image just like message but with some additional checks
+                    llm_model = get_model_by_name(user.current_model)
+                    if llm_model.capabilities.image_processing:
+                        await self.handle_message(message, user, message_processor)
+                    else:
+                        # TODO: exception is a bad way to handle this, need to find a better way
+                        raise ValueError(f'Image processing is not supported by {llm_model.model_name} model.')
                 else:
                     await self.handle_message(message, user, message_processor)
 

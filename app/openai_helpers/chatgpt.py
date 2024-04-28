@@ -4,7 +4,7 @@ from typing import List, Any, Optional, Callable, Union
 
 import settings
 from app.bot.utils import merge_dicts
-from app.llm_models import LLMModels, get_model_by_name
+from app.llm_models import LLModel, get_model_by_name
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
 
@@ -87,7 +87,7 @@ class ChatGPT:
                 'function_call': 'auto',
             })
 
-        if self.llm_model.model_name == LLMModels.GPT_4_VISION_PREVIEW:
+        if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
             additional_fields['max_tokens'] = 4096
 
@@ -114,14 +114,17 @@ class ChatGPT:
 
         additional_fields = {}
         if self.function_storage is not None:
-            functions = self.function_storage.get_functions_info()
-            prompt_tokens += count_tokens_from_functions(functions, self.llm_model.model_name)
-            additional_fields.update({
-                'functions': self.function_storage.get_functions_info(),
-                'function_call': 'auto',
-            })
+            if self.llm_model.capabilities.function_calling:
+                functions = self.function_storage.get_functions_info()
+                prompt_tokens += count_tokens_from_functions(functions, self.llm_model.model_name)
+                additional_fields.update({
+                    'functions': self.function_storage.get_functions_info(),
+                    'function_call': 'auto',
+                })
+            elif self.llm_model.capabilities.tool_calling:
+                NotImplementedError('Tool calling support is not implemented yet')
 
-        if self.llm_model.model_name == LLMModels.GPT_4_VISION_PREVIEW:
+        if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
             additional_fields['max_tokens'] = 4096
 
