@@ -3,11 +3,12 @@
 This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, state-of-the-art language models by OpenAI.  
 
 🔥 **GPT-4 Turbo support (with vision)**  
+🔥 **Custom OpenAI API compatible endpoints support**  
 🔥 **DALL-E 3 Image generation support**
 
 🔑 **Key Features**
 
-1. **Model Support**: gpt-3.5-turbo, gpt-4-turbo, gpt-4, gpt-4-turbo-preview, gpt-4-vision-preview.
+1. **Model Support**: all OpenAI models are supported out of the box. Also you can add OpenAI API compatible endpoints by adding them to `app/llm_models.py`
 2. **Image Generation**: You can ask bot to generate images using DALL-E 3 model, use bot just like official chatgpt app.
 3. **Dynamic Dialog Management**: The bot automatically manages the context of the conversation, eliminating the need for the user to manually reset the context using the /reset command. You still can reset dialog manually if needed.
 4. **Automatic Context Summarization**: In case the context size exceeds the model's maximum limit, the bot automatically summarizes the context to ensure the continuity of the conversation.
