@@ -48,7 +48,6 @@ class MessageProcessor:
 
     @staticmethod
     async def prepare_user_message(message: Message):
-
         if message.photo:
             content = []
 
@@ -66,8 +65,10 @@ class MessageProcessor:
             content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_IMAGE_URL, file_url))
 
             return DialogUtils.prepare_user_message(content)
-        else:
+        elif message.text:
             return DialogUtils.prepare_user_message(message.text)
+        else:
+            ValueError("prepare_user_message called with empty message")
 
     async def process(self, is_cancelled):
         context_manager = await self.context_manager()

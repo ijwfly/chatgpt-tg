@@ -112,9 +112,9 @@ class BatchedInputHandler:
             for message in messages_batch:
                 if message.audio:
                     await self.handle_voice(message, user, message_processor)
-                if message.voice:
+                elif message.voice:
                     await self.handle_voice(message, user, message_processor)
-                if message.document:
+                elif message.document:
                     await self.handle_document(message, user, message_processor)
                 else:
                     await self.handle_message(message, user, message_processor)
