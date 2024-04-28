@@ -10,6 +10,7 @@ from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.utils import send_telegram_message, detect_and_extract_code, edit_telegram_message
 from app.context.context_manager import build_context_manager
 from app.context.dialog_manager import DialogUtils
+from app.llm_models import get_model_by_name
 from app.openai_helpers.chatgpt import ChatGPT
 from app.openai_helpers.count_tokens import calculate_image_tokens
 from app.storage.db import DB, User, MessageType
@@ -73,7 +74,10 @@ class MessageProcessor:
     async def process(self, is_cancelled):
         context_manager = await self.context_manager()
 
-        function_storage = await context_manager.get_function_storage()
+        llm_model = get_model_by_name(self.user.current_model)
+        function_storage = None
+        if llm_model.capabilities.tool_calling or llm_model.capabilities.function_calling:
+            function_storage = await context_manager.get_function_storage()
         system_prompt = await context_manager.get_system_prompt()
         chat_gpt_manager = ChatGptManager(ChatGPT(self.user.current_model, system_prompt, function_storage), self.db)
 
