@@ -5,7 +5,7 @@ from aiogram import types
 import settings
 from app.context.dialog_manager import DialogManager
 from app.context.function_manager import FunctionManager
-from app.llm_models import get_models
+from app.llm_models import get_model_by_name
 from app.openai_helpers.chatgpt import DialogMessage
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User, MessageType
@@ -20,10 +20,7 @@ class ContextManager:
         self.function_manager = None
 
     async def process_dialog(self):
-        models = get_models()
-        llm_model = models.get(self.user.current_model)
-        if not llm_model:
-            raise ValueError(f"Unknown model: {self.user.current_model}")
+        llm_model = get_model_by_name(self.user.current_model)
         context_configuration = llm_model.context_configuration
         self.dialog_manager = DialogManager(self.db, self.user, context_configuration)
         await self.dialog_manager.process_dialog(self.message)

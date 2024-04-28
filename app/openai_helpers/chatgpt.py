@@ -4,7 +4,7 @@ from typing import List, Any, Optional, Callable, Union
 
 import settings
 from app.bot.utils import merge_dicts
-from app.llm_models import get_models, LLMModels
+from app.llm_models import LLMModels, get_model_by_name
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
 
@@ -76,20 +76,18 @@ class DialogMessage(pydantic.BaseModel):
 class ChatGPT:
     def __init__(self, model, system_prompt: str, function_storage: FunctionStorage = None):
         self.function_storage = function_storage
-        if model not in get_models():
-            raise ValueError(f"Unknown model: {model}")
-        self.model = model
+        self.llm_model = get_model_by_name(model)
         self.system_prompt = system_prompt
 
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = {}
         if self.function_storage is not None:
             additional_fields.update({
-                'functions': self.function_storage.get_openai_prompt(),
+                'functions': self.function_storage.get_functions_info(),
                 'function_call': 'auto',
             })
 
-        if self.model == LLMModels.GPT_4_VISION_PREVIEW:
+        if self.llm_model.model_name == LLMModels.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
             additional_fields['max_tokens'] = 4096
 
@@ -100,13 +98,13 @@ class ChatGPT:
                 del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.system_prompt)
-        resp = await OpenAILLMClient.get_client(self.model).chat.completions.create(
-            model=self.model,
+        resp = await OpenAILLMClient.get_client(self.llm_model.model_name).chat.completions.create(
+            model=self.llm_model.model_name,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             **additional_fields,
         )
-        completion_usage = CompletionUsage(model=self.model, **dict(resp.usage))
+        completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp.usage))
         message = resp.choices[0].message
         response = DialogMessage(**dict(message))
         return response, completion_usage
@@ -116,14 +114,14 @@ class ChatGPT:
 
         additional_fields = {}
         if self.function_storage is not None:
-            functions = self.function_storage.get_openai_prompt()
-            prompt_tokens += count_tokens_from_functions(functions, self.model)
+            functions = self.function_storage.get_functions_info()
+            prompt_tokens += count_tokens_from_functions(functions, self.llm_model.model_name)
             additional_fields.update({
-                'functions': self.function_storage.get_openai_prompt(),
+                'functions': self.function_storage.get_functions_info(),
                 'function_call': 'auto',
             })
 
-        if self.model == LLMModels.GPT_4_VISION_PREVIEW:
+        if self.llm_model.model_name == LLMModels.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
             additional_fields['max_tokens'] = 4096
 
@@ -134,15 +132,15 @@ class ChatGPT:
                 del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.system_prompt)
-        resp_generator = await OpenAILLMClient.get_client(self.model).chat.completions.create(
-            model=self.model,
+        resp_generator = await OpenAILLMClient.get_client(self.llm_model.model_name).chat.completions.create(
+            model=self.llm_model.model_name,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             stream=True,
             **additional_fields,
         )
 
-        prompt_tokens += count_messages_tokens(messages, self.model)
+        prompt_tokens += count_messages_tokens(messages, self.llm_model.model_name)
         result_dict = {}
         async for resp_part in resp_generator:
             delta = resp_part.choices[0].delta
@@ -154,19 +152,19 @@ class ChatGPT:
                     continue
                 result_dict = merge_dicts(result_dict, dict(delta))
                 dialog_message = DialogMessage(**result_dict)
-                completion_tokens = count_messages_tokens([result_dict], model=self.model)
+                completion_tokens = count_messages_tokens([result_dict], model=self.llm_model.model_name)
             elif delta.function_call is not None:
                 result_dict = merge_dicts(result_dict, dict(delta.function_call))
                 dialog_message = DialogMessage(function_call=result_dict)
                 # TODO: find mode accurate way to calculate completion length for function calls
-                completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.model)
+                completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
             else:
                 continue
 
             # openai doesn't return this field in streaming mode somewhy
             dialog_message.role = 'assistant'
             completion_usage = CompletionUsage(
-                model=self.model,
+                model=self.llm_model.model_name,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 total_tokens=prompt_tokens + completion_tokens,

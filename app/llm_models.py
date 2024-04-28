@@ -1,5 +1,6 @@
 import dataclasses
 from decimal import Decimal
+from functools import lru_cache
 
 import settings
 
@@ -24,16 +25,28 @@ class LLMModelContextConfiguration:
     hard_max_context_size: int
 
 
+@dataclasses.dataclass
+class LLMCapabilities:
+    function_calling: bool = False
+    tool_calling: bool = False
+    image_processing: bool = False
+
+
 class LLMModel:
-    def __init__(self, model_name: str, api_key, context_configuration, model_price=None, base_url=None):
+    def __init__(self, *, model_name: str, api_key, context_configuration, model_price=None, base_url=None,
+                 capabilities=None):
         if model_price is None:
             model_price = LLMModelPrice(input_tokens_price=Decimal('0'), output_tokens_price=Decimal('0'))
+
+        if capabilities is None:
+            capabilities = LLMCapabilities()
 
         self.model_name = model_name
         self.api_key = api_key
         self.context_configuration = context_configuration
         self.model_price = model_price
         self.base_url = base_url
+        self.capabilities = capabilities
 
 
 class LLMModels:
@@ -46,6 +59,7 @@ class LLMModels:
     LLAMA3 = 'llama3'
 
 
+@lru_cache
 def get_models():
     models = {}
     openai_models = {
@@ -152,3 +166,10 @@ def get_models():
         )
 
     return models
+
+
+def get_model_by_name(model_name: str):
+    model = get_models().get(model_name)
+    if not model:
+        raise ValueError(f"Unknown model: {model_name}")
+    return model

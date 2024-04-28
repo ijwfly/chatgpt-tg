@@ -1,7 +1,7 @@
 from decimal import Decimal
 import openai
 
-from app.llm_models import get_models
+from app.llm_models import get_model_by_name
 
 WHISPER_PRICE = Decimal('0.006')
 
@@ -20,10 +20,7 @@ IMAGE_GENERATION_PRICE = {
 
 
 def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int, model: str) -> Decimal:
-    llm_model = get_models().get(model)
-    if not llm_model:
-        raise ValueError(f"Unknown model: {model}")
-
+    llm_model = get_model_by_name(model)
     price = llm_model.model_price
     if not price:
         raise ValueError(f"Unknown model: {model}")

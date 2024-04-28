@@ -21,13 +21,24 @@ class FunctionStorage:
             "parameters": function.get_params_schema(),
         }
 
-    def get_openai_prompt(self):
+    def get_functions_info(self):
         functions = []
         for function in self.functions.values():
             function_info = function['info']
             functions.append(function_info)
 
         return functions
+
+    def get_tools_info(self):
+        tools = []
+        for function in self.functions.values():
+            function_info = {
+                "type": "function",
+                "function": function['info'],
+            }
+            tools.append(function_info)
+
+        return tools
 
     def get_system_prompt_addition(self) -> str:
         result = []

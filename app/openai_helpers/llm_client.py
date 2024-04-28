@@ -1,6 +1,6 @@
 import openai
 
-from app.llm_models import get_models
+from app.llm_models import get_model_by_name
 
 
 class OpenAILLMClient:
@@ -9,9 +9,7 @@ class OpenAILLMClient:
     @classmethod
     def get_client(cls, model_name: str):
         if model_name not in cls._model_clients:
-            llm_model = get_models().get(model_name)
-            if not llm_model:
-                raise ValueError(f"Unknown model: {model_name}")
+            llm_model = get_model_by_name(model_name)
             params = {
                 'api_key': llm_model.api_key,
             }
