@@ -17,11 +17,14 @@ gpt_mode = {
                   'and assist users to the best of your abilities. Listen carefully to what they say, ask questions, '
                   'and help in any way you can. Avoid giving advices, your ultimate goal is to help the user to find the right solution by himself. '
                   'Ask only one question a time.',
-    }
+    },
+    'ai dungeon': {  # free to be deleted, also you can add new ones
+        'system': 'You are the AI Dungeon game. Your task is to entertain user with role play. User creates a setup and you play role of the world and characters in it.',
+     },
 }
 
 # Mandatory settings
-OPENAI_TOKEN = 'YOUR_TOKEN'
+OPENAI_TOKEN = ''
 TELEGRAM_BOT_TOKEN = 'YOUR_TOKEN'
 # Image proxy settings
 # This proxy is used to send images to openai for GPT-4-Vision
@@ -68,6 +71,9 @@ POSTGRES_DATABASE = 'chatgpttg'
 # Change these if you know what you're doing
 IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
+
+OLLAMA_BASE_URL = ''
+OLLAMA_API_KEY = 'ollama'
 
 # Vectara RAG settings
 # this feature is highly experimental and not recommended to be used in it's current state

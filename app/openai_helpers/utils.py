@@ -1,16 +1,7 @@
 from decimal import Decimal
 import openai
 
-
-COMPLETION_PRICE = {
-    'gpt-3.5-turbo': (Decimal('0.0005'), Decimal('0.0015')),
-    'gpt-3.5-turbo-16k': (Decimal('0.003'), Decimal('0.004')),
-    'gpt-4': (Decimal('0.03'), Decimal('0.06')),
-    'gpt-4-1106-preview': (Decimal('0.01'), Decimal('0.03')),
-    'gpt-4-vision-preview': (Decimal('0.01'), Decimal('0.03')),
-    'gpt-4-turbo-preview': (Decimal('0.01'), Decimal('0.03')),
-    'gpt-4-turbo': (Decimal('0.01'), Decimal('0.03')),
-}
+from app.llm_models import get_model_by_name
 
 WHISPER_PRICE = Decimal('0.006')
 
@@ -29,10 +20,11 @@ IMAGE_GENERATION_PRICE = {
 
 
 def calculate_completion_usage_price(prompt_tokens: int, completion_tokens: int, model: str) -> Decimal:
-    price = COMPLETION_PRICE.get(model)
+    llm_model = get_model_by_name(model)
+    price = llm_model.model_price
     if not price:
         raise ValueError(f"Unknown model: {model}")
-    prompt_price, completion_price = price
+    prompt_price, completion_price = price.input_tokens_price, price.output_tokens_price
     return prompt_price * prompt_tokens / 1000 + completion_price * completion_tokens / 1000
 
 
@@ -54,14 +46,25 @@ def calculate_image_generation_usage_price(model, resolution, num_images):
 
 class OpenAIAsync:
     _key = None
+    _base_url = None
     _instance = None
 
     @classmethod
-    def init(cls, api_key):
+    def init(cls, api_key, base_url=None):
         cls._key = api_key
+        cls._base_url = base_url
 
     @classmethod
     def instance(cls):
+        params = {}
+        if cls._base_url:
+            params['base_url'] = cls._base_url
+
+        if cls._key is None:
+            raise ValueError("OpenAIAsync is not initialized")
+
+        params['api_key'] = cls._key
+
         if cls._instance is None:
-            cls._instance = openai.AsyncOpenAI(api_key=cls._key)
+            cls._instance = openai.AsyncOpenAI(**params)
         return cls._instance

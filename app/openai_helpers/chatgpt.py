@@ -4,25 +4,13 @@ from typing import List, Any, Optional, Callable, Union
 
 import settings
 from app.bot.utils import merge_dicts
+from app.llm_models import LLModel, get_model_by_name
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
 
 import pydantic
 
-from app.openai_helpers.utils import OpenAIAsync
-
-
-class GptModel:
-    GPT_35_TURBO = 'gpt-3.5-turbo'
-    GPT_35_TURBO_16K = 'gpt-3.5-turbo-16k'
-    GPT_4 = 'gpt-4'
-    GPT_4_TURBO = 'gpt-4-turbo'
-    GPT_4_TURBO_PREVIEW = 'gpt-4-turbo-preview'
-    GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
-
-
-GPT_MODELS = {GptModel.GPT_35_TURBO, GptModel.GPT_35_TURBO_16K, GptModel.GPT_4, GptModel.GPT_4_TURBO,
-              GptModel.GPT_4_TURBO_PREVIEW, GptModel.GPT_4_VISION_PREVIEW}
+from app.openai_helpers.llm_client import OpenAILLMClient
 
 
 class FunctionCall(pydantic.BaseModel):
@@ -88,20 +76,18 @@ class DialogMessage(pydantic.BaseModel):
 class ChatGPT:
     def __init__(self, model, system_prompt: str, function_storage: FunctionStorage = None):
         self.function_storage = function_storage
-        if model not in GPT_MODELS:
-            raise ValueError(f"Unknown model: {model}")
-        self.model = model
+        self.llm_model = get_model_by_name(model)
         self.system_prompt = system_prompt
 
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = {}
         if self.function_storage is not None:
             additional_fields.update({
-                'functions': self.function_storage.get_openai_prompt(),
+                'functions': self.function_storage.get_functions_info(),
                 'function_call': 'auto',
             })
 
-        if self.model == GptModel.GPT_4_VISION_PREVIEW:
+        if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
             additional_fields['max_tokens'] = 4096
 
@@ -112,13 +98,13 @@ class ChatGPT:
                 del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.system_prompt)
-        resp = await OpenAIAsync.instance().chat.completions.create(
-            model=self.model,
+        resp = await OpenAILLMClient.get_client(self.llm_model.model_name).chat.completions.create(
+            model=self.llm_model.model_name,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             **additional_fields,
         )
-        completion_usage = CompletionUsage(model=self.model, **dict(resp.usage))
+        completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp.usage))
         message = resp.choices[0].message
         response = DialogMessage(**dict(message))
         return response, completion_usage
@@ -127,17 +113,18 @@ class ChatGPT:
         prompt_tokens = 0
 
         additional_fields = {}
-        system_prompt_addition = None
         if self.function_storage is not None:
-            system_prompt_addition = self.function_storage.get_system_prompt_addition()
-            functions = self.function_storage.get_openai_prompt()
-            prompt_tokens += count_tokens_from_functions(functions, self.model)
-            additional_fields.update({
-                'functions': self.function_storage.get_openai_prompt(),
-                'function_call': 'auto',
-            })
+            if self.llm_model.capabilities.function_calling:
+                functions = self.function_storage.get_functions_info()
+                prompt_tokens += count_tokens_from_functions(functions, self.llm_model.model_name)
+                additional_fields.update({
+                    'functions': self.function_storage.get_functions_info(),
+                    'function_call': 'auto',
+                })
+            elif self.llm_model.capabilities.tool_calling:
+                NotImplementedError('Tool calling support is not implemented yet')
 
-        if self.model == GptModel.GPT_4_VISION_PREVIEW:
+        if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
             additional_fields['max_tokens'] = 4096
 
@@ -148,15 +135,15 @@ class ChatGPT:
                 del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.system_prompt)
-        resp_generator = await OpenAIAsync.instance().chat.completions.create(
-            model=self.model,
+        resp_generator = await OpenAILLMClient.get_client(self.llm_model.model_name).chat.completions.create(
+            model=self.llm_model.model_name,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             stream=True,
             **additional_fields,
         )
 
-        prompt_tokens += count_messages_tokens(messages, self.model)
+        prompt_tokens += count_messages_tokens(messages, self.llm_model.model_name)
         result_dict = {}
         async for resp_part in resp_generator:
             delta = resp_part.choices[0].delta
@@ -168,19 +155,19 @@ class ChatGPT:
                     continue
                 result_dict = merge_dicts(result_dict, dict(delta))
                 dialog_message = DialogMessage(**result_dict)
-                completion_tokens = count_messages_tokens([result_dict], model=self.model)
+                completion_tokens = count_messages_tokens([result_dict], model=self.llm_model.model_name)
             elif delta.function_call is not None:
                 result_dict = merge_dicts(result_dict, dict(delta.function_call))
                 dialog_message = DialogMessage(function_call=result_dict)
                 # TODO: find mode accurate way to calculate completion length for function calls
-                completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.model)
+                completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
             else:
                 continue
 
             # openai doesn't return this field in streaming mode somewhy
             dialog_message.role = 'assistant'
             completion_usage = CompletionUsage(
-                model=self.model,
+                model=self.llm_model.model_name,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 total_tokens=prompt_tokens + completion_tokens,
@@ -207,7 +194,7 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
         "role": "user",
         "content": f"Summarize this conversation in {summary_max_length} characters or less. Divide different themes explicitly with new lines. Return only text of summary, nothing else.",
     }]
-    resp = await OpenAIAsync.instance().chat.completions.create(
+    resp = await OpenAILLMClient.get_client(model).chat.completions.create(
         model=model,
         messages=prompt_messages,
         temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,

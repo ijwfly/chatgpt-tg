@@ -10,6 +10,7 @@ from app.bot.chatgpt_manager import ChatGptManager
 from app.bot.utils import send_telegram_message, detect_and_extract_code, edit_telegram_message
 from app.context.context_manager import build_context_manager
 from app.context.dialog_manager import DialogUtils
+from app.llm_models import get_model_by_name
 from app.openai_helpers.chatgpt import ChatGPT
 from app.openai_helpers.count_tokens import calculate_image_tokens
 from app.storage.db import DB, User, MessageType
@@ -48,11 +49,12 @@ class MessageProcessor:
 
     @staticmethod
     async def prepare_user_message(message: Message):
-        content = []
-        if message.text:
-            content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_TEXT, message.text))
-
         if message.photo:
+            content = []
+
+            if message.text:
+                content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_TEXT, message.text))
+
             # largest photo
             photo = message.photo[-1]
             file_id = photo.file_id
@@ -63,12 +65,19 @@ class MessageProcessor:
             file_url = urljoin(f'{settings.IMAGE_PROXY_URL}:{settings.IMAGE_PROXY_PORT}', f'{file_id}_{tokens}.jpg')
             content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_IMAGE_URL, file_url))
 
-        return DialogUtils.prepare_user_message(content)
+            return DialogUtils.prepare_user_message(content)
+        elif message.text:
+            return DialogUtils.prepare_user_message(message.text)
+        else:
+            ValueError("prepare_user_message called with empty message")
 
     async def process(self, is_cancelled):
         context_manager = await self.context_manager()
 
-        function_storage = await context_manager.get_function_storage()
+        llm_model = get_model_by_name(self.user.current_model)
+        function_storage = None
+        if llm_model.capabilities.tool_calling or llm_model.capabilities.function_calling:
+            function_storage = await context_manager.get_function_storage()
         system_prompt = await context_manager.get_system_prompt()
         chat_gpt_manager = ChatGptManager(ChatGPT(self.user.current_model, system_prompt, function_storage), self.db)
 

@@ -2,6 +2,7 @@ import settings
 
 from aiogram import Bot, types, Dispatcher
 
+from app.llm_models import get_models
 from app.storage.db import User, DB
 from app.storage.user_role import check_access_conditions, UserRole
 
@@ -15,6 +16,8 @@ OLD_MODELS_OPTIONS = {
     'gpt-4-vision-preview': 'GPT-4V',
     'gpt-4': 'GPT-4'
 }
+
+ALL_MODELS_OPTIONS = list(get_models().keys())
 
 TTS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
 
@@ -99,6 +102,7 @@ class Settings:
         self.settings = {
             'current_model': VisibleOptionsSetting('current_model', GPT_MODELS_OPTIONS),
             'current_model_preview': VisibleOptionsSetting('current_model', OLD_MODELS_OPTIONS),
+            'all_models': ChoiceSetting('Model', 'current_model', ALL_MODELS_OPTIONS),
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
             'image_generation': OnOffSetting('Image generation', 'image_generation'),
@@ -106,13 +110,14 @@ class Settings:
             'tts-voice': ChoiceSetting('TTS voice', 'tts_voice', TTS_VOICES),
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
             'function_call_verbose': OnOffSetting('Verbose function calls', 'function_call_verbose'),
-            # 'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
+            'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
             # 'auto_summarize': OnOffSetting('Auto summarize', 'auto_summarize'),
             # 'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
         }
         self.minimum_required_roles = {
             'current_model': settings.USER_ROLE_CHOOSE_MODEL,
             'current_model_preview': UserRole.ADMIN,
+            'all_models': UserRole.ADMIN,
             'image_generation': settings.USER_ROLE_IMAGE_GENERATION,
             'tts-voice': settings.USER_ROLE_TTS,
             'streaming_answers': settings.USER_ROLE_STREAMING_ANSWERS,

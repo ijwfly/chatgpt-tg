@@ -21,7 +21,8 @@ def count_string_tokens(string: str, model="gpt-3.5-turbo") -> int:
     elif "gpt-4" in model:
         model = "gpt-4"
     else:
-        raise ValueError(f"Unknown model: {model}")
+        # TODO: add method to calculate tokens for different models
+        model = "gpt-4"
     encoding = tiktoken.encoding_for_model(model)
     return len(encoding.encode(str(string)))
 
@@ -43,7 +44,11 @@ def count_messages_tokens(messages: List[dict], model="gpt-3.5-turbo") -> int:
     tokens_per_message = 3
     tokens_per_name = 1
 
-    encoding = tiktoken.encoding_for_model(model)
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except:
+        # TODO: add method to calculate tokens for different models
+        encoding = tiktoken.encoding_for_model("gpt-4")
 
     num_tokens = 0
     for message in messages:
@@ -84,7 +89,8 @@ def count_tokens_from_functions(functions, model="gpt-3.5-turbo"):
     elif "gpt-4" in model:
         model = "gpt-4"
     else:
-        raise ValueError(f"Unknown model: {model}")
+        # TODO: add method to calculate tokens for different models
+        model = "gpt-4"
 
     encoding = tiktoken.encoding_for_model(model)
     num_tokens = 0
