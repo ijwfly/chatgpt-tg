@@ -15,8 +15,6 @@ class LLMPrice:
 
 @dataclasses.dataclass
 class LLMContextConfiguration:
-    # long term memory is based on embedding context search
-    long_term_memory_tokens: int
     # short term memory is used for storing last messages
     short_term_memory_tokens: int
     # length of summary to be generated when context is too long
@@ -76,7 +74,6 @@ def get_models():
                 api_key=settings.OPENAI_TOKEN,
                 minimum_user_role=settings.USER_ROLE_BOT_ACCESS,
                 context_configuration=LLMContextConfiguration(
-                    long_term_memory_tokens=512,
                     short_term_memory_tokens=2560,
                     summary_length=512,
                     hard_max_context_size=5*1024,
@@ -96,7 +93,6 @@ def get_models():
                 api_key=settings.OPENAI_TOKEN,
                 minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
                 context_configuration=LLMContextConfiguration(
-                    long_term_memory_tokens=512,
                     short_term_memory_tokens=5120,
                     summary_length=2048,
                     hard_max_context_size=13*1024,
@@ -120,7 +116,6 @@ def get_models():
                 api_key=settings.OPENAI_TOKEN,
                 minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
-                    long_term_memory_tokens=1024,
                     short_term_memory_tokens=4096,
                     summary_length=1024,
                     hard_max_context_size=17*1024,
@@ -139,7 +134,6 @@ def get_models():
                 api_key=settings.OPENAI_TOKEN,
                 minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
-                    long_term_memory_tokens=512,
                     short_term_memory_tokens=2048,
                     summary_length=1024,
                     hard_max_context_size=9*1024,
@@ -158,7 +152,6 @@ def get_models():
                 api_key=settings.OPENAI_TOKEN,
                 minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
-                    long_term_memory_tokens=512,
                     short_term_memory_tokens=5120,
                     summary_length=2048,
                     hard_max_context_size=13*1024,
@@ -177,7 +170,6 @@ def get_models():
                 minimum_user_role=UserRole.NOONE,
                 api_key=settings.OPENAI_TOKEN,
                 context_configuration=LLMContextConfiguration(
-                    long_term_memory_tokens=512,
                     short_term_memory_tokens=5120,
                     summary_length=2048,
                     hard_max_context_size=13*1024,
@@ -201,7 +193,6 @@ def get_models():
                 api_key=settings.OPENROUTER_TOKEN,
                 minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
                 context_configuration=LLMContextConfiguration(
-                    long_term_memory_tokens=512,
                     short_term_memory_tokens=5120,
                     summary_length=2048,
                     hard_max_context_size=13 * 1024,
