@@ -1,5 +1,6 @@
 from typing import List, AsyncGenerator, Callable
 
+from app.llm_models import get_model_by_name
 from app.openai_helpers.chatgpt import DialogMessage
 from app.storage.db import DB, User
 
@@ -10,7 +11,8 @@ class ChatGptManager:
         self.db: DB = db
 
     async def send_user_message(self, user: User, messages: List[DialogMessage], is_cancelled: Callable[[], bool]) -> AsyncGenerator[DialogMessage, None]:
-        if user.streaming_answers:
+        llm_model = get_model_by_name(user.current_model)
+        if user.streaming_answers and llm_model.capabilities.streaming_responses:
             return self.send_user_message_streaming(user, messages, is_cancelled)
         else:
             return self.send_user_message_sync(user, messages)

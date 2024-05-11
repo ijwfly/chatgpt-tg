@@ -31,6 +31,7 @@ class LLMCapabilities:
     function_calling: bool = False
     tool_calling: bool = False
     image_processing: bool = False
+    streaming_responses: bool = False
 
 
 class LLModel:
@@ -86,6 +87,7 @@ def get_models():
                 ),
                 capabilities=LLMCapabilities(
                     function_calling=True,
+                    streaming_responses=True,
                 ),
             ),
             LLModel.GPT_35_TURBO_16K: LLModel(
@@ -144,6 +146,7 @@ def get_models():
                 capabilities=LLMCapabilities(
                     function_calling=True,
                     image_processing=True,
+                    streaming_responses=True,
                 ),
             ),
             LLModel.GPT_4_TURBO_PREVIEW: LLModel(

@@ -36,8 +36,8 @@ class ModelsMenu:
         info += f"\t-\t${input_price:.2f} per 1M input tokens\n"
         info += f"\t-\t${output_price:.2f} per 1M output tokens\n"
         info += f"*Capabilities*:\n"
-        info += f'\t-\t*Function calling*: {llm_model.capabilities.function_calling}\n'
-        info += f'\t-\t*Tool calling*: {llm_model.capabilities.tool_calling}\n'
+        info += f'\t-\t*Streaming responses*: {llm_model.capabilities.streaming_responses}\n'
+        info += f'\t-\t*Function calling*: {llm_model.capabilities.function_calling or llm_model.capabilities.tool_calling}\n'
         info += f'\t-\t*Image processing*: {llm_model.capabilities.image_processing}\n'
         return info
 
