@@ -3,7 +3,7 @@
 This GitHub repository contains the implementation of a telegram bot, designed to facilitate seamless interaction with GPT-3.5 and GPT-4, state-of-the-art language models by OpenAI.  
 
 🔥 **GPT-4 Turbo support (with vision)**  
-🔥 **Custom OpenAI API compatible endpoints support**  
+🔥 **Custom OpenAI API compatible endpoints support (see `app/llm_models.py` for example of using WizardLM-2 8x22b via OpenRouter.ai)**  
 🔥 **DALL-E 3 Image generation support**
 
 🔑 **Key Features**
@@ -36,6 +36,7 @@ If you've done optional steps, when you send your first message to the bot, you 
 ```
 /reset - reset current dialog
 /usage - show usage for current month
+/models - open models menu
 /settings - open settings menu
 /text2speech - generate voice message from message (last message or replied)
 /usage_all - show usage for all users
