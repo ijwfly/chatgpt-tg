@@ -82,10 +82,13 @@ class ChatGPT:
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = {}
         if self.function_storage is not None:
-            additional_fields.update({
-                'functions': self.function_storage.get_functions_info(),
-                'function_call': 'auto',
-            })
+            if self.llm_model.capabilities.function_calling:
+                additional_fields.update({
+                    'functions': self.function_storage.get_functions_info(),
+                    'function_call': 'auto',
+                })
+            elif self.llm_model.capabilities.tool_calling:
+                NotImplementedError('Tool calling support is not implemented yet')
 
         if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
             # TODO: somewhy by default it's 16 tokens for this model
@@ -118,7 +121,7 @@ class ChatGPT:
                 functions = self.function_storage.get_functions_info()
                 prompt_tokens += count_tokens_from_functions(functions, self.llm_model.model_name)
                 additional_fields.update({
-                    'functions': self.function_storage.get_functions_info(),
+                    'functions': functions,
                     'function_call': 'auto',
                 })
             elif self.llm_model.capabilities.tool_calling:

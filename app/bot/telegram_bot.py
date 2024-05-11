@@ -8,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 import settings
 from app.bot.batched_input_handler import BatchedInputHandler
 from app.bot.cancellation_manager import CancellationManager
+from app.bot.models_menu import ModelsMenu
 from app.bot.scheduled_tasks import build_monthly_usage_task
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
@@ -29,6 +30,7 @@ class TelegramBot:
         self.bot = bot
         self.dispatcher = dispatcher
         self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
+        self.dispatcher.register_message_handler(self.open_models, commands=['models'])
         self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
         self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
         self.dispatcher.register_message_handler(self.reset_dialog, commands=['reset'])
@@ -37,6 +39,7 @@ class TelegramBot:
 
         # initialized in on_startup
         self.settings = None
+        self.models_menu = None
         self.cancellation_manager = None
         self.role_manager = None
         self.monthly_usage_task = None
@@ -48,6 +51,7 @@ class TelegramBot:
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
         )
         self.settings = Settings(self.bot, self.dispatcher, self.db)
+        self.models_menu = ModelsMenu(self.bot, self.dispatcher, self.db)
         self.cancellation_manager = CancellationManager(self.bot, self.dispatcher)
         self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
         self.dispatcher.middleware.setup(UserMiddleware(self.db))
@@ -147,6 +151,13 @@ class TelegramBot:
             message_id=message.message_id,
         )
         await self.settings.send_settings(message, user)
+
+    async def open_models(self, message: types.Message, user: User):
+        await self.bot.delete_message(
+            chat_id=message.from_user.id,
+            message_id=message.message_id,
+        )
+        await self.models_menu.send_menu(message, user)
 
     async def generate_speech(self, message: types.Message, user: User):
         # TODO: add reply handling
