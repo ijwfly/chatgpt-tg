@@ -33,13 +33,16 @@ class ModelsMenu:
 
         input_price = float(llm_model.model_price.input_tokens_price * 1000)
         output_price = float(llm_model.model_price.output_tokens_price * 1000)
-        info += f"*Pricing*:\n"
-        info += f"\t-\t${input_price:.2f} per 1M input tokens\n"
-        info += f"\t-\t${output_price:.2f} per 1M output tokens\n"
-        info += f"*Capabilities*:\n"
+        info += f'*Pricing*:\n'
+        info += f'\t-\t${input_price:.2f} per 1M input tokens\n'
+        info += f'\t-\t${output_price:.2f} per 1M output tokens\n'
+        info += f'*Capabilities*:\n'
         info += f'\t-\t*Streaming responses*: {llm_model.capabilities.streaming_responses}\n'
         info += f'\t-\t*Function calling*: {llm_model.capabilities.function_calling or llm_model.capabilities.tool_calling}\n'
         info += f'\t-\t*Image processing*: {llm_model.capabilities.image_processing}\n'
+        info += f'*Context configuration*:\n'
+        info += f'\t-\t*Short term memory tokens*: {llm_model.context_configuration.short_term_memory_tokens}\n'
+        info += f'\t-\t*Summary length in tokens*: {llm_model.context_configuration.summary_length}\n'
         return info
 
     def get_keyboard(self, user: User):
