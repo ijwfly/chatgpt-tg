@@ -27,6 +27,9 @@ class UserRoleManager:
         keyboard = types.InlineKeyboardMarkup()
 
         for role in UserRole:
+            if role == UserRole.NOONE:
+                # noone role is not assignable
+                continue
             callback_data = f'{SET_ROLE_COMMAND}.{user.telegram_id}.{role.value}'
             if role == user.role:
                 keyboard.add(types.InlineKeyboardButton(text=f'<{role.value}>', callback_data=callback_data))
