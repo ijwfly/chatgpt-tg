@@ -28,7 +28,8 @@ class ModelsMenu:
     def get_model_info(self, user: User) -> str:
         llm_model = get_model_by_name(user.current_model)
         info = f"*Current model*: {llm_model.model_readable_name}\n"
-        info += f"*Model name*: {llm_model.model_name}\n"
+        if llm_model.model_name != llm_model.model_readable_name:
+            info += f"*Full name*: {llm_model.model_name}\n"
 
         input_price = float(llm_model.model_price.input_tokens_price * 1000)
         output_price = float(llm_model.model_price.output_tokens_price * 1000)

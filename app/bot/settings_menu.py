@@ -11,12 +11,6 @@ GPT_MODELS_OPTIONS = {
     'gpt-4-turbo': 'GPT-4-Turbo',
 }
 
-OLD_MODELS_OPTIONS = {
-    'gpt-4-turbo-preview': 'GPT-4T',
-    'gpt-4-vision-preview': 'GPT-4V',
-    'gpt-4': 'GPT-4'
-}
-
 ALL_MODELS_OPTIONS = list(get_models().keys())
 
 TTS_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
@@ -101,7 +95,6 @@ class Settings:
         self.db = db
         self.settings = {
             'current_model': VisibleOptionsSetting('current_model', GPT_MODELS_OPTIONS),
-            'current_model_preview': VisibleOptionsSetting('current_model', OLD_MODELS_OPTIONS),
             'all_models': ChoiceSetting('Model', 'current_model', ALL_MODELS_OPTIONS),
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
@@ -116,7 +109,6 @@ class Settings:
         }
         self.minimum_required_roles = {
             'current_model': settings.USER_ROLE_CHOOSE_MODEL,
-            'current_model_preview': UserRole.ADMIN,
             'all_models': UserRole.ADMIN,
             'image_generation': settings.USER_ROLE_IMAGE_GENERATION,
             'tts-voice': settings.USER_ROLE_TTS,

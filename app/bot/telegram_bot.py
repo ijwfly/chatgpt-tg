@@ -97,7 +97,11 @@ class TelegramBot:
 
         completion_usages = await self.db.get_user_current_month_completion_usage(user.id)
         for usage in completion_usages:
-            price = calculate_completion_usage_price(usage.prompt_tokens, usage.completion_tokens, usage.model)
+            try:
+                price = calculate_completion_usage_price(usage.prompt_tokens, usage.completion_tokens, usage.model)
+            except ValueError:
+                # database has some removed from code models, skipping
+                continue
             total += price
             result.append(f'*{usage.model}:* {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${price}')
 
