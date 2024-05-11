@@ -92,7 +92,7 @@ def get_models():
                 model_name=LLModel.GPT_35_TURBO_16K,
                 model_readable_name='GPT-3.5 16K',
                 api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
                     long_term_memory_tokens=1024,
                     short_term_memory_tokens=4096,
@@ -111,7 +111,7 @@ def get_models():
                 model_name=LLModel.GPT_4,
                 model_readable_name='GPT-4',
                 api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
                     long_term_memory_tokens=512,
                     short_term_memory_tokens=2048,
@@ -150,7 +150,7 @@ def get_models():
                 model_name=LLModel.GPT_4_TURBO_PREVIEW,
                 model_readable_name='GPT-4 Turbo Preview',
                 api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
                     long_term_memory_tokens=512,
                     short_term_memory_tokens=5120,
@@ -168,6 +168,7 @@ def get_models():
             LLModel.GPT_4_VISION_PREVIEW: LLModel(
                 model_name=LLModel.GPT_4_VISION_PREVIEW,
                 model_readable_name='GPT-4 Vision Preview',
+                minimum_user_role=UserRole.NOONE,
                 api_key=settings.OPENAI_TOKEN,
                 context_configuration=LLMContextConfiguration(
                     long_term_memory_tokens=512,
