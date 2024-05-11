@@ -41,7 +41,7 @@ class LLModel:
     GPT_4_TURBO = 'gpt-4-turbo'
     GPT_4_TURBO_PREVIEW = 'gpt-4-turbo-preview'
     GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
-    LLAMA3 = 'llama3'
+    OPENROUTER_WIZARDLM2 = 'microsoft/wizardlm-2-8x22b'
 
     def __init__(self, *, model_name: str, api_key, context_configuration, model_readable_name=None, model_price=None, base_url=None,
                  capabilities=None, minimum_user_role=UserRole.STRANGER):
@@ -90,6 +90,30 @@ def get_models():
                     streaming_responses=True,
                 ),
             ),
+            LLModel.GPT_4_TURBO: LLModel(
+                model_name=LLModel.GPT_4_TURBO,
+                model_readable_name='GPT-4 Turbo',
+                api_key=settings.OPENAI_TOKEN,
+                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                context_configuration=LLMContextConfiguration(
+                    long_term_memory_tokens=512,
+                    short_term_memory_tokens=5120,
+                    summary_length=2048,
+                    hard_max_context_size=13*1024,
+                ),
+                model_price=LLMPrice(
+                    input_tokens_price=Decimal('0.01'),
+                    output_tokens_price=Decimal('0.03'),
+                ),
+                capabilities=LLMCapabilities(
+                    function_calling=True,
+                    image_processing=True,
+                    streaming_responses=True,
+                ),
+            ),
+
+
+            # Deprecated OpenAI models
             LLModel.GPT_35_TURBO_16K: LLModel(
                 model_name=LLModel.GPT_35_TURBO_16K,
                 model_readable_name='GPT-3.5 16K',
@@ -126,27 +150,6 @@ def get_models():
                 ),
                 capabilities=LLMCapabilities(
                     function_calling=True,
-                ),
-            ),
-            LLModel.GPT_4_TURBO: LLModel(
-                model_name=LLModel.GPT_4_TURBO,
-                model_readable_name='GPT-4 Turbo',
-                api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
-                context_configuration=LLMContextConfiguration(
-                    long_term_memory_tokens=512,
-                    short_term_memory_tokens=5120,
-                    summary_length=2048,
-                    hard_max_context_size=13*1024,
-                ),
-                model_price=LLMPrice(
-                    input_tokens_price=Decimal('0.01'),
-                    output_tokens_price=Decimal('0.03'),
-                ),
-                capabilities=LLMCapabilities(
-                    function_calling=True,
-                    image_processing=True,
-                    streaming_responses=True,
                 ),
             ),
             LLModel.GPT_4_TURBO_PREVIEW: LLModel(
@@ -189,19 +192,32 @@ def get_models():
             ),
         })
 
-    # example of using llama3 model in ollama
-    if settings.OLLAMA_BASE_URL:
-        models[LLModel.LLAMA3] = LLModel(
-            model_name=LLModel.LLAMA3,
-            api_key=settings.OLLAMA_API_KEY,
-            context_configuration=LLMContextConfiguration(
-                long_term_memory_tokens=512,
-                short_term_memory_tokens=2048,
-                summary_length=512,
-                hard_max_context_size=13*1024,
+    # OpenRouter.ai model example
+    if settings.OPENROUTER_TOKEN:
+        models.update({
+            LLModel.OPENROUTER_WIZARDLM2: LLModel(
+                model_name=LLModel.OPENROUTER_WIZARDLM2,
+                model_readable_name='WizardLM-2 8x22b',
+                api_key=settings.OPENROUTER_TOKEN,
+                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                context_configuration=LLMContextConfiguration(
+                    long_term_memory_tokens=512,
+                    short_term_memory_tokens=5120,
+                    summary_length=2048,
+                    hard_max_context_size=13 * 1024,
+                ),
+                model_price=LLMPrice(
+                    input_tokens_price=Decimal('0.00065'),
+                    output_tokens_price=Decimal('0.00065'),
+                ),
+                capabilities=LLMCapabilities(
+                    function_calling=False,
+                    image_processing=False,
+                    streaming_responses=True,
+                ),
+                base_url=settings.OPENROUTER_BASE_URL,
             ),
-            base_url=settings.OLLAMA_BASE_URL,
-        )
+        })
 
     return models
 

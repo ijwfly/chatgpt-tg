@@ -38,6 +38,10 @@ IMAGE_PROXY_PORT = 8321
 ENABLE_USER_ROLE_MANAGER_CHAT = False
 USER_ROLE_MANAGER_CHAT_ID = -1
 
+# OpenRouter.ai models
+OPENROUTER_TOKEN = ''
+OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
+
 # User access settings, there are 4 levels of access, each: stranger, basic, advanced, admin
 # You can setup default role for new users and minimum role needed to access bot, see UserRole enum
 # Also you can setup which functions are available to each user role
@@ -71,9 +75,6 @@ POSTGRES_DATABASE = 'chatgpttg'
 # Change these if you know what you're doing
 IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
-
-OLLAMA_BASE_URL = ''
-OLLAMA_API_KEY = 'ollama'
 
 # Vectara RAG settings
 # this feature is highly experimental and not recommended to be used in it's current state
