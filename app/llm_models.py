@@ -86,6 +86,7 @@ def get_models():
                     function_calling=True,
                     streaming_responses=True,
                 ),
+                base_url=settings.OPENAI_BASE_URL,
             ),
             LLModel.GPT_4_TURBO: LLModel(
                 model_name=LLModel.GPT_4_TURBO,
@@ -106,8 +107,8 @@ def get_models():
                     image_processing=True,
                     streaming_responses=True,
                 ),
+                base_url=settings.OPENAI_BASE_URL,
             ),
-
 
             # Deprecated OpenAI models
             LLModel.GPT_35_TURBO_16K: LLModel(
