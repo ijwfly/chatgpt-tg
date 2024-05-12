@@ -14,6 +14,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 if __name__ == '__main__':
     # needed for whisper and tts capabilities
-    OpenAIAsync.init(settings.OPENAI_TOKEN)
+    OpenAIAsync.init(settings.OPENAI_TOKEN, settings.OPENAI_BASE_URL)
     telegram_bot = TelegramBot(bot, dp)
     telegram_bot.run()
