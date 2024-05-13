@@ -9,6 +9,7 @@ from app.storage.user_role import check_access_conditions, UserRole
 GPT_MODELS_OPTIONS = {
     'gpt-3.5-turbo': 'GPT-3.5',
     'gpt-4-turbo': 'GPT-4-Turbo',
+    'gpt-4o': 'GPT-4o',
 }
 
 ALL_MODELS_OPTIONS = list(get_models().keys())

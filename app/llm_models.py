@@ -37,6 +37,7 @@ class LLModel:
     GPT_35_TURBO_16K = 'gpt-3.5-turbo-16k'
     GPT_4 = 'gpt-4'
     GPT_4_TURBO = 'gpt-4-turbo'
+    GPT_4O = 'gpt-4o'
     GPT_4_TURBO_PREVIEW = 'gpt-4-turbo-preview'
     GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
     OPENROUTER_WIZARDLM2 = 'microsoft/wizardlm-2-8x22b'
@@ -101,6 +102,27 @@ def get_models():
                 model_price=LLMPrice(
                     input_tokens_price=Decimal('0.01'),
                     output_tokens_price=Decimal('0.03'),
+                ),
+                capabilities=LLMCapabilities(
+                    function_calling=True,
+                    image_processing=True,
+                    streaming_responses=True,
+                ),
+                base_url=settings.OPENAI_BASE_URL,
+            ),
+            LLModel.GPT_4O: LLModel(
+                model_name=LLModel.GPT_4O,
+                model_readable_name='GPT-4o',
+                api_key=settings.OPENAI_TOKEN,
+                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                context_configuration=LLMContextConfiguration(
+                    short_term_memory_tokens=8 * 1024,
+                    summary_length=2048,
+                    hard_max_context_size=13 * 1024,
+                ),
+                model_price=LLMPrice(
+                    input_tokens_price=Decimal('0.005'),
+                    output_tokens_price=Decimal('0.015'),
                 ),
                 capabilities=LLMCapabilities(
                     function_calling=True,

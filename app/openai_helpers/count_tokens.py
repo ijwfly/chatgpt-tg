@@ -20,6 +20,8 @@ def count_string_tokens(string: str, model="gpt-3.5-turbo") -> int:
         model = "gpt-3.5-turbo"
     elif "gpt-4" in model:
         model = "gpt-4"
+    elif "gpt-4o" in model:
+        model = "gpt-4o"
     else:
         # TODO: add method to calculate tokens for different models
         model = "gpt-4"
