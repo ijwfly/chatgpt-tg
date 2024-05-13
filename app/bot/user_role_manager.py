@@ -27,6 +27,9 @@ class UserRoleManager:
         keyboard = types.InlineKeyboardMarkup()
 
         for role in UserRole:
+            if role == UserRole.NOONE:
+                # noone role is not assignable
+                continue
             callback_data = f'{SET_ROLE_COMMAND}.{user.telegram_id}.{role.value}'
             if role == user.role:
                 keyboard.add(types.InlineKeyboardButton(text=f'<{role.value}>', callback_data=callback_data))
@@ -66,8 +69,16 @@ class UserRoleManager:
         commands += [
             types.BotCommand(command="/reset", description="reset current dialog"),
             types.BotCommand(command="/settings", description="open settings menu"),
-            types.BotCommand(command="/usage", description="show usage for current month"),
         ]
+
+        if check_access_conditions(settings.USER_ROLE_CHOOSE_MODEL, user_role):
+            commands += [
+                types.BotCommand(command="/models", description="open models menu"),
+            ]
+
+        commands.append(
+            types.BotCommand(command="/usage", description="show usage for current month"),
+        )
 
         if check_access_conditions(settings.USER_ROLE_TTS, user_role):
             commands += [
