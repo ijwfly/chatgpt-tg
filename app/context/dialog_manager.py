@@ -50,7 +50,7 @@ class DialogManager:
         token_length = self.context_configuration.short_term_memory_tokens / 2
         for split_point in range(len(messages)):
             right_dialog_messages = (d.message for d in messages[split_point:])
-            right_length = count_dialog_messages_tokens(right_dialog_messages)
+            right_length = count_dialog_messages_tokens(right_dialog_messages, self.user.current_model)
             if right_length <= token_length:
                 return messages[:split_point], messages[split_point:]
         else:
