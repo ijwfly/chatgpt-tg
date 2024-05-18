@@ -3,12 +3,13 @@ from typing import Optional
 import settings
 from app.context.dialog_manager import DialogManager
 from app.functions.dalle_3 import GenerateImageDalle3
+from app.functions.get_site_content import GetSiteContent
 from app.functions.save_user_settings import SaveUserSettings
 from app.functions.vectara_search import VectorSearch
 from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User, MessageType
-from app.storage.user_role import check_access_conditions
+from app.storage.user_role import check_access_conditions, UserRole
 from settings import USER_ROLE_IMAGE_GENERATION
 
 
@@ -42,6 +43,9 @@ class FunctionManager:
             context_has_documents = any(m.message_type == MessageType.DOCUMENT for m in messages)
             if context_has_documents:
                 functions.append(VectorSearch)
+
+        if check_access_conditions(UserRole.ADMIN, self.user.role):
+            functions.append(GetSiteContent)
 
         return functions
 
