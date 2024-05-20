@@ -3,7 +3,7 @@ from typing import Optional
 import settings
 from app.context.dialog_manager import DialogManager
 from app.functions.dalle_3 import GenerateImageDalle3
-from app.functions.get_site_content import GetSiteContent
+from app.functions.process_site_content import GetSiteContent
 from app.functions.save_user_settings import SaveUserSettings
 from app.functions.vectara_search import VectorSearch
 from app.functions.wolframalpha import QueryWolframAlpha

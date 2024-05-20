@@ -57,6 +57,8 @@ USER_ROLE_RAG = UserRole.BASIC  # minimum role needed to use RAG
 ENABLE_WOLFRAMALPHA = False
 WOLFRAMALPHA_APPID = 'YOUR_TOKEN'
 
+PROCESS_SITE_CONTENT_MODEL = 'gpt-3.5-turbo'
+
 # Utility settings
 OPENAI_BASE_URL = 'https://api.openai.com/v1'
 OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3

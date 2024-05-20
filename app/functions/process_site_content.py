@@ -4,13 +4,18 @@ import httpx
 import trafilatura
 from pydantic import Field
 
+import settings
+from app.bot.chatgpt_manager import ChatGptManager
+from app.context.dialog_manager import DialogUtils
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
+from app.openai_helpers.chatgpt import ChatGPT
 
 logger = logging.getLogger(__name__)
 
 
 class GetSiteContentParams(OpenAIFunctionParams):
     url: str = Field(..., description='url of the site to get text from')
+    task: str = Field(..., description='task in natural language (for LLM) how to process the site content')
 
 
 class GetSiteContent(OpenAIFunction):
@@ -47,12 +52,15 @@ class GetSiteContent(OpenAIFunction):
         contents = trafilatura.extract(downloaded, favor_precision=True, deduplicate=True)
         if not contents:
             return "Error: can't read contents of this site. Maybe there is some protection or the site is empty."
-        return contents
+        system_prompt = f'User passes web page text contents. Your task: {params.task}'
+        chat_gpt_manager = ChatGptManager(ChatGPT(settings.PROCESS_SITE_CONTENT_MODEL, system_prompt), self.db)
+        async for response in chat_gpt_manager.send_user_message_sync(self.user, [DialogUtils.prepare_user_message(contents)]):
+            return response.get_text_content()
 
     @classmethod
     def get_name(cls) -> str:
-        return "get_site_content"
+        return "process_site_content"
 
     @classmethod
     def get_description(cls) -> str:
-        return "Get text content from a site by url"
+        return "Process text content from a site by url"
