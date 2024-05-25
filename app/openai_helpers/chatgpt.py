@@ -90,16 +90,6 @@ class ChatGPT:
             elif self.llm_model.capabilities.tool_calling:
                 NotImplementedError('Tool calling support is not implemented yet')
 
-        if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
-            # TODO: somewhy by default it's 16 tokens for this model
-            additional_fields['max_tokens'] = 4096
-
-            # TODO: vision preview doesn't support function calls
-            if 'function_call' in additional_fields:
-                del additional_fields['function_call']
-            if 'functions' in additional_fields:
-                del additional_fields['functions']
-
         messages = self.create_context(messages_to_send, self.system_prompt)
         resp = await OpenAILLMClient.get_client(self.llm_model.model_name).chat.completions.create(
             model=self.llm_model.model_name,
@@ -126,16 +116,6 @@ class ChatGPT:
                 })
             elif self.llm_model.capabilities.tool_calling:
                 NotImplementedError('Tool calling support is not implemented yet')
-
-        if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
-            # TODO: somewhy by default it's 16 tokens for this model
-            additional_fields['max_tokens'] = 4096
-
-            # TODO: vision preview doesn't support function calls
-            if 'function_call' in additional_fields:
-                del additional_fields['function_call']
-            if 'functions' in additional_fields:
-                del additional_fields['functions']
 
         messages = self.create_context(messages_to_send, self.system_prompt)
         resp_generator = await OpenAILLMClient.get_client(self.llm_model.model_name).chat.completions.create(

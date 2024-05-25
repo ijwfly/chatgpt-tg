@@ -15,18 +15,25 @@ SECOND_SCALE_TO_PX = 768
 logger = logging.getLogger(__name__)
 
 
-def count_string_tokens(string: str, model="gpt-3.5-turbo") -> int:
+def get_encoder_for_model(model="gpt-3.5-turbo"):
     if "gpt-3.5-turbo" in model:
         model = "gpt-3.5-turbo"
-    elif "gpt-4" in model:
-        model = "gpt-4"
     elif "gpt-4o" in model:
         model = "gpt-4o"
-    else:
-        # TODO: add method to calculate tokens for different models
+    elif "gpt-4" in model:
         model = "gpt-4"
+    else:
+        # TODO: implement custom tokenizers support
+        # HACK: fallback to len(str) token counting for unknown models
+        return str
+
     encoding = tiktoken.encoding_for_model(model)
-    return len(encoding.encode(str(string)))
+    return encoding.encode
+
+
+def count_string_tokens(string: str, model="gpt-3.5-turbo") -> int:
+    encoder = get_encoder_for_model(model)
+    return len(encoder(string))
 
 
 def extract_tokens_count_from_image_url(image_url):
@@ -46,11 +53,7 @@ def count_messages_tokens(messages: List[dict], model="gpt-3.5-turbo") -> int:
     tokens_per_message = 3
     tokens_per_name = 1
 
-    try:
-        encoding = tiktoken.encoding_for_model(model)
-    except:
-        # TODO: add method to calculate tokens for different models
-        encoding = tiktoken.encoding_for_model("gpt-4")
+    encoder = get_encoder_for_model(model)
 
     num_tokens = 0
     for message in messages:
@@ -58,11 +61,11 @@ def count_messages_tokens(messages: List[dict], model="gpt-3.5-turbo") -> int:
         content = message.get('content')
         if content:
             if isinstance(content, str):
-                num_tokens += len(encoding.encode(content))
+                num_tokens += len(encoder(content))
             elif isinstance(content, list):
                 for part in content:
                     if part['type'] == 'text':
-                        num_tokens += len(encoding.encode(part['text']))
+                        num_tokens += len(encoder(part['text']))
                     elif part['type'] == 'image_url':
                         num_tokens += extract_tokens_count_from_image_url(part['image_url']['url'])
                     else:
@@ -73,7 +76,7 @@ def count_messages_tokens(messages: List[dict], model="gpt-3.5-turbo") -> int:
                 continue
             if value is None:
                 continue
-            num_tokens += len(encoding.encode(str(value)))
+            num_tokens += len(encoder(str(value)))
             if key == "name":
                 num_tokens += tokens_per_name
 
@@ -86,38 +89,30 @@ def count_dialog_messages_tokens(messages: Iterable['DialogMessage'], model="gpt
 
 
 def count_tokens_from_functions(functions, model="gpt-3.5-turbo"):
-    if "gpt-3.5-turbo" in model:
-        model = "gpt-3.5-turbo"
-    elif "gpt-4" in model:
-        model = "gpt-4"
-    else:
-        # TODO: add method to calculate tokens for different models
-        model = "gpt-4"
-
-    encoding = tiktoken.encoding_for_model(model)
+    encoder = get_encoder_for_model(model)
     num_tokens = 0
     for function in functions:
-        function_tokens = len(encoding.encode(function['name']))
-        function_tokens += len(encoding.encode(function['description']))
+        function_tokens = len(encoder(function['name']))
+        function_tokens += len(encoder(function['description']))
 
         if 'parameters' in function:
             parameters = function['parameters']
             if 'properties' in parameters:
                 for propertiesKey in parameters['properties']:
-                    function_tokens += len(encoding.encode(propertiesKey))
+                    function_tokens += len(encoder(propertiesKey))
                     v = parameters['properties'][propertiesKey]
                     for field in v:
                         if field == 'type':
                             function_tokens += 2
-                            function_tokens += len(encoding.encode(v['type']))
+                            function_tokens += len(encoder(v['type']))
                         elif field == 'description':
                             function_tokens += 2
-                            function_tokens += len(encoding.encode(v['description']))
+                            function_tokens += len(encoder(v['description']))
                         elif field == 'enum':
                             function_tokens -= 3
                             for o in v['enum']:
                                 function_tokens += 3
-                                function_tokens += len(encoding.encode(o))
+                                function_tokens += len(encoder(o))
                         else:
                             print(f"Warning: not supported field {field}")
                 function_tokens += 11
