@@ -4,18 +4,18 @@ from typing import List, Any, Optional, Callable, Union
 
 import settings
 from app.bot.utils import merge_dicts
-from app.llm_models import LLModel, get_model_by_name
+from app.llm_models import get_model_by_name
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
 
 import pydantic
 
-from app.openai_helpers.llm_client import OpenAILLMClient
+from app.openai_helpers.llm_client_factory import LLMClientFactory
 
 
 class FunctionCall(pydantic.BaseModel):
-    name: str
-    arguments: str
+    name: Optional[str]
+    arguments: Optional[str]
 
 
 class CompletionUsage(pydantic.BaseModel):
@@ -90,18 +90,8 @@ class ChatGPT:
             elif self.llm_model.capabilities.tool_calling:
                 NotImplementedError('Tool calling support is not implemented yet')
 
-        if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
-            # TODO: somewhy by default it's 16 tokens for this model
-            additional_fields['max_tokens'] = 4096
-
-            # TODO: vision preview doesn't support function calls
-            if 'function_call' in additional_fields:
-                del additional_fields['function_call']
-            if 'functions' in additional_fields:
-                del additional_fields['functions']
-
         messages = self.create_context(messages_to_send, self.system_prompt)
-        resp = await OpenAILLMClient.get_client(self.llm_model.model_name).chat.completions.create(
+        resp = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
@@ -127,18 +117,8 @@ class ChatGPT:
             elif self.llm_model.capabilities.tool_calling:
                 NotImplementedError('Tool calling support is not implemented yet')
 
-        if self.llm_model.model_name == LLModel.GPT_4_VISION_PREVIEW:
-            # TODO: somewhy by default it's 16 tokens for this model
-            additional_fields['max_tokens'] = 4096
-
-            # TODO: vision preview doesn't support function calls
-            if 'function_call' in additional_fields:
-                del additional_fields['function_call']
-            if 'functions' in additional_fields:
-                del additional_fields['functions']
-
         messages = self.create_context(messages_to_send, self.system_prompt)
-        resp_generator = await OpenAILLMClient.get_client(self.llm_model.model_name).chat.completions.create(
+        resp_generator = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
             messages=messages,
             temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
@@ -149,32 +129,44 @@ class ChatGPT:
         prompt_tokens += count_messages_tokens(messages, self.llm_model.model_name)
         result_dict = {}
         async for resp_part in resp_generator:
-            delta = resp_part.choices[0].delta
-            if not delta:
-                continue
+            dialog_message = None
+            completion_usage = None
+            completion_tokens = None
 
-            if delta.content is not None:
-                if not delta.content:
-                    continue
+            if resp_part.usage is not None:
+                completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp_part.usage))
+
+            delta = resp_part.choices[0].delta if resp_part.choices else None
+            if delta and delta.content:
                 result_dict = merge_dicts(result_dict, dict(delta))
                 dialog_message = DialogMessage(**result_dict)
                 completion_tokens = count_messages_tokens([result_dict], model=self.llm_model.model_name)
-            elif delta.function_call is not None:
-                result_dict = merge_dicts(result_dict, dict(delta.function_call))
+            if delta and delta.function_call is not None:
+                if 'function_call' not in result_dict or result_dict['function_call'] is None:
+                    result_dict['function_call'] = {}
+                function_call_dict = merge_dicts(result_dict['function_call'], dict(delta.function_call))
+                result_dict['function_call'] = function_call_dict
                 dialog_message = DialogMessage(function_call=result_dict)
-                # TODO: find mode accurate way to calculate completion length for function calls
+                # TODO: find more accurate way to calculate completion length for function calls
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
-            else:
+
+            if not dialog_message and not completion_usage:
+                # no updates at all, nothing to return
                 continue
+            elif not dialog_message:
+                # no updates only in dialog message, create it from last result
+                dialog_message = DialogMessage(**result_dict)
+            elif not completion_usage:
+                # no updates only in completion usage, calculate it from dialog message result
+                completion_usage = CompletionUsage(
+                    model=self.llm_model.model_name,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=prompt_tokens + completion_tokens,
+                )
 
             # openai doesn't return this field in streaming mode somewhy
             dialog_message.role = 'assistant'
-            completion_usage = CompletionUsage(
-                model=self.llm_model.model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=prompt_tokens + completion_tokens,
-            )
             yield dialog_message, completion_usage
             if is_cancelled():
                 # some more tokens may be generated after cancellation
@@ -197,7 +189,7 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
         "role": "user",
         "content": f"Summarize this conversation in {summary_max_length} characters or less. Divide different themes explicitly with new lines. Return only text of summary, nothing else.",
     }]
-    resp = await OpenAILLMClient.get_client(model).chat.completions.create(
+    resp = await LLMClientFactory.get_client(model).chat_completions_create(
         model=model,
         messages=prompt_messages,
         temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,

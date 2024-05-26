@@ -3,6 +3,7 @@ from decimal import Decimal
 from functools import lru_cache
 
 import settings
+from app.openai_helpers.llm_client import GenericAsyncOpenAIClient, OpenAISpecificAsyncOpenAIClient
 from app.storage.user_role import UserRole
 
 
@@ -43,7 +44,7 @@ class LLModel:
     OPENROUTER_WIZARDLM2 = 'microsoft/wizardlm-2-8x22b'
 
     def __init__(self, *, model_name: str, api_key, context_configuration, model_readable_name=None, model_price=None, base_url=None,
-                 capabilities=None, minimum_user_role=UserRole.STRANGER):
+                 capabilities=None, minimum_user_role=UserRole.STRANGER, api_client=None):
         if model_readable_name is None:
             model_readable_name = model_name
 
@@ -53,6 +54,9 @@ class LLModel:
         if capabilities is None:
             capabilities = LLMCapabilities()
 
+        if api_client is None:
+            api_client = GenericAsyncOpenAIClient
+
         self.model_name = model_name
         self.api_key = api_key
         self.context_configuration = context_configuration
@@ -61,6 +65,7 @@ class LLModel:
         self.base_url = base_url
         self.capabilities = capabilities
         self.minimum_user_role = minimum_user_role
+        self.api_client = api_client
 
 
 @lru_cache
@@ -88,6 +93,7 @@ def get_models():
                     streaming_responses=True,
                 ),
                 base_url=settings.OPENAI_BASE_URL,
+                api_client=OpenAISpecificAsyncOpenAIClient,
             ),
             LLModel.GPT_4_TURBO: LLModel(
                 model_name=LLModel.GPT_4_TURBO,
@@ -109,6 +115,7 @@ def get_models():
                     streaming_responses=True,
                 ),
                 base_url=settings.OPENAI_BASE_URL,
+                api_client=OpenAISpecificAsyncOpenAIClient,
             ),
             LLModel.GPT_4O: LLModel(
                 model_name=LLModel.GPT_4O,
@@ -130,6 +137,7 @@ def get_models():
                     streaming_responses=True,
                 ),
                 base_url=settings.OPENAI_BASE_URL,
+                api_client=OpenAISpecificAsyncOpenAIClient,
             ),
 
             # Deprecated OpenAI models

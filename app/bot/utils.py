@@ -166,7 +166,9 @@ def merge_dicts(dict_1, dict_2):
             ValueError("dicts must have strings as values")
         if not key in result:
             result[key] = "" if value is not None else None
-        if value is not None:
+        if isinstance(result[key], dict):
+            result[key] = merge_dicts(result[key], value)
+        elif value is not None:
             result[key] += value
 
     return result

@@ -1,0 +1,6 @@
+CREATE SCHEMA IF NOT EXISTS chatgpttg;
+
+ALTER TABLE chatgpttg.completion_usage ADD COLUMN IF NOT EXISTS price numeric(20, 10) NOT NULL DEFAULT 0.0000000000;
+ALTER TABLE chatgpttg.image_generation_usage ADD COLUMN IF NOT EXISTS price numeric(20, 10) NOT NULL DEFAULT 0.0000000000;
+ALTER TABLE chatgpttg.tts_usage ADD COLUMN IF NOT EXISTS price numeric(20, 10) NOT NULL DEFAULT 0.0000000000;
+ALTER TABLE chatgpttg.whisper_usage ADD COLUMN IF NOT EXISTS price numeric(20, 10) NOT NULL DEFAULT 0.0000000000;

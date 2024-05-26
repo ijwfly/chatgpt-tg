@@ -94,8 +94,25 @@ class MessageProcessor:
             raise ValueError('Model makes too many successive function calls')
 
         response_dialog_message, message_id = await self.handle_response_generator(response_generator)
+
+        if response_dialog_message.content:
+            dialog_messages = self.split_dialog_message(response_dialog_message)
+            for dialog_message in dialog_messages:
+                # code_fragments = detect_and_extract_code(dialog_message.content)
+                # parse_mode = ParseMode.MARKDOWN if code_fragments else None
+                parse_mode = ParseMode.MARKDOWN
+                if message_id is not None:
+                    response = await edit_telegram_message(self.message, dialog_message.content, message_id, parse_mode)
+                    message_id = None
+                else:
+                    response = await send_telegram_message(self.message, dialog_message.content, parse_mode)
+                await context_manager.add_message(dialog_message, response.message_id)
+
         if response_dialog_message.function_call:
-            await context_manager.add_message(response_dialog_message, -1)
+            if not response_dialog_message.content:
+                # if there is a content in response, context was already updated in the block above
+                await context_manager.add_message(response_dialog_message, -1)
+
             function_name = response_dialog_message.function_call.name
             function_args = response_dialog_message.function_call.arguments
             function_class = function_storage.get_function_class(function_name)
@@ -120,18 +137,6 @@ class MessageProcessor:
             response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
             await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled, recursive_count + 1)
-        else:
-            dialog_messages = self.split_dialog_message(response_dialog_message)
-            for dialog_message in dialog_messages:
-                # code_fragments = detect_and_extract_code(dialog_message.content)
-                # parse_mode = ParseMode.MARKDOWN if code_fragments else None
-                parse_mode = ParseMode.MARKDOWN
-                if message_id is not None:
-                    response = await edit_telegram_message(self.message, dialog_message.content, message_id, parse_mode)
-                    message_id = None
-                else:
-                    response = await send_telegram_message(self.message, dialog_message.content, parse_mode)
-                await context_manager.add_message(dialog_message, response.message_id)
 
     async def handle_response_generator(self, response_generator):
         dialog_message = None
