@@ -14,8 +14,8 @@ from app.openai_helpers.llm_client_factory import LLMClientFactory
 
 
 class FunctionCall(pydantic.BaseModel):
-    name: str
-    arguments: str
+    name: Optional[str]
+    arguments: Optional[str]
 
 
 class CompletionUsage(pydantic.BaseModel):
@@ -141,8 +141,11 @@ class ChatGPT:
                 result_dict = merge_dicts(result_dict, dict(delta))
                 dialog_message = DialogMessage(**result_dict)
                 completion_tokens = count_messages_tokens([result_dict], model=self.llm_model.model_name)
-            elif delta and delta.function_call is not None:
-                result_dict = merge_dicts(result_dict, dict(delta.function_call))
+            if delta and delta.function_call is not None:
+                if 'function_call' not in result_dict or result_dict['function_call'] is None:
+                    result_dict['function_call'] = {}
+                function_call_dict = merge_dicts(result_dict['function_call'], dict(delta.function_call))
+                result_dict['function_call'] = function_call_dict
                 dialog_message = DialogMessage(function_call=result_dict)
                 # TODO: find more accurate way to calculate completion length for function calls
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)

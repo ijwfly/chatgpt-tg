@@ -5,6 +5,7 @@ import settings
 from app.bot.utils import message_is_forward
 from app.openai_helpers.chatgpt import DialogMessage, summarize_messages, DialogMessageContentPart
 from app.openai_helpers.count_tokens import count_dialog_messages_tokens
+from app.openai_helpers.utils import calculate_completion_usage_price
 from app.storage.db import User, DB, Message, MessageType
 
 from aiogram import types
@@ -74,9 +75,10 @@ class DialogManager:
         summarized, completion_usage = await summarize_messages(
             [m.message for m in messages], self.user.current_model, self.context_configuration.summary_length
         )
+        price = calculate_completion_usage_price(completion_usage.prompt_tokens, completion_usage.completion_tokens, completion_usage.model)
         await self.db.create_completion_usage(
             self.user.id, completion_usage.prompt_tokens, completion_usage.completion_tokens,
-            completion_usage.total_tokens, completion_usage.model
+            completion_usage.total_tokens, completion_usage.model, price
         )
 
         summarized_message = DialogUtils.prepare_user_message(f"Summarized previous conversation:\n{summarized}")

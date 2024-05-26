@@ -189,7 +189,9 @@ class TelegramBot:
                 voice=user.tts_voice,
                 input=text,
             )
-            await self.db.create_tts_usage(user.id, model, len(text))
+            text_length = len(text)
+            price = calculate_tts_usage_price(text_length, model)
+            await self.db.create_tts_usage(user.id, model, text_length, price)
 
             # TODO: refactor without saving to file
             with tempfile.TemporaryDirectory() as temp_dir:

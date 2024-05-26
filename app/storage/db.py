@@ -152,21 +152,21 @@ class DB:
         await self.connection_pool.fetchrow(sql, user_id, tg_chat_id, tg_message_id, message, 'reset')
         return
 
-    async def create_completion_usage(self, user_id, prompt_tokens, completion_tokens, total_tokens, model) -> None:
-        sql = 'INSERT INTO chatgpttg.completion_usage (user_id, prompt_tokens, completion_tokens, total_tokens, model) VALUES ($1, $2, $3, $4, $5)'
-        await self.connection_pool.fetchrow(sql, user_id, prompt_tokens, completion_tokens, total_tokens, model)
+    async def create_completion_usage(self, user_id, prompt_tokens, completion_tokens, total_tokens, model, price) -> None:
+        sql = 'INSERT INTO chatgpttg.completion_usage (user_id, prompt_tokens, completion_tokens, total_tokens, model, price) VALUES ($1, $2, $3, $4, $5, $6)'
+        await self.connection_pool.fetchrow(sql, user_id, prompt_tokens, completion_tokens, total_tokens, model, price)
 
-    async def create_whisper_usage(self, user_id, audio_seconds) -> None:
-        sql = 'INSERT INTO chatgpttg.whisper_usage (user_id, audio_seconds) VALUES ($1, $2)'
-        await self.connection_pool.fetchrow(sql, user_id, audio_seconds)
+    async def create_whisper_usage(self, user_id, audio_seconds, price) -> None:
+        sql = 'INSERT INTO chatgpttg.whisper_usage (user_id, audio_seconds, price) VALUES ($1, $2, $3)'
+        await self.connection_pool.fetchrow(sql, user_id, audio_seconds, price)
 
-    async def create_image_generation_usage(self, user_id, model, resolution):
-        sql = 'INSERT INTO chatgpttg.image_generation_usage (user_id, model, resolution) VALUES ($1, $2, $3)'
-        await self.connection_pool.fetchrow(sql, user_id, model, resolution)
+    async def create_image_generation_usage(self, user_id, model, resolution, price):
+        sql = 'INSERT INTO chatgpttg.image_generation_usage (user_id, model, resolution, price) VALUES ($1, $2, $3, $4)'
+        await self.connection_pool.fetchrow(sql, user_id, model, resolution, price)
 
-    async def create_tts_usage(self, user_id: int, model: str, characters_count: int):
-        sql = 'INSERT INTO chatgpttg.tts_usage (user_id, model, characters_count) VALUES ($1, $2, $3)'
-        await self.connection_pool.fetchrow(sql, user_id, model, characters_count)
+    async def create_tts_usage(self, user_id: int, model: str, characters_count: int, price):
+        sql = 'INSERT INTO chatgpttg.tts_usage (user_id, model, characters_count, price) VALUES ($1, $2, $3, $4)'
+        await self.connection_pool.fetchrow(sql, user_id, model, characters_count, price)
 
     async def get_user_current_month_whisper_usage(self, user_id):
         sql = '''SELECT SUM(audio_seconds) AS audio_seconds

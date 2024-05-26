@@ -7,7 +7,7 @@ from pydantic import Field
 from app.bot.utils import send_photo
 from app.context.dialog_manager import DialogUtils
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
-from app.openai_helpers.utils import OpenAIAsync
+from app.openai_helpers.utils import OpenAIAsync, calculate_image_generation_usage_price
 
 
 class ImageSize(str, Enum):
@@ -35,14 +35,16 @@ class GenerateImageDalle3(OpenAIFunction):
     async def run(self, params: GenerateImageDalle3Params) -> Optional[str]:
         model = "dall-e-3"
         try:
+            num_images = 1
             resp = await OpenAIAsync.instance().images.generate(
                 model=model,
                 prompt=params.image_prompt,
                 size=params.image_size,
                 quality="standard",
-                n=1,
+                n=num_images,
             )
-            await self.db.create_image_generation_usage(self.user.id, model, params.image_size)
+            price = calculate_image_generation_usage_price(model, params.image_size, num_images)
+            await self.db.create_image_generation_usage(self.user.id, model, params.image_size, price)
 
             image_url = resp.data[0].url
             image_bytes = await self.download_image(image_url)

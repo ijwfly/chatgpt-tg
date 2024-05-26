@@ -28,11 +28,14 @@ class OpenAISpecificAsyncOpenAIClient(GenericAsyncOpenAIClient):
     This client is for OpenAI specific features.
     """
     async def chat_completions_create(self, model: str, messages, **additional_fields):
+        inner_additional_fields = {}
+        if additional_fields.get("stream"):
+            inner_additional_fields["stream_options"] = {
+                "include_usage": True,
+            }
         return await self.client.chat.completions.create(
             model=model,
             messages=messages,
-            stream_options={
-                "include_usage": True,
-            },
-            **additional_fields
+            **inner_additional_fields,
+            **additional_fields,
         )

@@ -12,6 +12,7 @@ import settings
 from app.bot.message_processor import MessageProcessor
 from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer, generate_document_id
 from app.llm_models import get_model_by_name
+from app.openai_helpers.utils import calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.storage.db import User, MessageType
 from app.storage.user_role import check_access_conditions
@@ -198,7 +199,8 @@ class BatchedInputHandler:
                 await self.bot.download_file(file.file_path, destination=voice_filepath)
                 audio = AudioSegment.from_file(voice_filepath)
                 audio_length_seconds = len(audio) // 1000 + 1
-                await self.db.create_whisper_usage(user.id, audio_length_seconds)
+                price = calculate_whisper_usage_price(audio_length_seconds)
+                await self.db.create_whisper_usage(user.id, audio_length_seconds, price)
                 audio.export(mp3_filename, format="mp3")
                 speech_text = await get_audio_speech_to_text(mp3_filename)
                 speech_text = f'speech2text:\n{speech_text}'
