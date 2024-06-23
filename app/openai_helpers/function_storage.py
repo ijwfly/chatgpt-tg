@@ -25,7 +25,7 @@ class FunctionStorage:
         functions = []
         for function in self.functions.values():
             function_info = function['info']
-            functions.append(function_info)
+            functions.append(function_info.copy())
 
         return functions
 

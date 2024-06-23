@@ -42,6 +42,9 @@ USER_ROLE_MANAGER_CHAT_ID = -1
 OPENROUTER_TOKEN = ''
 OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
+# Anthropic models
+ANTHROPIC_TOKEN = ''
+
 # User access settings, there are 4 levels of access, each: stranger, basic, advanced, admin
 # You can setup default role for new users and minimum role needed to access bot, see UserRole enum
 # Also you can setup which functions are available to each user role

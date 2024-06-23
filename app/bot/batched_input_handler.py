@@ -135,6 +135,7 @@ class BatchedInputHandler:
             async with TypingWorker(self.bot, first_message.chat.id).typing_context():
                 await self.answer_message(message, user, message_processor)
         except Exception as e:
+            logger.exception(f"An error occurred while processing input: %s", e)
             await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
             raise
 
