@@ -2,12 +2,15 @@ import dataclasses
 import re
 import asyncio
 from datetime import date
+from functools import lru_cache
 from typing import List
 from contextlib import asynccontextmanager
 
+import requests
 from aiogram import types
 from aiogram.utils.exceptions import CantParseEntities
 
+import settings
 from app.openai_helpers.utils import (calculate_completion_usage_price, calculate_whisper_usage_price,
                                       calculate_image_generation_usage_price, calculate_tts_usage_price)
 
@@ -215,3 +218,14 @@ async def get_usage_response_all_users(db, month_date: date = None) -> str:
 
 def generate_document_id(chat_id, message_id):
     return f'{chat_id}_{message_id}'
+
+
+@lru_cache
+def get_image_proxy_url():
+    public_url = f'{settings.IMAGE_PROXY_URL}:{settings.IMAGE_PROXY_PORT}'
+    docker_url = f'http://image_proxy:{settings.IMAGE_PROXY_BIND_PORT}'
+    try:
+        requests.get(public_url)
+    except requests.ConnectionError:
+        return docker_url
+    return public_url
