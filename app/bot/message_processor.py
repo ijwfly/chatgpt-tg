@@ -113,30 +113,56 @@ class MessageProcessor:
                 # if there is a content in response, context was already updated in the block above
                 await context_manager.add_message(response_dialog_message, -1)
 
-            function_name = response_dialog_message.function_call.name
-            function_args = response_dialog_message.function_call.arguments
-            function_class = function_storage.get_function_class(function_name)
-            function = function_class(self.user, self.db, context_manager, self.message)
-            function_response_raw = await function.run_str_args(function_args)
-
-            function_response_message_id = -1
-            if self.user.function_call_verbose:
-                with suppress(BadRequest):
-                    # TODO: split function call message if it's too long
-                    function_response_text = f'Function call: {function_name}({function_args})\n\nResponse: {function_response_raw}'
-                    function_response_text = function_response_text[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]
-                    function_response_tg_message = await send_telegram_message(self.message, function_response_text)
-                    function_response_message_id = function_response_tg_message.message_id
+            function_call = response_dialog_message.function_call
+            function_response_raw, function_response_message_id = await self.run_function_call(response_dialog_message.function_call, function_storage, context_manager)
 
             if function_response_raw is None:
                 # None means there is no need to pass response to GPT or add it to context
+                # TODO: add exception to cancel further processing instead of None
                 return
 
-            function_response = DialogUtils.prepare_function_response(function_name, function_response_raw)
+            function_response = DialogUtils.prepare_function_response(function_call.name, function_response_raw)
             context_dialog_messages = await context_manager.add_message(function_response, function_response_message_id)
             response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
             await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled, recursive_count + 1)
+
+        if response_dialog_message.tool_calls:
+            context_dialog_messages = None
+            if not response_dialog_message.content:
+                # if there is a content in response, context was already updated in the block above
+                await context_manager.add_message(response_dialog_message, -1)
+
+            for tool_call in response_dialog_message.tool_calls:
+                if tool_call.type != 'function':
+                    raise ValueError(f'Unknown tool call type: {type}')
+                tool_call_id = tool_call.id
+                function_call = tool_call.function
+                function_response_raw, function_response_message_id = await self.run_function_call(function_call, function_storage, context_manager)
+                tool_response = DialogUtils.prepare_tool_call_response(tool_call_id, function_response_raw)
+                context_dialog_messages = await context_manager.add_message(tool_response, function_response_message_id)
+
+            if context_dialog_messages:
+                response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
+                await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled, recursive_count + 1)
+
+    async def run_function_call(self, function_call, function_storage, context_manager):
+        function_name = function_call.name
+        function_args = function_call.arguments
+        function_class = function_storage.get_function_class(function_name)
+        function = function_class(self.user, self.db, context_manager, self.message)
+        function_response_raw = await function.run_str_args(function_args)
+
+        function_response_message_id = -1
+        if self.user.function_call_verbose:
+            with suppress(BadRequest):
+                # TODO: split function call message if it's too long
+                function_response_text = f'Function call: {function_name}({function_args})\n\nResponse: {function_response_raw}'
+                function_response_text = function_response_text[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]
+                function_response_tg_message = await send_telegram_message(self.message, function_response_text)
+                function_response_message_id = function_response_tg_message.message_id
+
+        return function_response_raw, function_response_message_id
 
     async def handle_response_generator(self, response_generator):
         dialog_message = None

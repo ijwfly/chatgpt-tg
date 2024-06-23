@@ -126,3 +126,7 @@ class DialogUtils:
     @staticmethod
     def prepare_function_response(function_name, function_response):
         return DialogMessage(role="function", name=function_name, content=function_response)
+
+    @staticmethod
+    def prepare_tool_call_response(tool_call_id, tool_call_response):
+        return DialogMessage(role="tool", tool_call_id=tool_call_id, content=tool_call_response)

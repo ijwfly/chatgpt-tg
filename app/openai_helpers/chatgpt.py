@@ -18,6 +18,12 @@ class FunctionCall(pydantic.BaseModel):
     arguments: Optional[str]
 
 
+class ToolCall(pydantic.BaseModel):
+    id: str
+    type: str
+    function: FunctionCall
+
+
 class CompletionUsage(pydantic.BaseModel):
     prompt_tokens: int
     completion_tokens: int
@@ -40,6 +46,8 @@ class DialogMessage(pydantic.BaseModel):
     name: Optional[str] = None
     content: Union[Optional[str], Optional[List[DialogMessageContentPart]]] = None
     function_call: Optional[FunctionCall] = None
+    tool_calls: Optional[List[ToolCall]] = None
+    tool_call_id: Optional[str] = None
 
     def get_text_content(self):
         if isinstance(self.content, str):
@@ -70,6 +78,19 @@ class DialogMessage(pydantic.BaseModel):
                 'name': self.function_call.name,
                 'arguments': self.function_call.arguments,
             }
+        if self.tool_calls:
+            data['tool_calls'] = []
+            for tool_call in self.tool_calls:
+                data['tool_calls'].append({
+                    'id': tool_call.id,
+                    'type': tool_call.type,
+                    'function': {
+                        'name': tool_call.function.name,
+                        'arguments': tool_call.function.arguments,
+                    }
+                })
+        if self.tool_call_id:
+            data['tool_call_id'] = self.tool_call_id
         return data
 
 
@@ -80,15 +101,7 @@ class ChatGPT:
         self.system_prompt = system_prompt
 
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
-        additional_fields = {}
-        if self.function_storage is not None:
-            if self.llm_model.capabilities.function_calling:
-                additional_fields.update({
-                    'functions': self.function_storage.get_functions_info(),
-                    'function_call': 'auto',
-                })
-            elif self.llm_model.capabilities.tool_calling:
-                NotImplementedError('Tool calling support is not implemented yet')
+        additional_fields = self.create_additional_fields()
 
         messages = self.create_context(messages_to_send, self.system_prompt)
         resp = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
@@ -103,19 +116,7 @@ class ChatGPT:
         return response, completion_usage
 
     async def send_messages_streaming(self, messages_to_send: List[DialogMessage], is_cancelled: Callable[[], bool]) -> (DialogMessage, CompletionUsage):
-        prompt_tokens = 0
-
-        additional_fields = {}
-        if self.function_storage is not None:
-            if self.llm_model.capabilities.function_calling:
-                functions = self.function_storage.get_functions_info()
-                prompt_tokens += count_tokens_from_functions(functions, self.llm_model.model_name)
-                additional_fields.update({
-                    'functions': functions,
-                    'function_call': 'auto',
-                })
-            elif self.llm_model.capabilities.tool_calling:
-                NotImplementedError('Tool calling support is not implemented yet')
+        additional_fields = self.create_additional_fields()
 
         messages = self.create_context(messages_to_send, self.system_prompt)
         resp_generator = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
@@ -126,7 +127,7 @@ class ChatGPT:
             **additional_fields,
         )
 
-        prompt_tokens += count_messages_tokens(messages, self.llm_model.model_name)
+        prompt_tokens = count_messages_tokens(messages, self.llm_model.model_name)
         result_dict = {}
         async for resp_part in resp_generator:
             dialog_message = None
@@ -175,6 +176,26 @@ class ChatGPT:
                     # sometimes this call throws an exception since python 3.8
                     await resp_generator.response.aclose()
                 break
+
+    def create_additional_fields(self):
+        additional_fields = {}
+        if self.function_storage is not None:
+            if self.llm_model.capabilities.function_calling:
+                additional_fields.update({
+                    'functions': self.function_storage.get_functions_info(),
+                    'function_call': 'auto',
+                })
+            elif self.llm_model.capabilities.tool_calling:
+                additional_fields.update({
+                    'tools': [
+                        {
+                            'type': 'function',
+                            'function': function,
+                        }
+                        for function in self.function_storage.get_functions_info()
+                    ]
+                })
+        return additional_fields
 
     @staticmethod
     def create_context(messages: List[DialogMessage], system_prompt: str) -> List[Any]:
