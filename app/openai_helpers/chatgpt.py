@@ -4,7 +4,6 @@ from typing import List, Any, Optional, Callable, Union
 
 import settings
 from app.bot.utils import merge_dicts
-from app.llm_models import get_model_by_name
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
 
@@ -95,9 +94,9 @@ class DialogMessage(pydantic.BaseModel):
 
 
 class ChatGPT:
-    def __init__(self, model, system_prompt: str, function_storage: FunctionStorage = None):
+    def __init__(self, llm_model, system_prompt: str, function_storage: FunctionStorage = None):
         self.function_storage = function_storage
-        self.llm_model = get_model_by_name(model)
+        self.llm_model = llm_model
         self.system_prompt = system_prompt
 
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
@@ -127,6 +126,7 @@ class ChatGPT:
             **additional_fields,
         )
 
+        # TODO: calculate function tokens
         prompt_tokens = count_messages_tokens(messages, self.llm_model.model_name)
         result_dict = {}
         async for resp_part in resp_generator:
@@ -180,12 +180,7 @@ class ChatGPT:
     def create_additional_fields(self):
         additional_fields = {}
         if self.function_storage is not None:
-            if self.llm_model.capabilities.function_calling:
-                additional_fields.update({
-                    'functions': self.function_storage.get_functions_info(),
-                    'function_call': 'auto',
-                })
-            elif self.llm_model.capabilities.tool_calling:
+            if self.llm_model.capabilities.tool_calling:
                 additional_fields.update({
                     'tools': [
                         {
@@ -194,6 +189,11 @@ class ChatGPT:
                         }
                         for function in self.function_storage.get_functions_info()
                     ]
+                })
+            elif self.llm_model.capabilities.function_calling:
+                additional_fields.update({
+                    'functions': self.function_storage.get_functions_info(),
+                    'function_call': 'auto',
                 })
         return additional_fields
 

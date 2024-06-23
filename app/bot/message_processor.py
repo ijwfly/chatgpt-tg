@@ -7,10 +7,11 @@ from aiogram.utils.exceptions import BadRequest
 import settings
 from app.bot.cancellation_manager import get_cancel_button
 from app.bot.chatgpt_manager import ChatGptManager
-from app.bot.utils import send_telegram_message, detect_and_extract_code, edit_telegram_message
+from app.bot.utils import send_telegram_message, edit_telegram_message
 from app.context.context_manager import build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.llm_models import get_model_by_name
+from app.openai_helpers.anthropic_chatgpt import AnthropicChatGPT
 from app.openai_helpers.chatgpt import ChatGPT
 from app.openai_helpers.count_tokens import calculate_image_tokens
 from app.storage.db import DB, User, MessageType
@@ -79,7 +80,12 @@ class MessageProcessor:
         if llm_model.capabilities.tool_calling or llm_model.capabilities.function_calling:
             function_storage = await context_manager.get_function_storage()
         system_prompt = await context_manager.get_system_prompt()
-        chat_gpt_manager = ChatGptManager(ChatGPT(self.user.current_model, system_prompt, function_storage), self.db)
+
+        # HACK: TODO: refactor to factory
+        if self.user.current_model == llm_model.ANTHROPIC_CLAUDE_35_SONNET:
+            chat_gpt_manager = ChatGptManager(AnthropicChatGPT(llm_model, system_prompt, function_storage), self.db)
+        else:
+            chat_gpt_manager = ChatGptManager(ChatGPT(llm_model, system_prompt, function_storage), self.db)
 
         context_dialog_messages = await context_manager.get_context_messages()
         response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
@@ -127,6 +133,7 @@ class MessageProcessor:
 
             await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled, recursive_count + 1)
 
+        pass_tool_response_to_gpt = False
         if response_dialog_message.tool_calls:
             context_dialog_messages = None
             if not response_dialog_message.content:
@@ -138,19 +145,24 @@ class MessageProcessor:
                     raise ValueError(f'Unknown tool call type: {type}')
                 tool_call_id = tool_call.id
                 function_call = tool_call.function
-                function_response_raw, function_response_message_id = await self.run_function_call(function_call, function_storage, context_manager)
-                tool_response = DialogUtils.prepare_tool_call_response(tool_call_id, function_response_raw)
-                context_dialog_messages = await context_manager.add_message(tool_response, function_response_message_id)
+                function_response_raw, function_response_message_id = await self.run_function_call(function_call, function_storage, context_manager, tool_call_id)
 
-            if context_dialog_messages:
+                if function_response_raw is not None:
+                    # None means there is no need to pass response to GPT or add it to context, the response is already added to context from function call
+                    # TODO: add exception to cancel further processing instead of None
+                    pass_tool_response_to_gpt = True
+                    tool_response = DialogUtils.prepare_tool_call_response(tool_call_id, function_response_raw)
+                    context_dialog_messages = await context_manager.add_message(tool_response, function_response_message_id)
+
+            if pass_tool_response_to_gpt and context_dialog_messages:
                 response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
                 await self.handle_gpt_response(chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled, recursive_count + 1)
 
-    async def run_function_call(self, function_call, function_storage, context_manager):
+    async def run_function_call(self, function_call, function_storage, context_manager, tool_call_id: str = None):
         function_name = function_call.name
         function_args = function_call.arguments
         function_class = function_storage.get_function_class(function_name)
-        function = function_class(self.user, self.db, context_manager, self.message)
+        function = function_class(self.user, self.db, context_manager, self.message, tool_call_id)
         function_response_raw = await function.run_str_args(function_args)
 
         function_response_message_id = -1

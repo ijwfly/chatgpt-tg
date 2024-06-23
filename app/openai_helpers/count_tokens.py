@@ -113,8 +113,6 @@ def count_tokens_from_functions(functions, model="gpt-3.5-turbo"):
                             for o in v['enum']:
                                 function_tokens += 3
                                 function_tokens += len(encoder(o))
-                        else:
-                            print(f"Warning: not supported field {field}")
                 function_tokens += 11
 
         num_tokens += function_tokens
