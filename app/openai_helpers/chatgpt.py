@@ -150,6 +150,19 @@ class ChatGPT:
                 dialog_message = DialogMessage(function_call=result_dict)
                 # TODO: find more accurate way to calculate completion length for function calls
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
+            if delta and delta.tool_calls is not None:
+                if 'tool_calls' not in result_dict or result_dict['tool_calls'] is None:
+                    result_dict['tool_calls'] = []
+                for tool_call in delta.tool_calls:
+                    while True:
+                        if tool_call.index >= len(result_dict['tool_calls']):
+                            result_dict['tool_calls'].append({})
+                        else:
+                            break
+                    result_dict['tool_calls'][tool_call.index] = merge_dicts(result_dict['tool_calls'][tool_call.index], tool_call.dict())
+                dialog_message = DialogMessage(tool_calls=result_dict['tool_calls'])
+                # TODO: find more accurate way to calculate completion length for function calls
+                completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
 
             if not dialog_message and not completion_usage:
                 # no updates at all, nothing to return

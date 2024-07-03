@@ -165,14 +165,18 @@ def merge_dicts(dict_1, dict_2):
     """
     result = dict_1.copy()
     for key, value in dict_2.items():
-        if not isinstance(value, str):
-            ValueError("dicts must have strings as values")
-        if not key in result:
-            result[key] = "" if value is not None else None
-        if isinstance(result[key], dict):
-            result[key] = merge_dicts(result[key], value)
-        elif value is not None:
-            result[key] += value
+        if isinstance(value, str):
+            if not key in result:
+                result[key] = "" if value is not None else None
+            if value is not None:
+                result[key] += value
+        elif isinstance(value, dict):
+            if not key in result:
+                result[key] = {} if value is not None else None
+            if isinstance(result[key], dict):
+                result[key] = merge_dicts(result[key], value)
+        else:
+            continue
 
     return result
 

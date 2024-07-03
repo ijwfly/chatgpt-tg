@@ -197,7 +197,7 @@ class MessageProcessor:
             if message_too_long_for_telegram:
                 continue
 
-            if dialog_message.function_call is not None:
+            if dialog_message.function_call is not None or dialog_message.tool_calls is not None:
                 continue
 
             new_content = ' '.join(dialog_message.content.strip().split(' ')[:-1]) if dialog_message.content else ''
