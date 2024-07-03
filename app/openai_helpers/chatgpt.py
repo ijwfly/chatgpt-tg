@@ -154,11 +154,8 @@ class ChatGPT:
                 if 'tool_calls' not in result_dict or result_dict['tool_calls'] is None:
                     result_dict['tool_calls'] = []
                 for tool_call in delta.tool_calls:
-                    while True:
-                        if tool_call.index >= len(result_dict['tool_calls']):
-                            result_dict['tool_calls'].append({})
-                        else:
-                            break
+                    while tool_call.index >= len(result_dict['tool_calls']):
+                        result_dict['tool_calls'].append({})
                     result_dict['tool_calls'][tool_call.index] = merge_dicts(result_dict['tool_calls'][tool_call.index], tool_call.dict())
                 dialog_message = DialogMessage(tool_calls=result_dict['tool_calls'])
                 # TODO: find more accurate way to calculate completion length for function calls
