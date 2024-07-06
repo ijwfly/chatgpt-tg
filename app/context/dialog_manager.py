@@ -58,7 +58,7 @@ class DialogManager:
             return messages, []
 
     async def summarize_messages_if_needed(self, messages: List[Message]):
-        message_tokens_count = count_dialog_messages_tokens(m.message for m in messages)
+        message_tokens_count = count_dialog_messages_tokens((m.message for m in messages), self.user.current_model)
         if message_tokens_count > self.context_configuration.hard_max_context_size:
             # this is safety measure, we should never get here
             # if hard limit is exceeded, the context is too big to summarize or to process

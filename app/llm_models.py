@@ -266,7 +266,7 @@ def get_models():
                 capabilities=LLMCapabilities(
                     function_calling=True,
                     image_processing=True,
-                    streaming_responses=False,
+                    streaming_responses=True,
                     tool_calling=True,
                 ),
                 # base_url=settings.ANTHROPIC_BASE_URL,

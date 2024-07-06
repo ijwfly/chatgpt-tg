@@ -7,7 +7,7 @@ import pydantic
 from async_lru import alru_cache
 
 import settings
-from app.bot.utils import get_image_proxy_url
+from app.bot.utils import get_image_proxy_url, merge_dicts
 from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage, FunctionCall, ToolCall
 from app.openai_helpers.function_storage import FunctionStorage
 
@@ -134,7 +134,60 @@ class AnthropicChatGPT:
         return anthropic_dialog_message.to_dialog_message(), completion_usage
 
     async def send_messages_streaming(self, messages_to_send: List[DialogMessage], is_cancelled: Callable[[], bool]) -> (DialogMessage, CompletionUsage):
-        raise NotImplementedError('Streaming responses are not supported yet for Anthropic models')
+        additional_fields = self.create_additional_fields()
+
+        messages = await self.create_context(messages_to_send, self.system_prompt)
+        resp_generator = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
+            model=self.llm_model.model_name,
+            messages=messages,
+            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
+            stream=True,
+            **additional_fields,
+        )
+        result_dict = {}
+        usage_dict = {}
+        async for resp_part in resp_generator:
+            if resp_part.type == 'message_start':
+                if resp_part.message.usage is not None:
+                    usage_dict = {
+                        'model': self.llm_model.model_name,
+                        'prompt_tokens': resp_part.message.usage.input_tokens,
+                        'completion_tokens': resp_part.message.usage.output_tokens,
+                        'total_tokens': resp_part.message.usage.input_tokens + resp_part.message.usage.output_tokens,
+                    }
+
+                message = resp_part.message
+                result_dict = merge_dicts(result_dict, message.dict())
+                if result_dict.get('content') is None:
+                    result_dict['content'] = []
+            elif resp_part.type == 'content_block_start':
+                while resp_part.index >= len(result_dict['content']):
+                    result_dict['content'].append({})
+                result_dict['content'][resp_part.index] = merge_dicts(result_dict['content'][resp_part.index], resp_part.content_block.dict())
+            elif resp_part.type == 'content_block_delta':
+                delta_dict = resp_part.delta.dict()
+                del delta_dict['type']
+                result_dict['content'][resp_part.index] = merge_dicts(result_dict['content'][resp_part.index], delta_dict)
+            elif resp_part.type == 'content_block_stop':
+                partial_json = result_dict['content'][resp_part.index].get('partial_json')
+                if partial_json:
+                    result_dict['content'][resp_part.index]['input'] = json.loads(partial_json)
+            elif resp_part.type == 'message_delta':
+                if resp_part.usage is not None and hasattr(resp_part.usage, 'output_tokens'):
+                    usage_dict['completion_tokens'] = resp_part.usage.output_tokens
+                    usage_dict['total_tokens'] = usage_dict['prompt_tokens'] + usage_dict['completion_tokens']
+            elif resp_part.type == 'end_turn':
+                pass
+            elif resp_part.type == 'message_stop':
+                pass
+            elif resp_part.type == 'ping':
+                pass
+            else:
+                raise NotImplementedError
+
+            dialog_message = AnthropicDialogMessage(**result_dict)
+            completion_usage = CompletionUsage(**usage_dict)
+            yield dialog_message.to_dialog_message(), completion_usage
 
     def create_additional_fields(self):
         additional_fields = {}
