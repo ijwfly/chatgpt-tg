@@ -40,6 +40,7 @@ class LLModel:
     GPT_4 = 'gpt-4'
     GPT_4_TURBO = 'gpt-4-turbo'
     GPT_4O = 'gpt-4o'
+    GPT_4O_MINI = 'gpt-4o-mini'
     GPT_4_TURBO_PREVIEW = 'gpt-4-turbo-preview'
     GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
     ANTHROPIC_CLAUDE_35_SONNET = 'claude-3-5-sonnet-20240620'
@@ -134,6 +135,29 @@ def get_models():
                 model_price=LLMPrice(
                     input_tokens_price=Decimal('0.005'),
                     output_tokens_price=Decimal('0.015'),
+                ),
+                capabilities=LLMCapabilities(
+                    function_calling=True,
+                    image_processing=True,
+                    streaming_responses=True,
+                    tool_calling=True,
+                ),
+                base_url=settings.OPENAI_BASE_URL,
+                api_client=OpenAISpecificAsyncOpenAIClient,
+            ),
+            LLModel.GPT_4O_MINI: LLModel(
+                model_name=LLModel.GPT_4O_MINI,
+                model_readable_name='GPT-4o mini',
+                api_key=settings.OPENAI_TOKEN,
+                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                context_configuration=LLMContextConfiguration(
+                    short_term_memory_tokens=8 * 1024,
+                    summary_length=2048,
+                    hard_max_context_size=13 * 1024,
+                ),
+                model_price=LLMPrice(
+                    input_tokens_price=Decimal('0.00015'),
+                    output_tokens_price=Decimal('0.0006'),
                 ),
                 capabilities=LLMCapabilities(
                     function_calling=True,
