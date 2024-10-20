@@ -12,11 +12,12 @@ class OpenAIFunctionParams(pydantic.BaseModel):
 class OpenAIFunction(ABC):
     PARAMS_SCHEMA = OpenAIFunctionParams
 
-    def __init__(self, user, db, context_manager, message: Message):
+    def __init__(self, user, db, context_manager, message: Message, tool_call_id: str = None):
         self.user = user
         self.db = db
         self.context_manager = context_manager
         self.message = message
+        self.tool_call_id = tool_call_id
 
     @abstractmethod
     async def run(self, params: OpenAIFunctionParams) -> Optional[str]:

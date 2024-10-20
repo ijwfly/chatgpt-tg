@@ -22,6 +22,9 @@ def get_encoder_for_model(model="gpt-3.5-turbo"):
         model = "gpt-4o"
     elif "gpt-4" in model:
         model = "gpt-4"
+    elif 'claude' in model:
+        # HACK: TODO: implement true token count for anthropic models
+        model = "gpt-4"
     else:
         # TODO: implement custom tokenizers support
         # HACK: fallback to len(str) token counting for unknown models
@@ -113,8 +116,6 @@ def count_tokens_from_functions(functions, model="gpt-3.5-turbo"):
                             for o in v['enum']:
                                 function_tokens += 3
                                 function_tokens += len(encoder(o))
-                        else:
-                            print(f"Warning: not supported field {field}")
                 function_tokens += 11
 
         num_tokens += function_tokens

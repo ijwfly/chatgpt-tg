@@ -1,4 +1,5 @@
 import openai
+import anthropic
 
 
 class BaseLLMClient:
@@ -39,3 +40,18 @@ class OpenAISpecificAsyncOpenAIClient(GenericAsyncOpenAIClient):
             **inner_additional_fields,
             **additional_fields,
         )
+
+
+class AnthropicAsyncClient(BaseLLMClient):
+    def __init__(self, api_key, base_url=None):
+        super().__init__(api_key, base_url)
+        self.client = anthropic.AsyncClient(api_key=api_key, base_url=base_url)
+
+    async def chat_completions_create(self, model: str, messages, **additional_fields):
+        # find system prompt in messages
+        system_prompt = None
+        if len(messages) > 0 and messages[0]['role'] == 'system':
+            system_prompt = messages[0]['content']
+            messages = messages[1:]
+
+        return await self.client.messages.create(max_tokens=4096, model=model, messages=messages, system=system_prompt, **additional_fields)

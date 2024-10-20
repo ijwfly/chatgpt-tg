@@ -59,7 +59,10 @@ class GenerateImageDalle3(OpenAIFunction):
 
             response = await send_photo(self.message, image_bytes, tg_caption)
             text = 'Generated Image:\n<image.png>'
-            dialog_message = DialogUtils.prepare_function_response(self.get_name(), text)
+            if self.tool_call_id:
+                dialog_message = DialogUtils.prepare_tool_call_response(self.tool_call_id, text)
+            else:
+                dialog_message = DialogUtils.prepare_function_response(self.get_name(), text)
             await self.context_manager.add_message(dialog_message, response.message_id)
             return None
         except Exception as e:
