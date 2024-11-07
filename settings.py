@@ -80,6 +80,10 @@ POSTGRES_DATABASE = 'chatgpttg'
 IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
 
+# Todoist feature for bot admin
+ENABLE_TODOIST_ADMIN_INTEGRATION = False
+TODOIST_TOKEN = ''
+
 # Vectara RAG settings
 # this feature is highly experimental and not recommended to be used in it's current state
 # currently it even doesn't have instructions on how to setup, use it only if you feel experimenalish
