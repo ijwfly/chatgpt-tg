@@ -4,6 +4,7 @@ import settings
 from app.context.dialog_manager import DialogManager
 from app.functions.dalle_3 import GenerateImageDalle3
 from app.functions.save_user_settings import SaveUserSettings
+from app.functions.todoist import TodoistAddTask
 from app.functions.vectara_search import VectorSearch
 from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
@@ -30,6 +31,9 @@ class FunctionManager:
 
     def get_conditional_functions(self):
         functions = []
+
+        if self.user.telegram_id == settings.USER_ROLE_MANAGER_CHAT_ID and settings.ENABLE_TODOIST_ADMIN_INTEGRATION:
+            functions.append(TodoistAddTask)
 
         if self.user.image_generation and check_access_conditions(USER_ROLE_IMAGE_GENERATION, self.user.role):
             functions.append(GenerateImageDalle3)
