@@ -84,6 +84,11 @@ IMAGE_PROXY_BIND_PORT = 8321
 ENABLE_TODOIST_ADMIN_INTEGRATION = False
 TODOIST_TOKEN = ''
 
+# Obsidian Echo integration for bot admin
+ENABLE_OBSIDIAN_ECHO_ADMIN_INTEGRATION = False
+OBSIDIAN_ECHO_BASE_URL = ''
+OBSIDIAN_ECHO_VAULT_TOKEN = ''
+
 # Vectara RAG settings
 # this feature is highly experimental and not recommended to be used in it's current state
 # currently it even doesn't have instructions on how to setup, use it only if you feel experimenalish
