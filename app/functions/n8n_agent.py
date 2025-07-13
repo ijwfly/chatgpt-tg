@@ -11,15 +11,15 @@ from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 # todoist = TodoistAPIAsync(settings.TODOIST_TOKEN)
 
 
-class N8NAgentCall(OpenAIFunctionParams):
+class N8NAgentCallParams(OpenAIFunctionParams):
     chatInput: str = Field(..., description="prompt for specified LLM agent")
     session_id: str = Field(None, description="session id, can be empty for the first call to this agent")
 
 
 class CallN8NAgent(OpenAIFunction):
-    PARAMS_SCHEMA = N8NAgentCall
+    PARAMS_SCHEMA = N8NAgentCallParams
 
-    async def run(self, params: TodoistAddTaskParams) -> Optional[str]:
+    async def run(self, params: N8NAgentCallParams) -> Optional[str]:
         try:
             async with httpx.AsyncClient(base_url=settings.OBSIDIAN_ECHO_BASE_URL) as client:
                 n8n_authorization = {"Authorization": f"Bearer {settings.N8N_TOKEN}"}

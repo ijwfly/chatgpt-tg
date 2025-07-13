@@ -3,7 +3,7 @@ from typing import Optional
 import settings
 from app.context.dialog_manager import DialogManager
 from app.functions.dalle_3 import GenerateImageDalle3
-from app.functions.n8n_agent import N8NAgentCall
+from app.functions.n8n_agent import CallN8NAgent
 from app.functions.obsidian_echo import CreateObsidianNote
 from app.functions.save_user_settings import SaveUserSettings
 from app.functions.todoist import TodoistAddTask
@@ -44,7 +44,7 @@ class FunctionManager:
             functions.append(GenerateImageDalle3)
 
         if self.user.telegram_id == settings.USER_ROLE_MANAGER_CHAT_ID and settings.ENABLE_TODOIST_ADMIN_INTEGRATION:
-            functions.append(N8NAgentCall)
+            functions.append(CallN8NAgent)
 
         if self.user.system_prompt_settings_enabled:
             functions.append(SaveUserSettings)
