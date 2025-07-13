@@ -43,7 +43,7 @@ class FunctionManager:
         if self.user.image_generation and check_access_conditions(USER_ROLE_IMAGE_GENERATION, self.user.role):
             functions.append(GenerateImageDalle3)
 
-        if settings.ENABLE_TODOIST_ADMIN_INTEGRATION:
+        if settings.ENABLE_N8N_AGENT_INTEGRATION:
             functions.append(CallN8NAgent)
 
         if self.user.system_prompt_settings_enabled:
