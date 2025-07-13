@@ -23,7 +23,7 @@ class CallN8NAgent(OpenAIFunction):
         try:
             async with httpx.AsyncClient(base_url=settings.N8N_BASE_URL) as client:
                 n8n_authorization = {"Authorization": f"Basic {settings.N8N_TOKEN}"}
-                if params.session_id is None:
+                if not params.session_id:
                     params.session_id = str(uuid.uuid4())
                 n8n_payload = {
                     "sessionId": params.session_id,
