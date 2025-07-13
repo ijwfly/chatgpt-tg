@@ -14,7 +14,7 @@ from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 
 class N8NAgentCallParams(OpenAIFunctionParams):
     chatInput: str = Field(..., description="prompt for specified LLM agent")
-    session_id: str = Field(None, description="session id, can be empty for the first call to this agent")
+    session_id: str = Field(None, description="session id, can be empty for the first call to this agent, and needed for consecutive calls")
 
 
 class CallN8NAgent(OpenAIFunction):
