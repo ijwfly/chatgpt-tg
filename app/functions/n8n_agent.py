@@ -21,7 +21,7 @@ class CallN8NAgent(OpenAIFunction):
 
     async def run(self, params: N8NAgentCallParams) -> Optional[str]:
         try:
-            async with httpx.AsyncClient(base_url=settings.OBSIDIAN_ECHO_BASE_URL) as client:
+            async with httpx.AsyncClient(base_url=settings.N8N_BASE_URL) as client:
                 n8n_authorization = {"Authorization": f"Bearer {settings.N8N_TOKEN}"}
                 if params.session_id is None:
                     params.session_id = str(uuid.uuid4())
