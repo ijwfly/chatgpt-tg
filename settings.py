@@ -89,6 +89,11 @@ ENABLE_OBSIDIAN_ECHO_ADMIN_INTEGRATION = False
 OBSIDIAN_ECHO_BASE_URL = ''
 OBSIDIAN_ECHO_VAULT_TOKEN = ''
 
+# N8N Token
+ENABLE_N8N_AGENT_INTEGRATION = False
+N8N_TOKEN = ''
+N8N_BASE_URL = ''
+
 # Vectara RAG settings
 # this feature is highly experimental and not recommended to be used in it's current state
 # currently it even doesn't have instructions on how to setup, use it only if you feel experimenalish
