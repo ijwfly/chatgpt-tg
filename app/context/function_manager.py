@@ -3,6 +3,7 @@ from typing import Optional
 import settings
 from app.context.dialog_manager import DialogManager
 from app.functions.dalle_3 import GenerateImageDalle3
+from app.functions.mcp.mcp_function_storage import MCPFunctionManager
 from app.functions.obsidian_echo import CreateObsidianNote
 from app.functions.save_user_settings import SaveUserSettings
 from app.functions.todoist import TodoistAddTask
@@ -59,6 +60,10 @@ class FunctionManager:
 
         functions = self.get_static_functions()
         functions += self.get_conditional_functions()
+
+        if self.user.telegram_id == settings.USER_ROLE_MANAGER_CHAT_ID and settings.N8N_TEST_MCP_SERVER_URL:
+            mcp_functions_manager = MCPFunctionManager(settings.N8N_TEST_MCP_SERVER_URL)
+            functions += await mcp_functions_manager.get_tools()
 
         if not functions:
             return None

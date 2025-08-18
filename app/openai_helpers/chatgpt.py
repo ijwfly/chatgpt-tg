@@ -111,7 +111,7 @@ class ChatGPT:
         )
         completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp.usage))
         message = resp.choices[0].message
-        response = DialogMessage(**dict(message))
+        response = DialogMessage(**message.dict())
         return response, completion_usage
 
     async def send_messages_streaming(self, messages_to_send: List[DialogMessage], is_cancelled: Callable[[], bool]) -> (DialogMessage, CompletionUsage):
