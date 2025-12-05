@@ -111,7 +111,7 @@ class ChatGPT:
         )
         completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp.usage))
         message = resp.choices[0].message
-        response = DialogMessage(**dict(message))
+        response = DialogMessage(**message.dict())
         return response, completion_usage
 
     async def send_messages_streaming(self, messages_to_send: List[DialogMessage], is_cancelled: Callable[[], bool]) -> (DialogMessage, CompletionUsage):
@@ -129,6 +129,7 @@ class ChatGPT:
         # TODO: calculate function tokens
         prompt_tokens = count_messages_tokens(messages, self.llm_model.model_name)
         result_dict = {}
+        tool_calls_accumulator = {}
         async for resp_part in resp_generator:
             dialog_message = None
             completion_usage = None
@@ -151,13 +152,45 @@ class ChatGPT:
                 # TODO: find more accurate way to calculate completion length for function calls
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
             if delta and delta.tool_calls is not None:
-                if 'tool_calls' not in result_dict or result_dict['tool_calls'] is None:
-                    result_dict['tool_calls'] = []
-                for tool_call in delta.tool_calls:
-                    while tool_call.index >= len(result_dict['tool_calls']):
-                        result_dict['tool_calls'].append({})
-                    result_dict['tool_calls'][tool_call.index] = merge_dicts(result_dict['tool_calls'][tool_call.index], tool_call.dict())
-                dialog_message = DialogMessage(tool_calls=result_dict['tool_calls'])
+                for tool_call_chunk in delta.tool_calls:
+                    idx = tool_call_chunk.index
+
+                    # Инициализируем аккумулятор для этого tool call
+                    if idx not in tool_calls_accumulator:
+                        tool_calls_accumulator[idx] = {
+                            "id": "",
+                            "type": "function",
+                            "function": {
+                                "name": "",
+                                "arguments": "",
+                            }
+                        }
+
+                    # Аккумулируем данные
+                    if tool_call_chunk.id:
+                        tool_calls_accumulator[idx]["id"] = tool_call_chunk.id
+
+                    if tool_call_chunk.function:
+                        if tool_call_chunk.function.name:
+                            tool_calls_accumulator[idx]["function"]["name"] += tool_call_chunk.function.name
+                        if tool_call_chunk.function.arguments:
+                            tool_calls_accumulator[idx]["function"]["arguments"] += tool_call_chunk.function.arguments
+
+                tool_calls_list = []
+                for idx in sorted(tool_calls_accumulator.keys()):
+                    tc = tool_calls_accumulator[idx]
+                    tool_calls_list.append(
+                        ToolCall(
+                            id=tc["id"],
+                            type="function",
+                            function=FunctionCall(
+                                name=tc["function"]["name"],
+                                arguments=tc["function"]["arguments"]
+                            )
+                        )
+                    )
+
+                dialog_message = DialogMessage(tool_calls=tool_calls_list)
                 # TODO: find more accurate way to calculate completion length for function calls
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
 
