@@ -8,11 +8,19 @@ from app.functions.base import OpenAIFunction
 
 
 class MCPFunction(OpenAIFunction):
-    def __init__(self, mcp_server_url: str, name: str, description: str, schema: dict):
+    def __init__(
+        self,
+        mcp_server_url: str,
+        name: str,
+        description: str,
+        schema: dict,
+        headers: Optional[dict[str, str]] = None
+    ):
         self.mcp_server_url = mcp_server_url
         self.name = name
         self.description = description
         self.schema = schema
+        self.headers = headers
 
         self.user = None
         self.db = None
@@ -30,7 +38,7 @@ class MCPFunction(OpenAIFunction):
 
     async def run(self, params: dict) -> Optional[str]:
         # TODO: very naive implementation, refactor with session manager
-        async with streamablehttp_client(self.mcp_server_url) as (
+        async with streamablehttp_client(self.mcp_server_url, headers=self.headers) as (
                 read_stream,
                 write_stream,
                 _,
@@ -65,13 +73,14 @@ class MCPFunction(OpenAIFunction):
 
 
 class MCPFunctionManager:
-    def __init__(self, server_url: str):
+    def __init__(self, server_url: str, headers: Optional[dict[str, str]] = None):
         self.server_url = server_url
+        self.headers = headers
 
     async def get_tools(self):
         # TODO: very naive implementation, refactor with session manager
         result = []
-        async with streamablehttp_client(self.server_url) as (
+        async with streamablehttp_client(self.server_url, headers=self.headers) as (
                 read_stream,
                 write_stream,
                 _,
@@ -80,5 +89,11 @@ class MCPFunctionManager:
                 await session.initialize()
                 tools = await session.list_tools()
                 for tool in tools.tools:
-                    result.append(MCPFunction(self.server_url, tool.name, tool.description, tool.inputSchema))
+                    result.append(MCPFunction(
+                        self.server_url,
+                        tool.name,
+                        tool.description,
+                        tool.inputSchema,
+                        self.headers
+                    ))
         return result

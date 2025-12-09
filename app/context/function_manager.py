@@ -61,9 +61,10 @@ class FunctionManager:
         functions = self.get_static_functions()
         functions += self.get_conditional_functions()
 
-        if self.user.telegram_id == settings.USER_ROLE_MANAGER_CHAT_ID and settings.N8N_TEST_MCP_SERVER_URL:
-            mcp_functions_manager = MCPFunctionManager(settings.N8N_TEST_MCP_SERVER_URL)
-            functions += await mcp_functions_manager.get_tools()
+        for mcp_config in settings.MCP_SERVERS:
+            if check_access_conditions(mcp_config.min_role, self.user.role):
+                mcp_manager = MCPFunctionManager(mcp_config.url, mcp_config.headers)
+                functions += await mcp_manager.get_tools()
 
         if not functions:
             return None
