@@ -10,7 +10,7 @@ from app.storage.user_role import UserRole
 class MCPServerConfig:
     url: str
     min_role: UserRole
-    headers: Optional[dict[str, str]] = field(default=None)
+    headers: Optional[dict[str, str]] = None
 
 # ChatGPT system prompts
 gpt_mode = {
