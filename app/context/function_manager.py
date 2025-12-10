@@ -1,5 +1,6 @@
 from typing import Optional
 
+import logging
 import settings
 from app.context.dialog_manager import DialogManager
 from app.functions.dalle_3 import GenerateImageDalle3
@@ -13,6 +14,9 @@ from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User, MessageType
 from app.storage.user_role import check_access_conditions
 from settings import USER_ROLE_IMAGE_GENERATION
+
+
+logger = logging.getLogger(__name__)
 
 
 class FunctionManager:
@@ -64,7 +68,10 @@ class FunctionManager:
         for mcp_config in settings.MCP_SERVERS:
             if check_access_conditions(mcp_config.min_role, self.user.role):
                 mcp_manager = MCPFunctionManager(mcp_config.url, mcp_config.headers)
-                functions += await mcp_manager.get_tools()
+                try:
+                    functions += await mcp_manager.get_tools()
+                except Exception as e:
+                    logger.error("Error while getting tools: {}. Skipping MCP tools.".format(e))
 
         if not functions:
             return None
