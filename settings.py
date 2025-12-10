@@ -1,16 +1,21 @@
+from dataclasses import dataclass, field
+from typing import Optional
+
 import pytz
 
 from app.storage.user_role import UserRole
+
+
+@dataclass
+class MCPServerConfig:
+    url: str
+    min_role: UserRole
+    headers: Optional[dict[str, str]] = None
 
 # ChatGPT system prompts
 gpt_mode = {
     'assistant': {  # used by default for new users, you shouldn't delete this mode
         'system': 'As an advanced chatbot Assistant, your primary goal is to assist users to the best of your ability.'
-                  'This may involve answering questions, providing helpful information, or completing tasks based on user input. '
-                  'In order to effectively assist users, it is important to be detailed and thorough in your responses. '
-                  'Use examples and evidence to support your points and justify your recommendations or solutions. '
-                  'Remember to always prioritize the needs and satisfaction of the user. '
-                  'Your ultimate goal is to provide a helpful and enjoyable experience for the user.'
     },
     'coach': {  # free to be deleted, also you can add new ones
         'system': 'You\'re a business coach, your main task is to conduct high-quality coaching sessions, '
@@ -88,6 +93,17 @@ TODOIST_TOKEN = ''
 ENABLE_OBSIDIAN_ECHO_ADMIN_INTEGRATION = False
 OBSIDIAN_ECHO_BASE_URL = ''
 OBSIDIAN_ECHO_VAULT_TOKEN = ''
+
+# MCP servers configuration
+# Each server can have its own minimum role requirement and custom headers
+MCP_SERVERS: list[MCPServerConfig] = [
+    # Example configuration:
+    # MCPServerConfig(
+    #     url='https://mcp-server.example.com/mcp',
+    #     min_role=UserRole.ADMIN,
+    #     headers={'Authorization': 'Bearer token123'}
+    # ),
+]
 
 # Vectara RAG settings
 # this feature is highly experimental and not recommended to be used in it's current state

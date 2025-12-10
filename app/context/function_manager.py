@@ -1,8 +1,10 @@
 from typing import Optional
 
+import logging
 import settings
 from app.context.dialog_manager import DialogManager
 from app.functions.dalle_3 import GenerateImageDalle3
+from app.functions.mcp.mcp_function_storage import MCPFunctionManager
 from app.functions.obsidian_echo import CreateObsidianNote
 from app.functions.save_user_settings import SaveUserSettings
 from app.functions.todoist import TodoistAddTask
@@ -12,6 +14,9 @@ from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User, MessageType
 from app.storage.user_role import check_access_conditions
 from settings import USER_ROLE_IMAGE_GENERATION
+
+
+logger = logging.getLogger(__name__)
 
 
 class FunctionManager:
@@ -59,6 +64,14 @@ class FunctionManager:
 
         functions = self.get_static_functions()
         functions += self.get_conditional_functions()
+
+        for mcp_config in settings.MCP_SERVERS:
+            if check_access_conditions(mcp_config.min_role, self.user.role):
+                mcp_manager = MCPFunctionManager(mcp_config.url, mcp_config.headers)
+                try:
+                    functions += await mcp_manager.get_tools()
+                except Exception as e:
+                    logger.error("Error while getting tools: {}. Skipping MCP tools.".format(e))
 
         if not functions:
             return None
