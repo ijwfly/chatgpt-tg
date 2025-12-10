@@ -37,9 +37,9 @@ class MCPFunction(OpenAIFunction):
         return self
 
     async def run(self, params: dict) -> Optional[str]:
-        # TODO: Каждый вызов создаёт новое соединение к MCP серверу.
-        # Для оптимизации можно использовать ClientSessionGroup из MCP SDK,
-        # который позволяет переиспользовать сессии между вызовами.
+        # TODO: Each invocation creates a new connection to the MCP server.
+        # For optimization, you can use ClientSessionGroup from the MCP SDK,
+        # which allows sessions to be reused between invocations.
         try:
             async with streamablehttp_client(self.mcp_server_url, headers=self.headers) as (
                     read_stream,
@@ -85,9 +85,9 @@ class MCPFunctionManager:
         self.headers = headers
 
     async def get_tools(self):
-        # Каждый вызов создаёт новое соединение к MCP серверу.
-        # Для оптимизации можно использовать ClientSessionGroup из MCP SDK,
-        # который позволяет переиспользовать сессии между вызовами.
+        # TODO: Each invocation creates a new connection to the MCP server.
+        # For optimization, you can use ClientSessionGroup from the MCP SDK,
+        # which allows sessions to be reused between invocations.
         result = []
         async with streamablehttp_client(self.server_url, headers=self.headers) as (
                 read_stream,
