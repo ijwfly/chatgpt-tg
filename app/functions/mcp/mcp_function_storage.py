@@ -40,19 +40,21 @@ class MCPFunction(OpenAIFunction):
         # TODO: Каждый вызов создаёт новое соединение к MCP серверу.
         # Для оптимизации можно использовать ClientSessionGroup из MCP SDK,
         # который позволяет переиспользовать сессии между вызовами.
-        async with streamablehttp_client(self.mcp_server_url, headers=self.headers) as (
-                read_stream,
-                write_stream,
-                _,
-        ):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                result = await session.call_tool(self.name, arguments=params)
-                if result is not None and hasattr(result, 'content') and len(result.content):
-                    return result.content[0].text
-                else:
-                    return None
-
+        try:
+            async with streamablehttp_client(self.mcp_server_url, headers=self.headers) as (
+                    read_stream,
+                    write_stream,
+                    _,
+            ):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    result = await session.call_tool(self.name, arguments=params)
+                    if result is not None and hasattr(result, 'content') and len(result.content):
+                        return result.content[0].text
+                    else:
+                        return None
+        except Exception as e:
+            return f"Error calling MCP tool: {e}"
     async def run_dict_args(self, params: dict):
         return await self.run(params)
 
