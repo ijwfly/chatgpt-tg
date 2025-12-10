@@ -57,8 +57,11 @@ class MCPFunction(OpenAIFunction):
         return await self.run(params)
 
     async def run_str_args(self, params: str):
-        params = json.loads(params)
-        return await self.run(params)
+        try:
+            params_dict = json.loads(params)
+            return await self.run(params_dict)
+        except json.JSONDecodeError as e:
+            return f"JSON parsing error: {e}"
 
     def get_description(self) -> str:
         return self.description
