@@ -1,3 +1,4 @@
+import base64
 import dataclasses
 import re
 import asyncio
@@ -6,9 +7,11 @@ from functools import lru_cache
 from typing import List
 from contextlib import asynccontextmanager
 
+import httpx
 import requests
 from aiogram import types
 from aiogram.utils.exceptions import CantParseEntities
+from async_lru import alru_cache
 
 import settings
 from app.openai_helpers.utils import (calculate_completion_usage_price, calculate_whisper_usage_price,
@@ -228,8 +231,18 @@ def generate_document_id(chat_id, message_id):
 def get_image_proxy_url():
     public_url = f'{settings.IMAGE_PROXY_URL}:{settings.IMAGE_PROXY_PORT}'
     docker_url = f'http://image_proxy:{settings.IMAGE_PROXY_BIND_PORT}'
-    try:
-        requests.get(public_url)
-    except requests.ConnectionError:
-        return docker_url
+    # try:
+    #     requests.get(public_url)
+    # except requests.ConnectionError:
+    #     return docker_url
     return public_url
+
+
+@alru_cache(maxsize=15)
+async def get_image_base64(image_url: str) -> str:
+    async with httpx.AsyncClient() as client:
+        image_name = image_url.split('/')[-1]
+        url = f'{get_image_proxy_url()}/{image_name}'
+        response = await client.get(url)
+        response.raise_for_status()
+        return base64.b64encode(response.content).decode()

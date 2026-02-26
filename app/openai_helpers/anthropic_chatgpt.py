@@ -1,13 +1,10 @@
-import base64
 import json
 from typing import List, Any, Optional, Callable, Union
 
-import httpx
 import pydantic
-from async_lru import alru_cache
 
 import settings
-from app.bot.utils import get_image_proxy_url, merge_dicts
+from app.bot.utils import get_image_base64, merge_dicts
 from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage, FunctionCall, ToolCall
 from app.openai_helpers.function_storage import FunctionStorage
 
@@ -19,16 +16,6 @@ OPENAI_TO_ANTHROPIC_ROLE_MAPPING = {
     'tool': 'user',
     'assistant': 'assistant',
 }
-
-
-@alru_cache(maxsize=32)
-async def get_image_base64(image_url: str) -> str:
-    async with httpx.AsyncClient() as client:
-        image_name = image_url.split('/')[-1]
-        url = f'{get_image_proxy_url()}/{image_name}'
-        response = await client.get(url)
-        response.raise_for_status()
-        return base64.b64encode(response.content).decode()
 
 
 class AnthropicImageContent(pydantic.BaseModel):

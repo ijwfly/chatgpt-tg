@@ -3,7 +3,7 @@ from contextlib import suppress
 from typing import List, Any, Optional, Callable, Union
 
 import settings
-from app.bot.utils import merge_dicts
+from app.bot.utils import merge_dicts, get_image_base64
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
 
@@ -99,9 +99,34 @@ class ChatGPT:
         self.llm_model = llm_model
         self.system_prompt = system_prompt
 
+    async def _convert_images_to_base64(self, messages: List[DialogMessage]) -> List[DialogMessage]:
+        if self.llm_model.capabilities.image_input_format != 'base64':
+            return messages
+
+        converted = []
+        for msg in messages:
+            if isinstance(msg.content, list):
+                new_parts = []
+                for part in msg.content:
+                    if part.type == 'image_url' and part.image_url:
+                        base64_data = await get_image_base64(part.image_url.url)
+                        new_parts.append(DialogMessageContentPart(
+                            type='image_url',
+                            image_url=DialogMessageImageUrl(
+                                url=f'data:image/jpeg;base64,{base64_data}'
+                            ),
+                        ))
+                    else:
+                        new_parts.append(part)
+                converted.append(msg.copy(update={'content': new_parts}))
+            else:
+                converted.append(msg)
+        return converted
+
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = self.create_additional_fields()
 
+        messages_to_send = await self._convert_images_to_base64(messages_to_send)
         messages = self.create_context(messages_to_send, self.system_prompt)
         resp = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
@@ -117,6 +142,12 @@ class ChatGPT:
     async def send_messages_streaming(self, messages_to_send: List[DialogMessage], is_cancelled: Callable[[], bool]) -> (DialogMessage, CompletionUsage):
         additional_fields = self.create_additional_fields()
 
+        # count tokens before base64 conversion to preserve proxy URL token parsing
+        original_messages = self.create_context(messages_to_send, self.system_prompt)
+        # TODO: calculate function tokens
+        prompt_tokens = count_messages_tokens(original_messages, self.llm_model.model_name)
+
+        messages_to_send = await self._convert_images_to_base64(messages_to_send)
         messages = self.create_context(messages_to_send, self.system_prompt)
         resp_generator = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
@@ -125,9 +156,6 @@ class ChatGPT:
             stream=True,
             **additional_fields,
         )
-
-        # TODO: calculate function tokens
-        prompt_tokens = count_messages_tokens(messages, self.llm_model.model_name)
         result_dict = {}
         tool_calls_accumulator = {}
         async for resp_part in resp_generator:

@@ -32,6 +32,7 @@ class LLMCapabilities:
     tool_calling: bool = False
     image_processing: bool = False
     streaming_responses: bool = False
+    image_input_format: str = 'url'  # 'url' or 'base64'
 
 
 class LLModel:
@@ -292,6 +293,7 @@ def get_models():
                     image_processing=True,
                     streaming_responses=True,
                     tool_calling=True,
+                    image_input_format='base64',
                 ),
                 # base_url=settings.ANTHROPIC_BASE_URL,
             )
