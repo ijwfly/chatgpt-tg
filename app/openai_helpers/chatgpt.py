@@ -1,4 +1,5 @@
 import json
+import re
 from contextlib import suppress
 from typing import List, Any, Optional, Callable, Union
 
@@ -47,6 +48,7 @@ class DialogMessage(pydantic.BaseModel):
     function_call: Optional[FunctionCall] = None
     tool_calls: Optional[List[ToolCall]] = None
     tool_call_id: Optional[str] = None
+    thinking: Optional[str] = None
 
     def get_text_content(self):
         if isinstance(self.content, str):
@@ -55,6 +57,13 @@ class DialogMessage(pydantic.BaseModel):
             return '\n'.join(part.text for part in self.content if part.text is not None)
         else:
             raise ValueError('Unknown type of content')
+
+    def strip_thinking(self) -> 'DialogMessage':
+        new = self.copy()
+        new.thinking = None
+        if isinstance(new.content, str):
+            new.content = re.sub(r'<(?:think|thinking)>.*?</(?:think|thinking)>', '', new.content, flags=re.DOTALL).strip()
+        return new
 
     def openai_message(self):
         if isinstance(self.content, str):
@@ -91,6 +100,59 @@ class DialogMessage(pydantic.BaseModel):
         if self.tool_call_id:
             data['tool_call_id'] = self.tool_call_id
         return data
+
+
+_THINK_OPEN_TAGS = ('<think>', '<thinking>')
+_THINK_CLOSE_TAGS = ('</think>', '</thinking>')
+
+
+def _find_think_open(content: str) -> tuple:
+    """Find the first <think> or <thinking> opening tag. Returns (index, tag_len) or (-1, 0)."""
+    best = -1
+    best_len = 0
+    for tag in _THINK_OPEN_TAGS:
+        idx = content.find(tag)
+        if idx != -1 and (best == -1 or idx < best):
+            best = idx
+            best_len = len(tag)
+    return best, best_len
+
+
+def _find_think_close(content: str) -> tuple:
+    """Find the first </think> or </thinking> closing tag. Returns (index, tag_len) or (-1, 0)."""
+    best = -1
+    best_len = 0
+    for tag in _THINK_CLOSE_TAGS:
+        idx = content.find(tag)
+        if idx != -1 and (best == -1 or idx < best):
+            best = idx
+            best_len = len(tag)
+    return best, best_len
+
+
+def parse_thinking(content: str) -> tuple:
+    """
+    Parse <think>/<thinking> tags in accumulated content.
+    Returns: (visible_content, thinking_text, is_thinking)
+    """
+    if not content:
+        return '', '', False
+
+    open_idx, open_len = _find_think_open(content)
+    if open_idx == -1:
+        return content, '', False
+
+    close_idx, close_len = _find_think_close(content)
+    if close_idx == -1:
+        # Tag opened but not closed — model is still thinking
+        thinking_text = content[open_idx + open_len:]
+        visible = content[:open_idx]
+        return visible, thinking_text, True
+
+    # Tag closed — thinking is complete
+    thinking_text = content[open_idx + open_len:close_idx]
+    visible = content[:open_idx] + content[close_idx + close_len:]
+    return visible.strip(), thinking_text, False
 
 
 class ChatGPT:
@@ -239,6 +301,12 @@ class ChatGPT:
 
             # openai doesn't return this field in streaming mode somewhy
             dialog_message.role = 'assistant'
+
+            if isinstance(dialog_message.content, str):
+                visible, thinking, is_thinking = parse_thinking(dialog_message.content)
+                if thinking:
+                    dialog_message.thinking = thinking
+
             yield dialog_message, completion_usage
             if is_cancelled():
                 # some more tokens may be generated after cancellation

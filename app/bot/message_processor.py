@@ -12,7 +12,7 @@ from app.context.context_manager import build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.llm_models import get_model_by_name
 from app.openai_helpers.anthropic_chatgpt import AnthropicChatGPT
-from app.openai_helpers.chatgpt import ChatGPT
+from app.openai_helpers.chatgpt import ChatGPT, parse_thinking
 from app.openai_helpers.count_tokens import calculate_image_tokens
 from app.storage.db import DB, User, MessageType
 
@@ -20,6 +20,30 @@ from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
 
 WAIT_BETWEEN_MESSAGE_UPDATES = 2
 TELEGRAM_MESSAGE_LENGTH_CUTOFF = 4080
+THINKING_EMOJI = '\U0001f9e0'
+THINKING_MAX_CHARS = 80
+
+
+def _format_thinking_display(thinking_text: str) -> str:
+    thinking_fallback = f'{THINKING_EMOJI} Thinking...'
+    if not thinking_text or not thinking_text.strip():
+        return thinking_fallback
+
+    # Find last non-empty line
+    lines = thinking_text.strip().split('\n')
+    last_line = ''
+    for line in reversed(lines):
+        if line.strip():
+            last_line = line.strip()
+            break
+
+    if len(last_line) < 10:
+        return thinking_fallback
+
+    if len(last_line) > THINKING_MAX_CHARS:
+        last_line = last_line[:THINKING_MAX_CHARS] + '...'
+
+    return f'{THINKING_EMOJI} {last_line}'
 
 
 class MessageProcessor:
@@ -100,6 +124,10 @@ class MessageProcessor:
             raise ValueError('Model makes too many successive function calls')
 
         response_dialog_message, message_id = await self.handle_response_generator(response_generator)
+
+        # Strip thinking content before saving
+        if response_dialog_message is not None:
+            response_dialog_message = response_dialog_message.strip_thinking()
 
         if response_dialog_message.content:
             dialog_messages = self.split_dialog_message(response_dialog_message)
@@ -188,6 +216,7 @@ class MessageProcessor:
 
         message_too_long_for_telegram = False
         first_iteration = True
+        was_thinking = False
         async for dialog_message in response_generator:
             if first_iteration:
                 # HACK: skip first iteration for case with full synchronous openai response
@@ -200,28 +229,60 @@ class MessageProcessor:
             if dialog_message.function_call is not None or dialog_message.tool_calls is not None:
                 continue
 
-            new_content = ' '.join(dialog_message.content.strip().split(' ')[:-1]) if dialog_message.content else ''
+            # Parse thinking tags from content
+            if isinstance(dialog_message.content, str):
+                visible, thinking, is_thinking = parse_thinking(dialog_message.content)
+            else:
+                visible, thinking, is_thinking = '', '', False
+
+            if is_thinking:
+                was_thinking = True
+                # Model is thinking — show thinking indicator
+                thinking_display = _format_thinking_display(thinking)
+                if not message_id:
+                    resp = await send_telegram_message(self.message, thinking_display, reply_markup=keyboard)
+                    chat_id = self.message.chat.id
+                    await self.message.bot.send_chat_action(chat_id, 'typing')
+                    message_id = resp.message_id
+                    previous_content = thinking_display
+                    previous_time = datetime.now()
+                    continue
+
+                time_passed_seconds = (datetime.now() - previous_time).seconds
+                if previous_content != thinking_display and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES:
+                    await self.message.bot.edit_message_text(thinking_display, chat_id, message_id, reply_markup=keyboard)
+                    previous_content = thinking_display
+                    previous_time = datetime.now()
+                continue
+
+            # Transition from thinking to normal content — reset timer for immediate update
+            if was_thinking:
+                was_thinking = False
+                previous_time = None
+
+            # Normal streaming — use visible content (without thinking tags)
+            new_content = ' '.join(visible.strip().split(' ')[:-1]) if visible else ''
             if len(new_content) < 50:
                 continue
 
             # send message
             if not message_id:
-                resp = await send_telegram_message(self.message, dialog_message.content, reply_markup=keyboard)
+                resp = await send_telegram_message(self.message, new_content, reply_markup=keyboard)
                 chat_id = self.message.chat.id
                 # hack: most telegram clients remove "typing" status after receiving new message from bot
                 await self.message.bot.send_chat_action(chat_id, 'typing')
                 message_id = resp.message_id
-                previous_content = dialog_message.content
+                previous_content = new_content
                 previous_time = datetime.now()
                 continue
 
             # update message
-            time_passed_seconds = (datetime.now() - previous_time).seconds
+            time_passed_seconds = (datetime.now() - previous_time).seconds if previous_time else WAIT_BETWEEN_MESSAGE_UPDATES
             if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES:
                 if len(new_content) > TELEGRAM_MESSAGE_LENGTH_CUTOFF:
                     # stop updating message if it's too long
                     message_too_long_for_telegram = True
-                    new_content = f'{new_content[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]} ⏳...'
+                    new_content = f'{new_content[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]} \u23f3...'
                 await self.message.bot.edit_message_text(new_content, chat_id, message_id, reply_markup=keyboard)
                 previous_content = new_content
                 previous_time = datetime.now()
