@@ -167,3 +167,7 @@ cython_debug/
 /.idea/vcs.xml
 /.idea/sqldialects.xml
 .aider*
+settings_local.py
+docker-compose.override.yml
+
+.DS_STORE

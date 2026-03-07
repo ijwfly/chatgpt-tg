@@ -113,3 +113,12 @@ VECTARA_RAG_ENABLED = False
 VECTARA_CUSTOMER_ID = -1
 VECTARA_API_KEY = 'YOUR KEY'
 VECTARA_CORPUS_ID = -1
+
+# Extra models configuration — define custom LLM models in settings_local.py
+EXTRA_MODELS: list[dict] = []
+
+# Local overrides — create settings_local.py (gitignored) to override any setting
+try:
+    from settings_local import *
+except ImportError:
+    pass
