@@ -21,7 +21,7 @@ from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
 WAIT_BETWEEN_MESSAGE_UPDATES = 2
 TELEGRAM_MESSAGE_LENGTH_CUTOFF = 4080
 THINKING_EMOJI = '\U0001f9e0'
-THINKING_MAX_CHARS = 80
+THINKING_MAX_CHARS = 300
 
 
 def _format_thinking_display(thinking_text: str) -> str:
