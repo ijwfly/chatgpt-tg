@@ -1,0 +1,25 @@
+# Development overrides — copy to docker-compose.override.yml (gitignored).
+# Docker Compose automatically merges this with docker-compose.yml.
+
+version: '3.7'
+
+services:
+  app:
+    # Sleep loop instead of running the bot (for development)
+    entrypoint: sh -c 'while true; do echo "working..."; sleep 60; done'
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  pgweb:
+    restart: always
+    image: sosedoff/pgweb
+    ports:
+      - "8081:8081"
+    links:
+      - postgres:postgres
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-chatgpttg}?sslmode=disable
+    depends_on:
+      - postgres

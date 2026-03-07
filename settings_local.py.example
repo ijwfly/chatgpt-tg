@@ -1,0 +1,75 @@
+# Local settings overrides — copy this file to settings_local.py and fill in your values.
+# settings_local.py is gitignored and will never be committed.
+#
+# Any variable from settings.py can be overridden here.
+# You can import types from settings if needed:
+#   from settings import MCPServerConfig, UserRole
+
+# from settings import MCPServerConfig
+from app.storage.user_role import UserRole
+
+# === Required ===
+OPENAI_TOKEN = ''
+TELEGRAM_BOT_TOKEN = ''
+
+# === Optional API keys ===
+# OPENROUTER_TOKEN = ''
+# ANTHROPIC_TOKEN = ''
+
+# === OpenAI base URL (for proxies or compatible APIs) ===
+# OPENAI_BASE_URL = 'https://api.openai.com/v1'
+
+# === Database (if not using docker-compose defaults) ===
+# POSTGRES_HOST = 'postgres'
+# POSTGRES_PORT = 5432
+# POSTGRES_USER = 'postgres'
+# POSTGRES_PASSWORD = 'password'
+# POSTGRES_DATABASE = 'chatgpttg'
+
+# === User roles ===
+# USER_ROLE_DEFAULT = UserRole.BASIC
+# USER_ROLE_BOT_ACCESS = UserRole.BASIC
+# USER_ROLE_CHOOSE_MODEL = UserRole.BASIC
+# USER_ROLE_STREAMING_ANSWERS = UserRole.BASIC
+
+# === User role manager chat ===
+# ENABLE_USER_ROLE_MANAGER_CHAT = False
+# USER_ROLE_MANAGER_CHAT_ID = -1
+
+# === Plugins ===
+# ENABLE_WOLFRAMALPHA = False
+# WOLFRAMALPHA_APPID = ''
+
+# ENABLE_TODOIST_ADMIN_INTEGRATION = False
+# TODOIST_TOKEN = ''
+
+# === Image proxy ===
+# IMAGE_PROXY_URL = 'http://your-server-ip'
+
+# === MCP servers ===
+# from settings import MCPServerConfig
+# MCP_SERVERS = [
+#     MCPServerConfig(
+#         url='https://mcp-server.example.com/mcp',
+#         min_role=UserRole.ADMIN,
+#         headers={'Authorization': 'Bearer token123'}
+#     ),
+# ]
+
+# === Extra LLM models (added without modifying llm_models.py) ===
+# EXTRA_MODELS = [
+#     {
+#         'model_name': 'my-local-model',
+#         'model_readable_name': 'My Local Model',
+#         'api_key': 'not-needed',
+#         'base_url': 'http://localhost:1234/v1',
+#         'context_configuration': {
+#             'short_term_memory_tokens': 8192,
+#             'summary_length': 2048,
+#             'hard_max_context_size': 13312,
+#         },
+#         'capabilities': {
+#             'streaming_responses': True,
+#         },
+#     },
+# ]
