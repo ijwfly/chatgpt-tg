@@ -157,6 +157,68 @@ docker compose -f docker-compose.test.yml down
 
 See `specs/E2E_TESTS.md` for details on test architecture and covered scenarios.
 
+🔄 **Upgrading from previous versions**
+
+<details>
+<summary>Migrating from settings.py to settings_local.py</summary>
+
+Previously all configuration was edited directly in `settings.py`, which caused merge conflicts on every `git pull`. Now your overrides live in `settings_local.py` (gitignored).
+
+**Quick migration:**
+
+```bash
+# 1. Your current settings.py becomes your local config
+cp settings.py settings_local.py
+
+# 2. Reset settings.py to defaults — no more merge conflicts
+git checkout settings.py
+
+# Done! The bot works exactly the same.
+```
+
+Optionally, clean up `settings_local.py` by removing unchanged defaults — you can see what you actually changed with:
+```bash
+git diff HEAD -- settings_local.py settings.py
+```
+
+</details>
+
+<details>
+<summary>Migrating custom models from llm_models.py</summary>
+
+If you added custom models directly in `app/llm_models.py`, move them to `EXTRA_MODELS` in `settings_local.py`. The `LLModel(...)` syntax is identical:
+
+```bash
+# See what you changed in llm_models.py
+git diff HEAD -- app/llm_models.py
+```
+
+Copy your `LLModel(...)` blocks into `settings_local.py`:
+```python
+from app.llm_models import LLModel, LLMPrice, LLMContextConfiguration, LLMCapabilities
+from app.openai_helpers.llm_client import OpenAISpecificAsyncOpenAIClient
+
+EXTRA_MODELS = [
+    # paste your LLModel(...) entries here — same syntax as in llm_models.py
+]
+```
+
+Then reset the file:
+```bash
+git checkout app/llm_models.py
+```
+
+</details>
+
+<details>
+<summary>Model list changes</summary>
+
+Deprecated models (gpt-4, gpt-4-turbo, gpt-4o, gpt-4o-mini) were removed from the built-in list. GPT-4.1 is now the default model — a migration will automatically switch all users to it.
+
+If you need any of the removed models, add them back via `EXTRA_MODELS` in `settings_local.py` (see "Adding custom LLM models" above). All conversations and usage history are preserved.
+
+</details>
+
 ⚠️ **Troubleshooting**
 
 If you have any issues with the bot, please create an issue in this repository. I will try to help you as soon as possible.  
