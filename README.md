@@ -49,23 +49,64 @@ You can also customize postgres credentials via a `.env` file (see `.env.example
 
 You can add extra models without modifying `app/llm_models.py` by setting `EXTRA_MODELS` in `settings_local.py`:
 ```python
+from app.llm_models import LLModel, LLMPrice, LLMContextConfiguration, LLMCapabilities
+from app.openai_helpers.llm_client import OpenAISpecificAsyncOpenAIClient
+
+EXTRA_MODELS = [
+    LLModel(
+        model_name='my-local-model',
+        model_readable_name='My Local Model',
+        api_key='not-needed',
+        base_url='http://localhost:1234/v1',
+        context_configuration=LLMContextConfiguration(
+            short_term_memory_tokens=8192,
+            summary_length=2048,
+            hard_max_context_size=13312,
+        ),
+        capabilities=LLMCapabilities(
+            streaming_responses=True,
+        ),
+    ),
+]
+```
+
+This gives you full access to all model parameters: `model_price` (with `LLMPrice`), `capabilities` (with `LLMCapabilities`), `api_client` (e.g. `OpenAISpecificAsyncOpenAIClient`, `AnthropicAsyncClient`), `minimum_user_role`, etc.
+
+<details>
+<summary>Migrating from dict-based EXTRA_MODELS</summary>
+
+If you used the old dict format, replace dicts with `LLModel(...)` calls and nested dicts with their dataclass equivalents:
+
+```python
+# Old format (still works, but deprecated):
 EXTRA_MODELS = [
     {
-        'model_name': 'my-local-model',
-        'model_readable_name': 'My Local Model',
-        'api_key': 'not-needed',
-        'base_url': 'http://localhost:1234/v1',
+        'model_name': 'my-model',
+        'api_key': 'key',
         'context_configuration': {
             'short_term_memory_tokens': 8192,
             'summary_length': 2048,
             'hard_max_context_size': 13312,
         },
-        'capabilities': {
-            'streaming_responses': True,
-        },
     },
 ]
+
+# New format:
+from app.llm_models import LLModel, LLMContextConfiguration
+
+EXTRA_MODELS = [
+    LLModel(
+        model_name='my-model',
+        api_key='key',
+        context_configuration=LLMContextConfiguration(
+            short_term_memory_tokens=8192,
+            summary_length=2048,
+            hard_max_context_size=13312,
+        ),
+    ),
+]
 ```
+</details>
 
 If you've done optional steps, when you send your first message to the bot, you will get a management message with your telegram id and info. You can use this message to setup your role as admin.
 

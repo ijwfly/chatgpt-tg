@@ -174,15 +174,18 @@ def get_models():
         })
 
     for model_config in settings.EXTRA_MODELS:
-        config = dict(model_config)
-        if isinstance(config.get('context_configuration'), dict):
-            config['context_configuration'] = LLMContextConfiguration(**config['context_configuration'])
-        if isinstance(config.get('model_price'), dict):
-            config['model_price'] = LLMPrice(**config['model_price'])
-        if isinstance(config.get('capabilities'), dict):
-            config['capabilities'] = LLMCapabilities(**config['capabilities'])
-        model = LLModel(**config)
-        models[model.model_name] = model
+        if isinstance(model_config, LLModel):
+            models[model_config.model_name] = model_config
+        else:
+            config = dict(model_config)
+            if isinstance(config.get('context_configuration'), dict):
+                config['context_configuration'] = LLMContextConfiguration(**config['context_configuration'])
+            if isinstance(config.get('model_price'), dict):
+                config['model_price'] = LLMPrice(**config['model_price'])
+            if isinstance(config.get('capabilities'), dict):
+                config['capabilities'] = LLMCapabilities(**config['capabilities'])
+            model = LLModel(**config)
+            models[model.model_name] = model
 
     return models
 
