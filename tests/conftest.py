@@ -102,6 +102,8 @@ async def db_pool(event_loop):
     """Session-scoped connection pool."""
     dsn = f'postgres://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DATABASE}'
     pool = await asyncpg.create_pool(dsn)
+    # Override DB default so test users get gpt-3.5-turbo (matches test mock setup)
+    await pool.execute("ALTER TABLE chatgpttg.user ALTER COLUMN current_model SET DEFAULT 'gpt-3.5-turbo'")
     yield pool
     await pool.close()
 
