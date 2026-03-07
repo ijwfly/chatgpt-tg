@@ -33,6 +33,17 @@ class MockLLMClient(BaseLLMClient):
             'function_call': function_call,
             'prompt_tokens': prompt_tokens,
             'completion_tokens': completion_tokens,
+            'streaming': False,
+        })
+
+    def add_streaming_response(self, content_chunks, tool_calls=None,
+                               prompt_tokens=10, completion_tokens=20):
+        self.responses.append({
+            'content_chunks': content_chunks,
+            'tool_calls': tool_calls,
+            'prompt_tokens': prompt_tokens,
+            'completion_tokens': completion_tokens,
+            'streaming': True,
         })
 
     async def chat_completions_create(self, model, messages, **additional_fields):
@@ -46,6 +57,10 @@ class MockLLMClient(BaseLLMClient):
             raise ValueError("MockLLMClient: no more responses in queue")
 
         resp_data = self.responses.pop(0)
+
+        if additional_fields.get('stream') and resp_data.get('streaming'):
+            return _build_streaming_response(resp_data, model)
+
         return _build_response(resp_data, model)
 
 
@@ -114,3 +129,79 @@ def _build_response(resp_data, model):
     resp.usage = usage
 
     return resp
+
+
+class MockDelta:
+    """Delta object that supports dict() conversion for merge_dicts."""
+    def __init__(self, content=None, function_call=None, tool_calls=None):
+        self.content = content
+        self.function_call = function_call
+        self.tool_calls = tool_calls
+
+    def __iter__(self):
+        items = []
+        if self.content is not None:
+            items.append(('content', self.content))
+        if self.function_call is not None:
+            items.append(('function_call', self.function_call))
+        if self.tool_calls is not None:
+            items.append(('tool_calls', self.tool_calls))
+        return iter(items)
+
+    def keys(self):
+        keys = []
+        if self.content is not None:
+            keys.append('content')
+        if self.function_call is not None:
+            keys.append('function_call')
+        if self.tool_calls is not None:
+            keys.append('tool_calls')
+        return keys
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+
+async def _build_streaming_response(resp_data, model):
+    """Build an async generator yielding mock streaming chunks."""
+    content_chunks = resp_data.get('content_chunks', [])
+    tool_calls_data = resp_data.get('tool_calls')
+    prompt_tokens = resp_data.get('prompt_tokens', 10)
+    completion_tokens = resp_data.get('completion_tokens', 20)
+
+    for chunk_text in content_chunks:
+        chunk = MagicMock()
+        delta = MockDelta(content=chunk_text)
+        choice = MagicMock()
+        choice.delta = delta
+        chunk.choices = [choice]
+        chunk.usage = None
+        yield chunk
+
+    # If tool_calls provided, yield a chunk with tool call data
+    if tool_calls_data:
+        chunk = MagicMock()
+        delta = MagicMock()
+        delta.content = None
+        delta.function_call = None
+        mock_tc_chunks = []
+        for i, tc in enumerate(tool_calls_data):
+            tc_chunk = MagicMock()
+            tc_chunk.index = i
+            tc_chunk.id = tc['id']
+            tc_chunk.function = MagicMock()
+            tc_chunk.function.name = tc['function']['name']
+            tc_chunk.function.arguments = tc['function']['arguments']
+            mock_tc_chunks.append(tc_chunk)
+        delta.tool_calls = mock_tc_chunks
+        choice = MagicMock()
+        choice.delta = delta
+        chunk.choices = [choice]
+        chunk.usage = None
+        yield chunk
+
+    # Final chunk with usage info and empty choices
+    final_chunk = MagicMock()
+    final_chunk.choices = []
+    final_chunk.usage = MockUsage(prompt_tokens, completion_tokens, prompt_tokens + completion_tokens)
+    yield final_chunk

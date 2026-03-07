@@ -68,6 +68,38 @@ def make_command_message(command, user_id=12345, chat_id=None, **kwargs):
     return make_text_message(f'/{command}', user_id=user_id, chat_id=chat_id, **kwargs)
 
 
+def make_forward_message(text, forward_sender_name=None, forward_from=None,
+                         user_id=12345, chat_id=None, **kwargs):
+    if chat_id is None:
+        chat_id = user_id
+
+    message_id = _next_message_id()
+    message_dict = {
+        'message_id': message_id,
+        'from': _make_user_dict(user_id, **{k: v for k, v in kwargs.items()
+                                            if k in ('first_name', 'last_name', 'username')}),
+        'chat': _make_chat_dict(chat_id),
+        'date': int(time.time()),
+        'text': text,
+        'forward_date': int(time.time()),
+    }
+
+    if forward_from:
+        message_dict['forward_from'] = {
+            'id': forward_from.get('id', 99999),
+            'is_bot': False,
+            'first_name': forward_from.get('first_name', 'Forwarded'),
+        }
+    elif forward_sender_name:
+        message_dict['forward_sender_name'] = forward_sender_name
+
+    update_dict = {
+        'update_id': _next_update_id(),
+        'message': message_dict,
+    }
+    return types.Update(**update_dict)
+
+
 def make_callback_query(data, message_id, user_id=12345, chat_id=None):
     if chat_id is None:
         chat_id = user_id

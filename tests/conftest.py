@@ -59,7 +59,7 @@ def _make_bot_request_handler():
         global _bot_message_id
         _bot_message_id += 1
 
-        if method in ('sendMessage', 'editMessageText', 'sendPhoto'):
+        if method in ('sendMessage', 'editMessageText', 'sendPhoto', 'editMessageReplyMarkup'):
             chat_id = 12345
             if data:
                 chat_id = data.get('chat_id', 12345)

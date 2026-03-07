@@ -29,6 +29,7 @@ All outgoing Telegram calls funnel through `Bot.request(method_name, data)`. The
 |--------|--------|---------|
 | `sendMessage` | `{message_id, from, chat, date, text}` | Response messages, function verbose output |
 | `editMessageText` | Same as sendMessage | Streaming updates |
+| `editMessageReplyMarkup` | Same as sendMessage | Settings toggle (update keyboard) |
 | `sendPhoto` | Same as sendMessage | DALL-E image results |
 | `sendChatAction` | `True` | TypingWorker background loop |
 | `deleteMessage` | `True` | /usage, /settings, /models |
@@ -55,7 +56,13 @@ tests/
 │   ├── __init__.py
 │   ├── test_simple_message.py      # Text message -> LLM response (4 tests)
 │   ├── test_commands.py            # /reset, /usage (2 tests)
-│   └── test_sub_dialogue.py        # Multi-message dialogue context (1 test)
+│   ├── test_sub_dialogue.py        # Multi-message dialogue context (1 test)
+│   ├── test_function_calling.py    # Tool calling via SaveUserSettings (3 tests)
+│   ├── test_streaming.py           # Streaming responses and thinking blocks (2 tests)
+│   ├── test_context_management.py  # Reset, expiration, reply branching (3 tests)
+│   ├── test_settings.py            # Settings menu and toggles (3 tests)
+│   ├── test_forwarded_messages.py  # Forwarded message context (1 test)
+│   └── test_error_handling.py      # Error conditions (1 test)
 ```
 
 ---
@@ -93,6 +100,7 @@ Factory functions for creating fake aiogram `types.Update` objects:
 
 - `make_text_message(text, user_id, chat_id, reply_to_message_id, ...)` — text message update
 - `make_command_message(command, ...)` — `/command` message update
+- `make_forward_message(text, forward_sender_name, forward_from, ...)` — forwarded message update
 - `make_callback_query(data, message_id, ...)` — callback query update
 
 Auto-incrementing counters for `update_id` and `message_id`.
@@ -101,12 +109,12 @@ Auto-incrementing counters for `update_id` and `message_id`.
 
 `MockLLMClient(BaseLLMClient)` — mock that returns canned responses from a queue:
 
-- `add_response(content, tool_calls, function_call, prompt_tokens, completion_tokens)` — enqueue a response
-- `chat_completions_create()` — pops first response, builds mock matching OpenAI SDK shape
+- `add_response(content, tool_calls, function_call, prompt_tokens, completion_tokens)` — enqueue a sync response
+- `add_streaming_response(content_chunks, tool_calls, prompt_tokens, completion_tokens)` — enqueue a streaming response (async generator of chunks)
+- `chat_completions_create()` — pops first response, builds mock matching OpenAI SDK shape. When `stream=True` and response is streaming, returns async generator
 - `calls` list — records all calls with model, messages, additional_fields
 - `MockUsage` — supports `dict()` conversion via `__iter__` (needed by `CompletionUsage(**dict(resp.usage))`)
-
-Currently only supports sync mode (`stream=False`). Streaming mock can be added later.
+- `MockDelta` — streaming chunk delta with proper `dict()` support for `merge_dicts()`
 
 ### bot_spy.py
 
@@ -151,21 +159,71 @@ Currently only supports sync mode (`stream=False`). Streaming mock can be added 
 
 **Pipeline covered:** `Multi-turn conversation: message A -> response A -> message B -> LLM gets context [A, response_A, B]`
 
+### test_function_calling.py (3 tests)
+
+| Test | Scenario | Verifies |
+|------|----------|----------|
+| `test_tool_call_executes_and_returns_to_llm` | LLM returns tool_call for `save_user_settings`, then final response | Tool execution, DB update, response passed back to LLM |
+| `test_function_call_verbose_shows_details` | Same with `function_call_verbose=True` | Verbose output with function name in message |
+| `test_successive_function_call_limit` | LLM returns tool_calls exceeding limit | Error message sent, exception raised |
+
+**Pipeline covered:** `MessageProcessor -> FunctionManager -> FunctionStorage -> SaveUserSettings -> recursive handle_gpt_response`
+
+### test_streaming.py (2 tests)
+
+| Test | Scenario | Verifies |
+|------|----------|----------|
+| `test_streaming_sends_and_edits_message` | Streaming response with multiple chunks | sendMessage during streaming + editMessageText after |
+| `test_streaming_with_thinking_blocks` | Streaming with `<think>` tags | Thinking emoji shown during thinking, final content visible |
+
+**Pipeline covered:** `ChatGptManager.send_user_message_streaming -> ChatGPT.send_messages_streaming -> handle_response_generator (streaming edits, thinking parsing)`
+
+### test_context_management.py (3 tests)
+
+| Test | Scenario | Verifies |
+|------|----------|----------|
+| `test_reset_clears_context` | Send A -> /reset -> send B | LLM context for B doesn't contain A |
+| `test_message_expiration_starts_fresh_context` | Send A -> age messages 2h -> send B | Expired messages excluded from context |
+| `test_reply_to_bot_message_loads_branch` | Send A -> /reset -> send B -> reply to A's response | Reply loads branch A context, not branch B |
+
+**Pipeline covered:** `DialogManager.process_dialog (reset, expiration, reply branching) -> DB message chain`
+
+### test_settings.py (3 tests)
+
+| Test | Scenario | Verifies |
+|------|----------|----------|
+| `test_settings_command_shows_menu` | Send `/settings` | Bot sends message with "Settings:" text |
+| `test_toggle_setting_updates_db` | Callback query `settings.streaming_answers` | Setting value flipped in DB |
+| `test_hide_settings_deletes_message` | Callback query `settings.hide` | Bot calls deleteMessage |
+
+**Pipeline covered:** `Settings.send_settings -> process_callback -> toggle_setting -> DB update / delete_message`
+
+### test_forwarded_messages.py (1 test)
+
+| Test | Scenario | Verifies |
+|------|----------|----------|
+| `test_forwarded_message_as_context` | Forward message + prompt | LLM context includes sender name and forwarded content |
+
+**Pipeline covered:** `BatchedInputHandler.handle_forwarded_message -> MessageProcessor.add_text_as_context`
+
+### test_error_handling.py (1 test)
+
+| Test | Scenario | Verifies |
+|------|----------|----------|
+| `test_error_on_no_llm_response` | Empty MockLLMClient response queue | "Something went wrong" message sent |
+
+**Pipeline covered:** `process_batch exception handler -> message.answer with error`
+
 ---
 
 ## Not Yet Covered
 
 | Scenario | Why | Priority |
 |----------|-----|----------|
-| Streaming responses | Requires async generator mock for `send_messages_streaming()` | Medium |
-| Sub-dialogue via reply | Needs `reply_to_message_id` pointing to a real DB-stored tg_message_id | Medium |
-| Function/tool calling | Needs MockLLMClient to return `tool_calls`, then a second response | Medium |
 | Image generation (DALL-E) | Needs mock of `OpenAIAsync.instance().images.generate()` + `httpx` | Low |
 | Voice input (Whisper) | Needs mock of file download + pydub + Whisper API | Low |
 | Context auto-summarization | Needs enough messages to exceed `short_term_memory_tokens` | Low |
-| Message expiration | Needs time manipulation (messages older than 1 hour) | Low |
 | Access control (role gating) | Needs user with insufficient role | Low |
-| Settings/models menus | Needs callback query handling + inline keyboard parsing | Low |
 | Cancellation (streaming stop) | Needs streaming mock + callback query | Low |
 | Anthropic models | Needs `AnthropicChatGPT` path + different mock shape | Low |
 | MCP tool calling | Needs MCP server mock | Low |
@@ -199,5 +257,7 @@ Applied in `conftest.py` before any app imports:
 2. **`LLMClientFactory._model_clients` is class-level** — cleared per test to avoid cross-test contamination
 3. **`DBFactory.connection_pool` is class-level** — pre-set in bot_app fixture to reuse session pool
 4. **`monthly_usage_task.start()` in on_startup** — creates background task, stopped in teardown
-5. **Sync mode only** — initial tests use `user.streaming_answers = False` (default for new users). Streaming tests need async generator mocks
+5. **Streaming mock** — `add_streaming_response()` returns an async generator with `MockDelta` objects supporting `dict()` conversion (required by `merge_dicts()` in `send_messages_streaming`)
 6. **`TypingWorker`** — background task calls `bot.send_chat_action` in a loop; handled by Bot.request mock returning `True`
+7. **Error tests** — `process_batch` sends "Something went wrong" then re-raises; tests must use `pytest.raises(ValueError)` around `dp.process_update()`
+8. **Streaming edits timing** — `WAIT_BETWEEN_MESSAGE_UPDATES = 2s` prevents edits in fast tests; streaming tests verify sendMessage during streaming + editMessageText after (from `handle_gpt_response`)
