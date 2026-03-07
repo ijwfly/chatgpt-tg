@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 
@@ -98,3 +99,51 @@ class TestStreaming:
         # Final message should have actual response
         assert any("response content" in t for t in all_texts), \
             f"Expected 'response content' in messages, got: {all_texts}"
+
+    async def test_streaming_tool_call_executes(self, bot_app):
+        """Streaming tool call is not lost on final usage-only chunk."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+
+        user_id = 55557
+
+        # Create user
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("Hello!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Hi', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(0.1)
+
+        # Enable streaming + functions
+        user = await telegram_bot.db.get_user(user_id)
+        user.streaming_answers = True
+        user.use_functions = True
+        user.system_prompt_settings_enabled = True
+        await telegram_bot.db.update_user(user)
+
+        # Streaming response: tool call without content, then final answer
+        mock_llm2 = MockLLMClient()
+        mock_llm2.add_streaming_response(
+            content_chunks=[],
+            tool_calls=[{
+                'id': 'call_stream_1',
+                'function': {
+                    'name': 'save_user_settings',
+                    'arguments': json.dumps({'settings_text': 'Name: StreamTest'}),
+                },
+            }],
+        )
+        mock_llm2.add_streaming_response(content_chunks=["Settings saved!"])
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
+
+        update2 = make_text_message('Save my name as StreamTest', user_id=user_id)
+        await dp.process_update(update2)
+        await asyncio.sleep(0.3)
+
+        spy.assert_sent_text_contains("Settings saved!")
+
+        # Verify DB was updated by the function
+        user = await telegram_bot.db.get_user(user_id)
+        assert user.system_prompt_settings == 'Name: StreamTest'
