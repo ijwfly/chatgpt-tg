@@ -77,7 +77,7 @@ def get_models():
                 model_name=LLModel.GPT_35_TURBO,
                 model_readable_name='GPT-3.5',
                 api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=settings.USER_ROLE_BOT_ACCESS,
+                minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
                     short_term_memory_tokens=10*1024,
                     summary_length=2*1024,
@@ -99,7 +99,7 @@ def get_models():
                 model_name=LLModel.GPT_41,
                 model_readable_name='GPT-4.1',
                 api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                minimum_user_role=settings.USER_ROLE_BOT_ACCESS,
                 context_configuration=LLMContextConfiguration(
                     short_term_memory_tokens=32 * 1024,
                     summary_length=8 * 1024,
