@@ -37,13 +37,7 @@ class LLMCapabilities:
 
 class LLModel:
     GPT_35_TURBO = 'gpt-3.5-turbo'
-    GPT_35_TURBO_16K = 'gpt-3.5-turbo-16k'
-    GPT_4 = 'gpt-4'
-    GPT_4_TURBO = 'gpt-4-turbo'
-    GPT_4O = 'gpt-4o'
-    GPT_4O_MINI = 'gpt-4o-mini'
-    GPT_4_TURBO_PREVIEW = 'gpt-4-turbo-preview'
-    GPT_4_VISION_PREVIEW = 'gpt-4-vision-preview'
+    GPT_41 = 'gpt-4.1'
     ANTHROPIC_CLAUDE_35_SONNET = 'claude-3-5-sonnet-20240620'
     OPENROUTER_WIZARDLM2 = 'microsoft/wizardlm-2-8x22b'
 
@@ -76,6 +70,7 @@ class LLModel:
 def get_models():
     models = {}
 
+    # openai models
     if settings.OPENAI_TOKEN:
         models.update({
             LLModel.GPT_35_TURBO: LLModel(
@@ -100,19 +95,19 @@ def get_models():
                 base_url=settings.OPENAI_BASE_URL,
                 api_client=OpenAISpecificAsyncOpenAIClient,
             ),
-            LLModel.GPT_4_TURBO: LLModel(
-                model_name=LLModel.GPT_4_TURBO,
-                model_readable_name='GPT-4 Turbo',
+            LLModel.GPT_41: LLModel(
+                model_name=LLModel.GPT_41,
+                model_readable_name='GPT-4.1',
                 api_key=settings.OPENAI_TOKEN,
                 minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
                 context_configuration=LLMContextConfiguration(
-                    short_term_memory_tokens=5*1024,
-                    summary_length=2048,
-                    hard_max_context_size=13*1024,
+                    short_term_memory_tokens=32 * 1024,
+                    summary_length=8 * 1024,
+                    hard_max_context_size=64 * 1024,
                 ),
                 model_price=LLMPrice(
-                    input_tokens_price=Decimal('0.01'),
-                    output_tokens_price=Decimal('0.03'),
+                    input_tokens_price=Decimal('0.002'),
+                    output_tokens_price=Decimal('0.008'),
                 ),
                 capabilities=LLMCapabilities(
                     function_calling=True,
@@ -122,126 +117,6 @@ def get_models():
                 ),
                 base_url=settings.OPENAI_BASE_URL,
                 api_client=OpenAISpecificAsyncOpenAIClient,
-            ),
-            LLModel.GPT_4O: LLModel(
-                model_name=LLModel.GPT_4O,
-                model_readable_name='GPT-4o',
-                api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
-                context_configuration=LLMContextConfiguration(
-                    short_term_memory_tokens=8 * 1024,
-                    summary_length=2048,
-                    hard_max_context_size=13 * 1024,
-                ),
-                model_price=LLMPrice(
-                    input_tokens_price=Decimal('0.005'),
-                    output_tokens_price=Decimal('0.015'),
-                ),
-                capabilities=LLMCapabilities(
-                    function_calling=True,
-                    image_processing=True,
-                    streaming_responses=True,
-                    tool_calling=True,
-                ),
-                base_url=settings.OPENAI_BASE_URL,
-                api_client=OpenAISpecificAsyncOpenAIClient,
-            ),
-            LLModel.GPT_4O_MINI: LLModel(
-                model_name=LLModel.GPT_4O_MINI,
-                model_readable_name='GPT-4o mini',
-                api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
-                context_configuration=LLMContextConfiguration(
-                    short_term_memory_tokens=8 * 1024,
-                    summary_length=2048,
-                    hard_max_context_size=13 * 1024,
-                ),
-                model_price=LLMPrice(
-                    input_tokens_price=Decimal('0.00015'),
-                    output_tokens_price=Decimal('0.0006'),
-                ),
-                capabilities=LLMCapabilities(
-                    function_calling=True,
-                    image_processing=True,
-                    streaming_responses=True,
-                    tool_calling=True,
-                ),
-                base_url=settings.OPENAI_BASE_URL,
-                api_client=OpenAISpecificAsyncOpenAIClient,
-            ),
-
-            # Deprecated OpenAI models
-            LLModel.GPT_35_TURBO_16K: LLModel(
-                model_name=LLModel.GPT_35_TURBO_16K,
-                model_readable_name='GPT-3.5 16K',
-                api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=UserRole.NOONE,
-                context_configuration=LLMContextConfiguration(
-                    short_term_memory_tokens=4096,
-                    summary_length=1024,
-                    hard_max_context_size=17*1024,
-                ),
-                model_price=LLMPrice(
-                    input_tokens_price=Decimal('0.003'),
-                    output_tokens_price=Decimal('0.004'),
-                ),
-                capabilities=LLMCapabilities(
-                    function_calling=True,
-                ),
-            ),
-            LLModel.GPT_4: LLModel(
-                model_name=LLModel.GPT_4,
-                model_readable_name='GPT-4',
-                api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=UserRole.NOONE,
-                context_configuration=LLMContextConfiguration(
-                    short_term_memory_tokens=2048,
-                    summary_length=1024,
-                    hard_max_context_size=9*1024,
-                ),
-                model_price=LLMPrice(
-                    input_tokens_price=Decimal('0.03'),
-                    output_tokens_price=Decimal('0.06'),
-                ),
-                capabilities=LLMCapabilities(
-                    function_calling=True,
-                ),
-            ),
-            LLModel.GPT_4_TURBO_PREVIEW: LLModel(
-                model_name=LLModel.GPT_4_TURBO_PREVIEW,
-                model_readable_name='GPT-4 Turbo Preview',
-                api_key=settings.OPENAI_TOKEN,
-                minimum_user_role=UserRole.NOONE,
-                context_configuration=LLMContextConfiguration(
-                    short_term_memory_tokens=5120,
-                    summary_length=2048,
-                    hard_max_context_size=13*1024,
-                ),
-                model_price=LLMPrice(
-                    input_tokens_price=Decimal('0.01'),
-                    output_tokens_price=Decimal('0.03'),
-                ),
-                capabilities=LLMCapabilities(
-                    function_calling=True,
-                ),
-            ),
-            LLModel.GPT_4_VISION_PREVIEW: LLModel(
-                model_name=LLModel.GPT_4_VISION_PREVIEW,
-                model_readable_name='GPT-4 Vision Preview',
-                minimum_user_role=UserRole.NOONE,
-                api_key=settings.OPENAI_TOKEN,
-                context_configuration=LLMContextConfiguration(
-                    short_term_memory_tokens=5120,
-                    summary_length=2048,
-                    hard_max_context_size=13*1024,
-                ),
-                model_price=LLMPrice(
-                    input_tokens_price=Decimal('0.01'),
-                    output_tokens_price=Decimal('0.03'),
-                ),
-                capabilities=LLMCapabilities(
-                    image_processing=True,
-                ),
             ),
         })
 
@@ -252,7 +127,7 @@ def get_models():
                 model_name=LLModel.OPENROUTER_WIZARDLM2,
                 model_readable_name='WizardLM-2 8x22b',
                 api_key=settings.OPENROUTER_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
                     short_term_memory_tokens=8*1024,
                     summary_length=2048,
@@ -278,7 +153,7 @@ def get_models():
                 model_readable_name='Claude 3.5 Sonnet',
                 api_client=AnthropicAsyncClient,
                 api_key=settings.ANTHROPIC_TOKEN,
-                minimum_user_role=settings.USER_ROLE_CHOOSE_MODEL,
+                minimum_user_role=UserRole.NOONE,
                 context_configuration=LLMContextConfiguration(
                     short_term_memory_tokens=10 * 1024,
                     summary_length=2048,
@@ -293,7 +168,6 @@ def get_models():
                     image_processing=True,
                     streaming_responses=True,
                     tool_calling=True,
-                    image_input_format='base64',
                 ),
                 # base_url=settings.ANTHROPIC_BASE_URL,
             )

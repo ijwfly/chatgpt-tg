@@ -18,7 +18,7 @@ from app.storage.db import DB, User, MessageType
 
 from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
 
-WAIT_BETWEEN_MESSAGE_UPDATES = 2
+WAIT_BETWEEN_MESSAGE_UPDATES = 1
 TELEGRAM_MESSAGE_LENGTH_CUTOFF = 4080
 THINKING_EMOJI = '\U0001f9e0'
 THINKING_MAX_CHARS = 300
