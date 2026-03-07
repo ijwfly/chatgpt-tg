@@ -184,7 +184,8 @@ class DB:
         SELECT model, 
            SUM(prompt_tokens) AS prompt_tokens, 
            SUM(completion_tokens) AS completion_tokens,
-           SUM(total_tokens) AS total_tokens
+           SUM(total_tokens) AS total_tokens,
+           SUM(price) AS price
         FROM chatgpttg.completion_usage
         WHERE user_id = $1 AND
           date_trunc('month', cdate) = date_trunc('month', current_date)
@@ -238,7 +239,8 @@ class DB:
         SELECT u.telegram_id, u.username, u.full_name, cu.model, 
            SUM(cu.prompt_tokens) AS prompt_tokens, 
            SUM(cu.completion_tokens) AS completion_tokens,
-           SUM(cu.total_tokens) AS total_tokens
+           SUM(cu.total_tokens) AS total_tokens,
+           SUM(cu.price) AS price
         FROM chatgpttg.completion_usage cu
         JOIN chatgpttg.user u ON cu.user_id = u.id
         WHERE EXTRACT(YEAR FROM cu.cdate) = {year} AND EXTRACT(MONTH FROM cu.cdate) = {month}

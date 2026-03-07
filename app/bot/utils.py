@@ -14,7 +14,7 @@ from aiogram.utils.exceptions import CantParseEntities
 from async_lru import alru_cache
 
 import settings
-from app.openai_helpers.utils import (calculate_completion_usage_price, calculate_whisper_usage_price,
+from app.openai_helpers.utils import (calculate_whisper_usage_price,
                                       calculate_image_generation_usage_price, calculate_tts_usage_price)
 
 TYPING_TIMEOUT = 180
@@ -195,9 +195,7 @@ async def get_usage_response_all_users(db, month_date: date = None) -> str:
         user_usage_price = 0
 
         for usage in user_completion_usages:
-            user_usage_price += calculate_completion_usage_price(
-                usage.prompt_tokens, usage.completion_tokens, usage.model
-            )
+            user_usage_price += usage.price
 
         for usage in image_generation_usages.get(name, []):
             user_usage_price += calculate_image_generation_usage_price(

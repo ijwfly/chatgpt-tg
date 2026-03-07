@@ -1,6 +1,7 @@
 import json
 import re
 from contextlib import suppress
+from decimal import Decimal
 from typing import List, Any, Optional, Callable, Union
 
 import settings
@@ -29,6 +30,7 @@ class CompletionUsage(pydantic.BaseModel):
     completion_tokens: int
     total_tokens: int
     model: str
+    price: Decimal = Decimal('0')
 
 
 class DialogMessageImageUrl(pydantic.BaseModel):
