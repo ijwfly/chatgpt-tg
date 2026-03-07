@@ -776,12 +776,23 @@ chatgpt-tg/
 │   ├── entrypoint.sh             # Docker entrypoint for migrations
 │   └── wait-for-it.sh            # PostgreSQL readiness wait utility
 │
+├── tests/                        # E2E tests (real DB, mocked LLM/Telegram)
+│   ├── conftest.py               # Core fixtures: db, bot, dispatcher, cleanup
+│   ├── helpers/
+│   │   ├── telegram_factory.py   # Factory for fake aiogram Update objects
+│   │   ├── mock_llm_client.py    # MockLLMClient with canned responses
+│   │   └── bot_spy.py            # Assertion helpers over Bot.request calls
+│   └── e2e/
+│       ├── test_simple_message.py  # Text message → LLM response (4 tests)
+│       ├── test_commands.py        # /reset, /usage (2 tests)
+│       └── test_sub_dialogue.py    # Multi-message dialogue context (1 test)
+│
 ├── scripts/
+│   ├── test.sh                   # Run tests locally (postgres in docker, pytest on host)
+│   ├── test_docker.sh            # Run tests fully in docker
 │   ├── update_keyboards.py       # Update bot commands for all users
 │   ├── send_management_menus.py  # Send role management menus
 │   └── create_vectara_corpus.py  # Initialize Vectara RAG corpus
-│
-├── tests/                        # Unit tests
 │
 ├── specs/                        # Project specifications
 │

@@ -81,6 +81,41 @@ If you've done optional steps, when you send your first message to the bot, you 
 These commands will provide additional interaction control for the bot users. You can find most settings in settings menu, commands are just shortcuts for them.
 
 
+🧪 **Running Tests**
+
+The project has e2e tests that exercise the full message pipeline with real PostgreSQL but mocked LLM and Telegram APIs.
+
+**Local (recommended for development):**
+
+```bash
+./scripts/test.sh -v
+```
+
+This starts a test PostgreSQL container, runs pytest on the host, and stops the container when done. All pytest arguments are forwarded — for example:
+
+```bash
+./scripts/test.sh -v -k "test_reset"         # run a specific test
+./scripts/test.sh -v --tb=long               # verbose tracebacks
+```
+
+**Fully in Docker:**
+
+```bash
+./scripts/test_docker.sh
+```
+
+Builds the app image, starts PostgreSQL + test runner in Docker, and tears everything down after. Useful for CI or clean-room runs.
+
+**Manual setup (if you need persistent postgres for debugging):**
+
+```bash
+docker compose -f docker-compose.test.yml up -d postgres_test
+POSTGRES_HOST=localhost POSTGRES_PORT=15432 pytest tests/ -v
+docker compose -f docker-compose.test.yml down
+```
+
+See `specs/E2E_TESTS.md` for details on test architecture and covered scenarios.
+
 ⚠️ **Troubleshooting**
 
 If you have any issues with the bot, please create an issue in this repository. I will try to help you as soon as possible.  
