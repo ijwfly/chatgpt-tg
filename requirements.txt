@@ -61,3 +61,5 @@ typing_extensions==4.14.1
 urllib3==2.0.3
 uvicorn==0.35.0
 yarl==1.9.2
+pytest==8.3.4
+pytest-asyncio==0.24.0

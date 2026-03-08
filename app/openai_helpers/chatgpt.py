@@ -1,6 +1,7 @@
 import json
 import re
 from contextlib import suppress
+from decimal import Decimal
 from typing import List, Any, Optional, Callable, Union
 
 import settings
@@ -29,6 +30,7 @@ class CompletionUsage(pydantic.BaseModel):
     completion_tokens: int
     total_tokens: int
     model: str
+    price: Decimal = Decimal('0')
 
 
 class DialogMessageImageUrl(pydantic.BaseModel):
@@ -289,7 +291,23 @@ class ChatGPT:
                 continue
             elif not dialog_message:
                 # no updates only in dialog message, create it from last result
-                dialog_message = DialogMessage(**result_dict)
+                kwargs = dict(result_dict)
+                if tool_calls_accumulator:
+                    tool_calls_list = []
+                    for idx in sorted(tool_calls_accumulator.keys()):
+                        tc = tool_calls_accumulator[idx]
+                        tool_calls_list.append(
+                            ToolCall(
+                                id=tc["id"],
+                                type="function",
+                                function=FunctionCall(
+                                    name=tc["function"]["name"],
+                                    arguments=tc["function"]["arguments"]
+                                )
+                            )
+                        )
+                    kwargs['tool_calls'] = tool_calls_list
+                dialog_message = DialogMessage(**kwargs)
             elif not completion_usage:
                 # no updates only in completion usage, calculate it from dialog message result
                 completion_usage = CompletionUsage(

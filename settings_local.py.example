@@ -57,19 +57,22 @@ TELEGRAM_BOT_TOKEN = ''
 # ]
 
 # === Extra LLM models (added without modifying llm_models.py) ===
+# from app.llm_models import LLModel, LLMPrice, LLMContextConfiguration, LLMCapabilities
+# from app.openai_helpers.llm_client import OpenAISpecificAsyncOpenAIClient, AnthropicAsyncClient
+#
 # EXTRA_MODELS = [
-#     {
-#         'model_name': 'my-local-model',
-#         'model_readable_name': 'My Local Model',
-#         'api_key': 'not-needed',
-#         'base_url': 'http://localhost:1234/v1',
-#         'context_configuration': {
-#             'short_term_memory_tokens': 8192,
-#             'summary_length': 2048,
-#             'hard_max_context_size': 13312,
-#         },
-#         'capabilities': {
-#             'streaming_responses': True,
-#         },
-#     },
+#     LLModel(
+#         model_name='my-local-model',
+#         model_readable_name='My Local Model',
+#         api_key='not-needed',
+#         base_url='http://localhost:1234/v1',
+#         context_configuration=LLMContextConfiguration(
+#             short_term_memory_tokens=8192,
+#             summary_length=2048,
+#             hard_max_context_size=13312,
+#         ),
+#         capabilities=LLMCapabilities(
+#             streaming_responses=True,
+#         ),
+#     ),
 # ]

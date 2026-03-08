@@ -15,7 +15,7 @@ from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
 from app.bot.utils import (get_hide_button, get_usage_response_all_users, TypingWorker)
 from app.bot.utils import send_telegram_message
-from app.openai_helpers.utils import (calculate_completion_usage_price, calculate_whisper_usage_price, OpenAIAsync,
+from app.openai_helpers.utils import (calculate_whisper_usage_price, OpenAIAsync,
                                       calculate_image_generation_usage_price, calculate_tts_usage_price)
 from app.storage.db import DBFactory, User
 from app.storage.user_role import check_access_conditions, UserRole
@@ -97,13 +97,8 @@ class TelegramBot:
 
         completion_usages = await self.db.get_user_current_month_completion_usage(user.id)
         for usage in completion_usages:
-            try:
-                price = calculate_completion_usage_price(usage.prompt_tokens, usage.completion_tokens, usage.model)
-            except ValueError:
-                # database has some removed from code models, skipping
-                continue
-            total += price
-            result.append(f'*{usage.model}:* {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${price}')
+            total += usage.price
+            result.append(f'*{usage.model}:* {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${usage.price}')
 
         whisper_usage = await self.db.get_user_current_month_whisper_usage(user.id)
         whisper_price = calculate_whisper_usage_price(whisper_usage)

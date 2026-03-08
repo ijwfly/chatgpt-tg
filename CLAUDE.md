@@ -61,6 +61,18 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - **User roles**: `UserRole` enum (STRANGER, BASIC, ADVANCED, ADMIN, NOONE) gates access to features and models
 - **Image proxy**: `main_image_proxy.py` serves Telegram file IDs as URLs for OpenAI vision API
 
+## Testing
+
+**After any code changes, always run the E2E tests and verify they pass:**
+
+```bash
+bash scripts/test.sh
+```
+
+The script starts a test PostgreSQL container, runs all tests, and tears down the container. All 20 tests must pass before considering the work done. If a test fails, fix the issue before committing.
+
+Test details: `specs/E2E_TESTS.md`
+
 ### Libraries
 - `aiogram` 2.x (Telegram bot framework)
 - `openai` (OpenAI API)
