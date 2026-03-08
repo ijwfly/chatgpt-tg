@@ -1,6 +1,5 @@
 from typing import Optional
 
-from app.bot.utils import send_telegram_message
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 from pydantic import Field
 
@@ -16,9 +15,9 @@ class SaveUserSettings(OpenAIFunction):
         self.user.system_prompt_settings = params.settings_text.strip()
         await self.db.update_user(self.user)
         if self.user.system_prompt_settings:
-            await send_telegram_message(self.message, f'Saved User Info:\n{params.settings_text}')
+            await self.side_effects.send_message(f'Saved User Info:\n{params.settings_text}')
         else:
-            await send_telegram_message(self.message, f'Cleared User Info')
+            await self.side_effects.send_message(f'Cleared User Info')
         return 'success'
 
     @classmethod

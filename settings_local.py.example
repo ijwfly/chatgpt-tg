@@ -59,6 +59,7 @@ TELEGRAM_BOT_TOKEN = ''
 # === Extra LLM models (added without modifying llm_models.py) ===
 # from app.llm_models import LLModel, LLMPrice, LLMContextConfiguration, LLMCapabilities
 # from app.openai_helpers.llm_client import OpenAISpecificAsyncOpenAIClient, AnthropicAsyncClient
+# from decimal import Decimal
 #
 # EXTRA_MODELS = [
 #     LLModel(

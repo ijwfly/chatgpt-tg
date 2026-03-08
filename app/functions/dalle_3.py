@@ -4,7 +4,6 @@ from typing import Optional
 import httpx
 from pydantic import Field
 
-from app.bot.utils import send_photo
 from app.context.dialog_manager import DialogUtils
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 from app.openai_helpers.utils import OpenAIAsync, calculate_image_generation_usage_price
@@ -57,13 +56,13 @@ class GenerateImageDalle3(OpenAIFunction):
             # truncate caption to 1024 symbols, telegram limit
             tg_caption = caption[:1021] + '...' if len(caption) > 1024 else caption
 
-            response = await send_photo(self.message, image_bytes, tg_caption)
+            response_message_id = await self.side_effects.send_photo(image_bytes, tg_caption)
             text = 'Generated Image:\n<image.png>'
             if self.tool_call_id:
                 dialog_message = DialogUtils.prepare_tool_call_response(self.tool_call_id, text)
             else:
                 dialog_message = DialogUtils.prepare_function_response(self.get_name(), text)
-            await self.context_manager.add_message(dialog_message, response.message_id)
+            await self.context_manager.add_message(dialog_message, response_message_id)
             return None
         except Exception as e:
             return f"Error: {e}"

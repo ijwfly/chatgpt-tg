@@ -14,6 +14,7 @@ from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer,
 from app.llm_models import get_model_by_name
 from app.openai_helpers.utils import calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
+from app.runtime.user_input import UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription
 from app.storage.db import User, MessageType
 from app.storage.user_role import check_access_conditions
 from app.storage.vectara import VectaraCorpusClient, VECTARA_SUPPORTED_EXTENSIONS
@@ -110,36 +111,40 @@ class BatchedInputHandler:
         try:
             messages_batch = sorted(messages_batch, key=lambda m: m.message_id)
             first_message = messages_batch[0]
-            message_processor = MessageProcessor(self.db, user, first_message)
+            user_input = UserInput()
+
             for message in messages_batch:
                 if message.audio:
-                    await self.handle_voice(message, user, message_processor)
+                    await self.handle_voice(message, user, user_input)
                 elif message.voice:
-                    await self.handle_voice(message, user, message_processor)
+                    await self.handle_voice(message, user, user_input)
                 elif message.document:
-                    await self.handle_document(message, user, message_processor)
+                    await self.handle_document(message, user, user_input)
                 elif message.photo:
                     # handling image just like message but with some additional checks
                     llm_model = get_model_by_name(user.current_model)
                     if llm_model.capabilities.image_processing:
-                        await self.handle_message(message, user, message_processor)
+                        self.handle_message(message, user, user_input)
                     else:
                         # TODO: exception is a bad way to handle this, need to find a better way
                         raise ValueError(f'Image processing is not supported by {llm_model.model_name} model.')
                 else:
-                    await self.handle_message(message, user, message_processor)
+                    self.handle_message(message, user, user_input)
 
             if not self.batch_is_prompt(messages_batch, user):
+                # Context-only batch: add to context without calling LLM
+                message_processor = MessageProcessor(self.db, user, first_message)
+                await message_processor.add_context_only(user_input)
                 return
 
             async with TypingWorker(self.bot, first_message.chat.id).typing_context():
-                await self.answer_message(message, user, message_processor)
+                await self.answer_message(first_message, user, user_input)
         except Exception as e:
             logger.exception(f"An error occurred while processing input: %s", e)
-            await message.answer(f'Something went wrong:\n{str(type(e))}\n{e}')
+            await messages_batch[-1].answer(f'Something went wrong:\n{str(type(e))}\n{e}')
             raise
 
-    async def handle_document(self, message: types.Message, user: User, message_processor: MessageProcessor):
+    async def handle_document(self, message: types.Message, user: User, user_input: UserInput):
         if not settings.VECTARA_RAG_ENABLED:
             await message.reply('Documents are not supported')
             return
@@ -168,14 +173,14 @@ class BatchedInputHandler:
                                                      settings.VECTARA_CORPUS_ID)
 
                 with open(temp_filepath, 'rb') as f:
-                    document_info = {
-                        "document_id": document_id,
-                        "document_name": message.document.file_name,
-                    }
                     await vectara_client.upload_document(f, doc_metadata={'document_id': document_id})
-                    await message_processor.add_text_as_context(json.dumps(document_info), message.message_id, MessageType.DOCUMENT)
+                    user_input.documents.append(DocumentInput(
+                        document_id=document_id,
+                        document_name=message.document.file_name,
+                        tg_message_id=message.message_id,
+                    ))
 
-    async def handle_voice(self, message: types.Message, user: User, message_processor: MessageProcessor):
+    async def handle_voice(self, message: types.Message, user: User, user_input: UserInput):
         """
         Handles voice message or audio file with voice. Downloads voice file, converts it to mp3, sends it to whisper,
         sends response to user, adds response to context.
@@ -211,9 +216,13 @@ class BatchedInputHandler:
         speech_text_chunks = [speech_text[i:i + chunk_size] for i in range(0, len(speech_text), chunk_size)]
         for chunk in speech_text_chunks:
             response = await message.reply(chunk)
-            await message_processor.add_text_as_context(chunk, response.message_id)
+            user_input.voice_transcriptions.append(VoiceTranscription(
+                text=chunk,
+                tg_message_id=response.message_id,
+            ))
 
-    async def handle_message(self, message: types.Message, user: User, message_processor: MessageProcessor):
+    @staticmethod
+    def handle_message(message: types.Message, user: User, user_input: UserInput):
         """
         Handles text message. If message is forward, adds it to context with additional info. If message is not forward,
         adds it to context.
@@ -225,12 +234,29 @@ class BatchedInputHandler:
             return
 
         if message_is_forward(message) and not user.forward_as_prompt:
-            await self.handle_forwarded_message(message, user, message_processor)
+            BatchedInputHandler._handle_forwarded_message(message, user, user_input)
             return
 
-        await message_processor.add_message_as_context(message=message)
+        if message.photo:
+            # largest photo
+            photo = message.photo[-1]
+            user_input.text_inputs.append(TextInput(
+                text=message.text,
+                tg_message_id=message.message_id,
+                images=[ImageInput(
+                    file_id=photo.file_id,
+                    width=photo.width,
+                    height=photo.height,
+                )],
+            ))
+        elif message.text:
+            user_input.text_inputs.append(TextInput(
+                text=message.text,
+                tg_message_id=message.message_id,
+            ))
 
-    async def handle_forwarded_message(self, message: types.Message, user: User, message_processor: MessageProcessor):
+    @staticmethod
+    def _handle_forwarded_message(message: types.Message, user: User, user_input: UserInput):
         """
         Handles forwarded message. Adds it to context with additional info.
         """
@@ -244,14 +270,17 @@ class BatchedInputHandler:
         else:
             username = None
         forwarded_text = f'{username}:\n{message.text}' if username else message.text
-        message.text = forwarded_text
 
-        await message_processor.add_message_as_context(message=message)
+        user_input.text_inputs.append(TextInput(
+            text=forwarded_text,
+            tg_message_id=message.message_id,
+        ))
 
-    async def answer_message(self, message: types.Message, user: User, message_processor: MessageProcessor):
+    async def answer_message(self, first_message: types.Message, user: User, user_input: UserInput):
         """
         Sends prompt to OpenAI, sends response to user, adds response to context.
         """
         # TODO: fix memory leak (if message not cancelelled, the token is not deleted)
         is_cancelled = self.cancellation_manager.get_token(user.telegram_id)
-        await message_processor.process(is_cancelled)
+        message_processor = MessageProcessor(self.db, user, first_message)
+        await message_processor.process(is_cancelled, user_input)

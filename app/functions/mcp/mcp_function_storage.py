@@ -25,14 +25,14 @@ class MCPFunction(OpenAIFunction):
         self.user = None
         self.db = None
         self.context_manager = None
-        self.message = None
+        self.side_effects = None
         self.tool_call_id = None
 
-    def __call__(self, user, db, context_manager, message, tool_call_id: str = None):
+    def __call__(self, user, db, context_manager, side_effects, tool_call_id: str = None):
         self.user = user
         self.db = db
         self.context_manager = context_manager
-        self.message = message
+        self.side_effects = side_effects
         self.tool_call_id = tool_call_id
         return self
 

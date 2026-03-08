@@ -27,11 +27,22 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 ### Request Flow
 1. `main.py` → creates aiogram `Bot`/`Dispatcher`, initializes `TelegramBot`
 2. `TelegramBot` (`app/bot/telegram_bot.py`) — registers handlers, sets up middleware, manages lifecycle
-3. `BatchedInputHandler` (`app/bot/batched_input_handler.py`) — collects user messages into batches (handles text, voice, photos, documents), determines if batch is prompt or context-only
-4. `MessageProcessor` (`app/bot/message_processor.py`) — orchestrates a single request: builds context, calls LLM, handles streaming updates, processes function/tool call responses recursively
-5. `ContextManager` (`app/context/context_manager.py`) — facade over `DialogManager` and `FunctionManager`
-6. `DialogManager` (`app/context/dialog_manager.py`) — loads conversation history from DB, handles sub-dialogues (reply chains), auto-summarizes when context exceeds token limits
-7. `ChatGPT` / `AnthropicChatGPT` (`app/openai_helpers/chatgpt.py`, `app/openai_helpers/anthropic_chatgpt.py`) — LLM API interaction, streaming, response parsing
+3. `BatchedInputHandler` (`app/bot/batched_input_handler.py`) — collects user messages into batches, does transport preprocessing (Whisper, Vectara upload), builds transport-agnostic `UserInput`
+4. `MessageProcessor` (`app/bot/message_processor.py`) — thin adapter: builds `ConversationSession`, creates `DefaultLLMRuntime` + `TelegramRuntimeAdapter`, delegates execution
+5. `DefaultLLMRuntime` (`app/runtime/default_runtime.py`) — adds user input to context, calls LLM, handles tool call loop, yields `RuntimeEvent`s
+6. `TelegramRuntimeAdapter` (`app/bot/telegram_runtime_adapter.py`) — consumes RuntimeEvents: streaming message editing, thinking emoji, cancel button, verbose function output, saves assistant responses to context
+7. `ContextManager` (`app/context/context_manager.py`) — facade over `DialogManager` and `FunctionManager`
+8. `DialogManager` (`app/context/dialog_manager.py`) — loads conversation history from DB, handles sub-dialogues (reply chains), auto-summarizes when context exceeds token limits
+9. `ChatGPT` / `AnthropicChatGPT` (`app/openai_helpers/chatgpt.py`, `app/openai_helpers/anthropic_chatgpt.py`) — LLM API interaction, streaming, response parsing
+
+### LLM Runtime Layer
+- `app/runtime/runtime.py` — `LLMRuntime` protocol: `process_turn(user_input, session, is_cancelled) -> AsyncGenerator[RuntimeEvent]`
+- `app/runtime/default_runtime.py` — `DefaultLLMRuntime`: current implementation using ChatGPT/Anthropic clients
+- `app/runtime/events.py` — event hierarchy: `StreamingContentDelta`, `FinalResponse`, `FunctionCallStarted`, `FunctionCallCompleted`, `ErrorEvent`
+- `app/runtime/user_input.py` — `UserInput` with `TextInput`, `ImageInput`, `DocumentInput`, `VoiceTranscription`
+- `app/runtime/side_effects.py` — `SideEffectHandler` protocol for transport-agnostic function side effects
+- `app/runtime/context_utils.py` — shared `add_user_input_to_context()` used by runtime and context-only path
+- See `specs/RUNTIME_ARCHITECTURE.md` for full details on how to add new runtimes and transports
 
 ### Multi-Provider LLM Support
 - `app/llm_models.py` — defines all models via `LLModel` class with pricing, context config, capabilities, and API client type
@@ -40,7 +51,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - To add a new model: add entry in `get_models()` in `llm_models.py` with appropriate client class, capabilities, and context configuration
 
 ### Function/Tool Calling
-- `app/functions/base.py` — `OpenAIFunction` base class. Subclasses define params via Pydantic `PARAMS_SCHEMA`, implement `run()`, provide `get_description()` and optional `get_system_prompt_addition()`
+- `app/functions/base.py` — `OpenAIFunction` base class. Accepts `SideEffectHandler` (not aiogram Message) for transport interactions. Subclasses define params via Pydantic `PARAMS_SCHEMA`, implement `run()`, provide `get_description()` and optional `get_system_prompt_addition()`
 - `app/openai_helpers/function_storage.py` — `FunctionStorage` registry, converts functions to OpenAI function/tool format
 - `app/context/function_manager.py` — decides which functions to register based on settings, user role, and context (e.g., VectorSearch only when documents are in context)
 - Built-in functions: `wolframalpha`, `dalle_3`, `todoist`, `obsidian_echo`, `save_user_settings`, `vectara_search`
@@ -69,7 +80,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 bash scripts/test.sh
 ```
 
-The script starts a test PostgreSQL container, runs all tests, and tears down the container. All 20 tests must pass before considering the work done. If a test fails, fix the issue before committing.
+The script starts a test PostgreSQL container, runs all tests, and tears down the container. All 23 tests must pass before considering the work done. If a test fails, fix the issue before committing.
 
 Test details: `specs/E2E_TESTS.md`
 

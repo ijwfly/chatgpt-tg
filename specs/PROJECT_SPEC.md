@@ -67,16 +67,20 @@
 
 ```
 app/
-├── bot/               ← Telegram interface layer
-│   │                    Handlers, middleware, UI menus
+├── bot/               ← Telegram transport layer
+│   │                    Handlers, middleware, UI menus, runtime adapter
 │   │
-├── context/           ← Context orchestration
+├── runtime/           ← LLM Runtime layer (transport-agnostic)
+│   │                    Runtime protocol, events, user input types,
+│   │                    DefaultLLMRuntime, side effects protocol
+│   │
+├── context/           ← Context orchestration (transport-agnostic)
 │   │                    Conversation management, function aggregation
 │   │
 ├── openai_helpers/    ← LLM client abstraction layer
 │   │                    Clients, tokenization, utilities
 │   │
-├── functions/         ← Plugin system
+├── functions/         ← Plugin system (transport-agnostic)
 │   │                    Base class, built-in functions, MCP
 │   │
 ├── storage/           ← Data access layer
@@ -87,14 +91,19 @@ app/
 
 **Dependency direction:**
 ```
-bot → context → openai_helpers → storage
-              ↘ functions ↗
+bot → runtime → context → openai_helpers → storage
+                        ↘ functions ↗
 ```
+
+> See [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md) for detailed runtime layer documentation, including how to add new runtimes and transports.
 
 ### 2.3 Key Design Patterns
 
 | Pattern | Implementation | File | Purpose |
 |---------|---------------|------|---------|
+| Protocol (DI) | `LLMRuntime` | `runtime/runtime.py` | Pluggable LLM execution layer |
+| Protocol (DI) | `SideEffectHandler` | `runtime/side_effects.py` | Transport-agnostic side effects for functions |
+| Event-based AsyncGenerator | `RuntimeEvent` hierarchy | `runtime/events.py` | Decoupled streaming between runtime and transport |
 | Factory | `LLMClientFactory` | `openai_helpers/llm_client_factory.py` | Lazy creation and caching of LLM clients |
 | Abstract Base + Plugin | `OpenAIFunction` | `functions/base.py` | All tool functions inherit from this ABC |
 | Middleware | `UserMiddleware` | `bot/user_middleware.py` | Injection of `User` object into each handler |
@@ -130,50 +139,55 @@ User sends message(s) to Telegram
 ┌──────────────────────────────────────────────┐
 │  BatchedInputHandler.process_batch()          │
 │  • Sort by message_id                        │
-│  • Route by content type:                    │
-│    voice/audio → handle_voice (Whisper)       │
-│    document → handle_document (Vectara)       │
-│    photo → handle_message (vision check)      │
-│    text → handle_message                      │
-│  • batch_is_prompt() — does it need LLM?     │
-│  • If yes → TypingWorker + answer_message()  │
+│  • Transport preprocessing (builds UserInput):│
+│    voice/audio → Whisper → VoiceTranscription │
+│    document → Vectara upload → DocumentInput  │
+│    photo → ImageInput (file_id + dimensions)  │
+│    text → TextInput                           │
+│    forwarded → TextInput (with attribution)   │
+│  • batch_is_prompt()?                        │
+│    No  → add_context_only(user_input)        │
+│    Yes → TypingWorker + process(user_input)  │
 └──────────────────────┬───────────────────────┘
                        ▼
 ┌──────────────────────────────────────────────┐
 │  MessageProcessor.process()                   │
-│  • build_context_manager():                  │
-│    ├─ DialogManager.process_dialog()         │
-│    │  (load history from DB)                 │
-│    └─ FunctionManager.process_functions()    │
-│       (collect available tool functions)     │
-│  • Determine LLM client:                    │
-│    Claude → AnthropicChatGPT                 │
-│    Others → ChatGPT                          │
-│  • get_system_prompt():                      │
-│    base_prompt + function_additions + user_s. │
-│  • send_user_message() (streaming / sync)    │
+│  • Build ConversationSession from aiogram msg │
+│  • Create ContextManager (loads dialog history│
+│    from DB, collects available functions)      │
+│  • Create DefaultLLMRuntime + adapter         │
+│  • Delegate to TelegramRuntimeAdapter         │
 └──────────────────────┬───────────────────────┘
                        ▼
 ┌──────────────────────────────────────────────┐
-│  handle_gpt_response() — recursive           │
-│  • Text response:                            │
-│    split_dialog_message() (4080 char limit)  │
-│    → send/edit Telegram message              │
-│  • function_call:                            │
-│    → run_function_call() → execute           │
-│    → add result to context                   │
-│    → recurse (up to 12 times)               │
-│  • tool_calls:                               │
-│    → for each tool_call: execute             │
-│    → add results to context                  │
-│    → recurse (up to 12 times)               │
-│  • Save usage (tokens, price) to DB          │
+│  TelegramRuntimeAdapter.handle_turn()         │
+│  Consumes RuntimeEvent stream from runtime:   │
+│  • StreamingContentDelta → throttled editing, │
+│    thinking emoji, cancel button              │
+│  • FinalResponse → split by 4080 chars,      │
+│    send/edit final msg, save to context       │
+│  • FunctionCallCompleted → verbose display    │
+└──────────────────────┬───────────────────────┘
+                       ▼
+┌──────────────────────────────────────────────┐
+│  DefaultLLMRuntime.process_turn()             │
+│  1. Add UserInput to context                  │
+│  2. Select LLM client (ChatGPT / Anthropic)  │
+│  3. Build system prompt + function storage    │
+│  4. Stream LLM response → yield deltas       │
+│  5. yield FinalResponse                       │
+│  6. Tool calls → execute → yield events       │
+│     → pass results to LLM → recurse to 4     │
+│     (up to SUCCESSIVE_FUNCTION_CALLS_LIMIT)   │
+│  7. Usage tracking (tokens, price) to DB      │
 └──────────────────────────────────────────────┘
 ```
 
+> For full runtime architecture details, see [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md).
+
 ### 3.2 Response Streaming
 
-Implemented in `MessageProcessor.handle_response_generator()`:
+Implemented in `TelegramRuntimeAdapter.handle_turn()` (consumes `StreamingContentDelta` events from the runtime):
 
 1. **First chunk** — a new Telegram message is created with an inline Cancel button
 2. **Subsequent chunks** — message updates no more often than once every **2 seconds** (`WAIT_BETWEEN_MESSAGE_UPDATES`)
@@ -372,7 +386,7 @@ File: `functions/base.py`
 class OpenAIFunction(ABC):
     PARAMS_SCHEMA = OpenAIFunctionParams  # Pydantic model
 
-    def __init__(self, user, db, context_manager, message, tool_call_id=None)
+    def __init__(self, user, db, context_manager, side_effects: SideEffectHandler, tool_call_id=None)
 
     async def run(self, params) -> Optional[str]        # abstract
     async def run_dict_args(self, params: dict)          # parsing from dict
@@ -725,8 +739,10 @@ chatgpt-tg/
 ├── app/
 │   ├── bot/
 │   │   ├── telegram_bot.py        # TelegramBot class: handler registration, startup/shutdown
-│   │   ├── message_processor.py   # MessageProcessor: LLM pipeline, streaming, function calls
-│   │   ├── batched_input_handler.py  # BatchedInputHandler: 300ms batching, type-based routing
+│   │   ├── message_processor.py   # Thin adapter: builds session, wires runtime + adapter
+│   │   ├── telegram_runtime_adapter.py  # Consumes RuntimeEvents for Telegram streaming UI
+│   │   ├── telegram_side_effects.py     # TelegramSideEffectHandler for function side effects
+│   │   ├── batched_input_handler.py  # BatchedInputHandler: 300ms batching, builds UserInput
 │   │   ├── chatgpt_manager.py     # ChatGptManager: wrapper over ChatGPT/Anthropic for usage tracking
 │   │   ├── models_menu.py         # ModelsMenu: inline keyboard for model selection
 │   │   ├── settings_menu.py       # Settings: inline keyboard for user settings
@@ -735,6 +751,15 @@ chatgpt-tg/
 │   │   ├── scheduled_tasks.py     # Monthly usage reporting task
 │   │   ├── cancellation_manager.py  # CancellationManager: streaming cancellation tokens
 │   │   └── utils.py              # Utilities: send/edit message, TypingWorker, Timer, etc.
+│   │
+│   ├── runtime/
+│   │   ├── runtime.py             # LLMRuntime protocol
+│   │   ├── default_runtime.py     # DefaultLLMRuntime: current LLM logic (streaming, tool calls)
+│   │   ├── conversation_session.py # ConversationSession dataclass
+│   │   ├── user_input.py          # UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription
+│   │   ├── events.py              # RuntimeEvent hierarchy (deltas, final, function events)
+│   │   ├── side_effects.py        # SideEffectHandler protocol
+│   │   └── context_utils.py       # add_user_input_to_context() shared utility
 │   │
 │   ├── context/
 │   │   ├── context_manager.py     # ContextManager: orchestration of dialog + functions + system prompt
