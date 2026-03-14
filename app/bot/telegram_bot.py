@@ -44,6 +44,7 @@ class TelegramBot:
         self.role_manager = None
         self.monthly_usage_task = None
         self.batched_handler = None
+        self.api_runner = None
 
     async def on_startup(self, _):
         self.db = await DBFactory.create_database(
@@ -69,7 +70,18 @@ class TelegramBot:
         commands = self.role_manager.get_role_commands(UserRole.ADVANCED)
         await self.bot.set_my_commands(commands)
 
+        if settings.HTTP_API_ENABLED:
+            from app.api.http_api import create_api_app
+            import aiohttp.web
+            api_app = create_api_app(self.bot, self.db)
+            self.api_runner = aiohttp.web.AppRunner(api_app)
+            await self.api_runner.setup()
+            site = aiohttp.web.TCPSite(self.api_runner, '0.0.0.0', settings.HTTP_API_PORT)
+            await site.start()
+
     async def on_shutdown(self, _):
+        if self.api_runner:
+            await self.api_runner.cleanup()
         if self.monthly_usage_task:
             await self.monthly_usage_task.stop()
         await DBFactory().close_database()

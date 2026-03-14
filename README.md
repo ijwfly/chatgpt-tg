@@ -110,6 +110,38 @@ EXTRA_MODELS = [
 
 If you've done optional steps, when you send your first message to the bot, you will get a management message with your telegram id and info. You can use this message to setup your role as admin.
 
+**HTTP API for external message injection**
+
+The bot includes an optional HTTP API that lets external systems inject messages into conversations. The bot processes them through the full LLM pipeline and sends responses to Telegram.
+
+Use cases: external workers reacting to events (monitoring, CI/CD, webhooks), async tool results from long-running tasks.
+
+To enable, add to `settings_local.py`:
+```python
+HTTP_API_ENABLED = True
+HTTP_API_PORT = 8080
+HTTP_API_SECRET = 'your-hmac-secret-for-jwt'
+```
+
+Generate a JWT token and send a request:
+```bash
+TOKEN=$(python -c "import jwt; print(jwt.encode({'user_id': None}, 'your-hmac-secret-for-jwt', algorithm='HS256'))")
+
+# Fire-and-forget
+curl -X POST http://localhost:8080/api/v1/inject \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"chat_id": 123456789, "text": "Alert: server CPU at 95%"}'
+
+# Wait for LLM response
+curl -X POST http://localhost:8080/api/v1/inject \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"chat_id": 123456789, "text": "Summarize this", "wait_for_response": true}'
+```
+
+Supports text, images, and linked mode (subdialog via `reply_to_message_id`). See `specs/HTTP_API.md` for full documentation.
+
 🤖 **Commands**
 ```
 /reset - reset current dialog
