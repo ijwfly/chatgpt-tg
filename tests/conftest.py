@@ -124,6 +124,7 @@ async def clean_db(db_pool):
         'chatgpttg.whisper_usage',
         'chatgpttg.completion_usage',
         'chatgpttg.message',
+        'chatgpttg.plan',
         'chatgpttg.user',
     ]
     for table in tables:

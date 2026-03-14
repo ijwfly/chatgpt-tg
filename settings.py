@@ -72,6 +72,22 @@ MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 POSTGRES_TIMEZONE = pytz.timezone('UTC')
 SUCCESSIVE_FUNCTION_CALLS_LIMIT = 12  # limit of successive function calls that model can make
 
+# Agent runtime settings
+ENABLE_AGENT_RUNTIME = True
+AGENT_MAX_ITERATIONS = 30
+AGENT_SUB_AGENT_MAX_ITERATIONS = 10
+AGENT_BG_TASK_TIMEOUT = 300
+
+# MCP servers available only in agent mode (in addition to MCP_SERVERS)
+MCP_SERVERS_AGENT: list[MCPServerConfig] = [
+    # Example: agent-specific MCP servers
+    # MCPServerConfig(
+    #     url='https://agent-tools.example.com/mcp',
+    #     min_role=UserRole.ADMIN,
+    #     headers={'Authorization': 'Bearer token123'}
+    # ),
+]
+
 # Database settings
 # Change these if you know what you're doing
 POSTGRES_HOST = 'postgres'
