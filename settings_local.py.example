@@ -56,6 +56,15 @@ TELEGRAM_BOT_TOKEN = ''
 #     ),
 # ]
 
+# === HTTP API (external message injection) ===
+# HTTP_API_ENABLED = True
+# HTTP_API_PORT = 8080
+# HTTP_API_SECRET = 'your-hmac-secret-for-jwt'
+#
+# Generate tokens:
+#   python -c "import jwt; print(jwt.encode({'user_id': None}, 'your-hmac-secret-for-jwt', algorithm='HS256'))"
+#   python -c "import jwt; print(jwt.encode({'user_id': 123456789}, 'your-hmac-secret-for-jwt', algorithm='HS256'))"
+
 # === Extra LLM models (added without modifying llm_models.py) ===
 # from app.llm_models import LLModel, LLMPrice, LLMContextConfiguration, LLMCapabilities
 # from app.openai_helpers.llm_client import OpenAISpecificAsyncOpenAIClient, AnthropicAsyncClient

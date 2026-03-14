@@ -29,6 +29,7 @@ settings.ENABLE_OBSIDIAN_ECHO_ADMIN_INTEGRATION = False
 settings.ENABLE_USER_ROLE_MANAGER_CHAT = False
 settings.MCP_SERVERS = []
 settings.EXTRA_MODELS = []
+settings.HTTP_API_ENABLED = False
 settings.IMAGE_PROXY_URL = 'http://localhost'
 settings.IMAGE_PROXY_PORT = 18321
 

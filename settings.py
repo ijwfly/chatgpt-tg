@@ -118,6 +118,11 @@ VECTARA_CORPUS_ID = -1
 # Accepts LLModel instances or dicts (legacy format). See settings_local.py.example.
 EXTRA_MODELS: list = []
 
+# HTTP API (external message injection)
+HTTP_API_ENABLED = False
+HTTP_API_PORT = 8080
+HTTP_API_SECRET = ''  # HMAC-SHA256 secret for signing JWT tokens
+
 # Local overrides — create settings_local.py (gitignored) to override any setting
 try:
     from settings_local import *
