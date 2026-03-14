@@ -4,7 +4,6 @@ from typing import List
 from pydantic import Field
 
 import settings
-from app.bot.utils import send_telegram_message
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 from app.storage.vectara import VectaraCorpusClient
 
@@ -35,7 +34,7 @@ class VectorSearch(OpenAIFunction):
     async def run(self, params: VectorSearchParams):
         if not params.query.strip():
             logger.error("Model is trying to search for an empty query: %s", params.query)
-            await send_telegram_message(self.message, "Model is trying to do vector search for an empty query. Stopping.")
+            await self.side_effects.send_message("Model is trying to do vector search for an empty query. Stopping.")
             return None
         search_results = await self.get_search_results(params.query, params.documents_ids)
         search_results = search_results[:VECTOR_SEARCH_NUM_RESULTS]

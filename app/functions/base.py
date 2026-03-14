@@ -1,8 +1,9 @@
 from typing import Optional
 
 import pydantic
-from aiogram.types import Message
 from abc import ABC, abstractmethod
+
+from app.runtime.side_effects import SideEffectHandler
 
 
 class OpenAIFunctionParams(pydantic.BaseModel):
@@ -12,11 +13,11 @@ class OpenAIFunctionParams(pydantic.BaseModel):
 class OpenAIFunction(ABC):
     PARAMS_SCHEMA = OpenAIFunctionParams
 
-    def __init__(self, user, db, context_manager, message: Message, tool_call_id: str = None):
+    def __init__(self, user, db, context_manager, side_effects: SideEffectHandler, tool_call_id: str = None):
         self.user = user
         self.db = db
         self.context_manager = context_manager
-        self.message = message
+        self.side_effects = side_effects
         self.tool_call_id = tool_call_id
 
     @abstractmethod

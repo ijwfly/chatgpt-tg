@@ -1,21 +1,20 @@
 from typing import List, Optional
 
-from aiogram import types
-
 import settings
 from app.context.dialog_manager import DialogManager
 from app.context.function_manager import FunctionManager
 from app.llm_models import get_model_by_name
 from app.openai_helpers.chatgpt import DialogMessage
 from app.openai_helpers.function_storage import FunctionStorage
+from app.runtime.conversation_session import ConversationSession
 from app.storage.db import DB, User, MessageType
 
 
 class ContextManager:
-    def __init__(self, db: DB, user: User, message: types.Message):
+    def __init__(self, db: DB, user: User, session: ConversationSession):
         self.db = db
         self.user = user
-        self.message = message
+        self.session = session
         self.dialog_manager = None
         self.function_manager = None
 
@@ -23,7 +22,7 @@ class ContextManager:
         llm_model = get_model_by_name(self.user.current_model)
         context_configuration = llm_model.context_configuration
         self.dialog_manager = DialogManager(self.db, self.user, context_configuration)
-        await self.dialog_manager.process_dialog(self.message)
+        await self.dialog_manager.process_dialog(self.session)
 
     async def process_functions(self):
         self.function_manager = FunctionManager(self.db, self.user, self.dialog_manager)
@@ -62,7 +61,7 @@ class ContextManager:
         return self.function_manager.get_function_storage()
 
 
-async def build_context_manager(db: DB, user: User, message: types.Message) -> ContextManager:
-    context_manager = ContextManager(db, user, message)
+async def build_context_manager(db: DB, user: User, session: ConversationSession) -> ContextManager:
+    context_manager = ContextManager(db, user, session)
     await context_manager.process()
     return context_manager

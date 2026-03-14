@@ -2,13 +2,11 @@ import datetime
 from typing import List, Optional, Union
 
 import settings
-from app.bot.utils import message_is_forward
+from app.runtime.conversation_session import ConversationSession
 from app.openai_helpers.chatgpt import DialogMessage, summarize_messages, DialogMessageContentPart
 from app.openai_helpers.count_tokens import count_dialog_messages_tokens
 from app.openai_helpers.utils import calculate_completion_usage_price
 from app.storage.db import User, DB, Message, MessageType
-
-from aiogram import types
 
 
 class DialogManager:
@@ -19,12 +17,12 @@ class DialogManager:
         self.chat_id = None
         self.context_configuration = context_configuration
 
-    async def process_dialog(self, message: types.Message) -> List[DialogMessage]:
-        self.chat_id = message.chat.id
+    async def process_dialog(self, session: ConversationSession) -> List[DialogMessage]:
+        self.chat_id = session.chat_id
 
-        if message.reply_to_message is not None and not message_is_forward(message):
+        if session.reply_to_message_id is not None and not session.is_forwarded:
             is_reply = True
-            db_message = await self.db.get_telegram_message(self.chat_id, message.reply_to_message.message_id)
+            db_message = await self.db.get_telegram_message(self.chat_id, session.reply_to_message_id)
         else:
             is_reply = False
             db_message = await self.db.get_last_message(self.user.id, self.chat_id)
