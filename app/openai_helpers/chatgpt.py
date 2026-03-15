@@ -63,7 +63,13 @@ class DialogMessage(pydantic.BaseModel):
         new = self.copy()
         new.thinking = None
         if isinstance(new.content, str):
-            new.content = re.sub(r'<(?:think|thinking)>.*?</(?:think|thinking)>', '', new.content, flags=re.DOTALL).strip()
+            # Remove complete <think>...</think> blocks
+            new.content = re.sub(r'<(?:think|thinking)>.*?</(?:think|thinking)>', '', new.content, flags=re.DOTALL)
+            # Remove unclosed <think> blocks (e.g. when tool_call interrupts thinking)
+            new.content = re.sub(r'<(?:think|thinking)>.*$', '', new.content, flags=re.DOTALL)
+            # Remove orphaned </think> tags (continuation from previous turn)
+            new.content = re.sub(r'</(?:think|thinking)>', '', new.content)
+            new.content = new.content.strip()
         return new
 
     def openai_message(self):
@@ -139,15 +145,22 @@ def parse_thinking(content: str) -> tuple:
     if not content:
         return '', '', False
 
+    close_idx, close_len = _find_think_close(content)
     open_idx, open_len = _find_think_open(content)
+
     if open_idx == -1:
+        if close_idx != -1:
+            # Standalone </think> — strip it from visible content
+            visible = (content[:close_idx] + content[close_idx + close_len:]).strip()
+            return visible, '', False
         return content, '', False
 
-    close_idx, close_len = _find_think_close(content)
-    if close_idx == -1:
+    if close_idx == -1 or close_idx < open_idx:
         # Tag opened but not closed — model is still thinking
         thinking_text = content[open_idx + open_len:]
         visible = content[:open_idx]
+        if close_idx != -1 and close_idx < open_idx:
+            visible = (content[:close_idx] + content[close_idx + close_len:open_idx]).strip()
         return visible, thinking_text, True
 
     # Tag closed — thinking is complete

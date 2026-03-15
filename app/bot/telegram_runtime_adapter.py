@@ -122,6 +122,12 @@ class TelegramRuntimeAdapter:
 
             elif isinstance(event, FinalResponse):
                 final_dialog_message = event.dialog_message
+
+                # Delete orphaned thinking message if no content to show (thinking-only + tool_call)
+                if message_id is not None and (not final_dialog_message or not final_dialog_message.content):
+                    with suppress(BadRequest):
+                        await self.message.bot.delete_message(chat_id, message_id)
+
                 if final_dialog_message and final_dialog_message.content:
                     dialog_messages = self._split_dialog_message(final_dialog_message)
                     for dm in dialog_messages:
