@@ -279,7 +279,10 @@ class ChatGPT:
                         )
                     )
 
-                dialog_message = DialogMessage(tool_calls=tool_calls_list)
+                tool_call_kwargs = {'tool_calls': tool_calls_list}
+                if 'content' in result_dict:
+                    tool_call_kwargs['content'] = result_dict['content']
+                dialog_message = DialogMessage(**tool_call_kwargs)
                 # TODO: find more accurate way to calculate completion length for function calls
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
 
