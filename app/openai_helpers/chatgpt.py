@@ -4,7 +4,6 @@ from contextlib import suppress
 from decimal import Decimal
 from typing import List, Any, Optional, Callable, Union
 
-import settings
 from app.bot.utils import merge_dicts, get_image_base64
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
@@ -195,7 +194,6 @@ class ChatGPT:
         resp = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
             messages=messages,
-            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             **additional_fields,
         )
         completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp.usage))
@@ -216,7 +214,6 @@ class ChatGPT:
         resp_generator = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
             messages=messages,
-            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             stream=True,
             **additional_fields,
         )
@@ -374,7 +371,6 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
     resp = await LLMClientFactory.get_client(model).chat_completions_create(
         model=model,
         messages=prompt_messages,
-        temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
     )
     completion_usage = CompletionUsage(model=model, **dict(resp.usage))
     return resp.choices[0].message.content, completion_usage
