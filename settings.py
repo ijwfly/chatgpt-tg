@@ -87,6 +87,7 @@ AGENT_MAX_ITERATIONS = 30
 AGENT_SUB_AGENT_MAX_ITERATIONS = 10
 AGENT_BG_TASK_TIMEOUT = 300
 AGENT_PLAN_REMINDER_INTERVAL = 5
+MCP_TOOL_CALL_TIMEOUT = 300  # seconds, timeout for individual MCP tool calls
 SCHEDULER_POLL_INTERVAL = 30  # seconds between scheduler checks
 
 # MCP servers available only in agent mode (in addition to MCP_SERVERS)
