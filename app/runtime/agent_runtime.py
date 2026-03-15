@@ -287,9 +287,12 @@ class AgentRuntime:
             tool_call_id=tool_call_id,
         )
 
-        function_class = function_storage.get_function_class(function_name)
-        function = function_class(self.user, self.db, context_manager, self.side_effects, tool_call_id)
-        function_response_raw = await function.run_str_args(function_args)
+        try:
+            function_class = function_storage.get_function_class(function_name)
+            function = function_class(self.user, self.db, context_manager, self.side_effects, tool_call_id)
+            function_response_raw = await function.run_str_args(function_args)
+        except Exception as e:
+            function_response_raw = f"Error: {e}"
 
         yield FunctionCallCompleted(
             function_name=function_name,
@@ -342,23 +345,29 @@ class AgentRuntime:
                 for tool_call in dialog_message.tool_calls:
                     if tool_call.type != 'function':
                         continue
-                    function_class = sub_function_storage.get_function_class(tool_call.function.name)
-                    function = function_class(
-                        self.user, self.db, parent_context_manager,
-                        self.side_effects, tool_call.id
-                    )
-                    result = await function.run_str_args(tool_call.function.arguments)
+                    try:
+                        function_class = sub_function_storage.get_function_class(tool_call.function.name)
+                        function = function_class(
+                            self.user, self.db, parent_context_manager,
+                            self.side_effects, tool_call.id
+                        )
+                        result = await function.run_str_args(tool_call.function.arguments)
+                    except Exception as e:
+                        result = f"Error: {e}"
                     result = result if result is not None else "(no output)"
                     messages.append(DialogUtils.prepare_tool_call_response(tool_call.id, result))
 
             elif dialog_message.function_call:
                 fc = dialog_message.function_call
-                function_class = sub_function_storage.get_function_class(fc.name)
-                function = function_class(
-                    self.user, self.db, parent_context_manager,
-                    self.side_effects, None
-                )
-                result = await function.run_str_args(fc.arguments)
+                try:
+                    function_class = sub_function_storage.get_function_class(fc.name)
+                    function = function_class(
+                        self.user, self.db, parent_context_manager,
+                        self.side_effects, None
+                    )
+                    result = await function.run_str_args(fc.arguments)
+                except Exception as e:
+                    result = f"Error: {e}"
                 result = result if result is not None else "(no output)"
                 messages.append(DialogUtils.prepare_function_response(fc.name, result))
 
