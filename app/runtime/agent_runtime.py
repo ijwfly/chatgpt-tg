@@ -202,9 +202,10 @@ class AgentRuntime:
                 dialog_message = dialog_message.strip_thinking()
 
             has_content = bool(dialog_message.content)
+            has_tool_calls = bool(dialog_message.tool_calls or dialog_message.function_call)
             yield FinalResponse(
                 dialog_message=dialog_message,
-                needs_context_save=has_content,
+                needs_context_save=has_content and not has_tool_calls,
             )
 
             # D) If no tool calls — check for pending bg tasks
@@ -222,8 +223,7 @@ class AgentRuntime:
 
             # E) Execute tool calls (iterative, not recursive)
             if dialog_message.function_call:
-                if not has_content:
-                    await context_manager.add_message(dialog_message, -1)
+                await context_manager.add_message(dialog_message, -1)
 
                 function_call = dialog_message.function_call
                 async for event in self._run_function(function_call, function_storage, context_manager):
@@ -239,8 +239,7 @@ class AgentRuntime:
                         yield event
 
             elif dialog_message.tool_calls:
-                if not has_content:
-                    await context_manager.add_message(dialog_message, -1)
+                await context_manager.add_message(dialog_message, -1)
 
                 pass_tool_response_to_gpt = False
                 for tool_call in dialog_message.tool_calls:
