@@ -67,10 +67,37 @@ WOLFRAMALPHA_APPID = 'YOUR_TOKEN'
 
 # Utility settings
 OPENAI_BASE_URL = 'https://api.openai.com/v1'
-OPENAI_CHAT_COMPLETION_TEMPERATURE = 0.3
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 POSTGRES_TIMEZONE = pytz.timezone('UTC')
 SUCCESSIVE_FUNCTION_CALLS_LIMIT = 12  # limit of successive function calls that model can make
+
+# Agent runtime settings
+AGENT_SYSTEM_PROMPT = """You are a proactive agent that completes tasks end-to-end. Do not stop at suggestions — take action and deliver results.
+
+Key principles:
+- Drive tasks to completion autonomously. Only ask the user when you truly lack information.
+- Batch your questions: if you need to clarify multiple things, ask them all at once, not one by one.
+- You have access to a bash execution environment (via MCP tools), Python, and standard Unix utilities. Use them freely to accomplish tasks — run commands, write scripts, process data.
+- You can create and store files and notes as needed during your work on your bash machine.
+- Be concise and result-oriented. Report what you did and the outcome."""
+
+ENABLE_AGENT_RUNTIME = True
+AGENT_MAX_ITERATIONS = 30
+AGENT_SUB_AGENT_MAX_ITERATIONS = 10
+AGENT_BG_TASK_TIMEOUT = 300
+AGENT_PLAN_REMINDER_INTERVAL = 5
+MCP_TOOL_CALL_TIMEOUT = 300  # seconds, timeout for individual MCP tool calls
+SCHEDULER_POLL_INTERVAL = 30  # seconds between scheduler checks
+
+# MCP servers available only in agent mode (in addition to MCP_SERVERS)
+MCP_SERVERS_AGENT: list[MCPServerConfig] = [
+    # Example: agent-specific MCP servers
+    # MCPServerConfig(
+    #     url='https://agent-tools.example.com/mcp',
+    #     min_role=UserRole.ADMIN,
+    #     headers={'Authorization': 'Bearer token123'}
+    # ),
+]
 
 # Database settings
 # Change these if you know what you're doing

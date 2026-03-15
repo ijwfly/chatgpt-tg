@@ -1,9 +1,11 @@
 import json
+from datetime import timedelta
 from typing import Optional
 
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.client.session import ClientSession
 
+import settings
 from app.functions.base import OpenAIFunction
 
 
@@ -48,7 +50,11 @@ class MCPFunction(OpenAIFunction):
             ):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
-                    result = await session.call_tool(self.name, arguments=params)
+                    result = await session.call_tool(
+                        self.name,
+                        arguments=params,
+                        read_timeout_seconds=timedelta(seconds=settings.MCP_TOOL_CALL_TIMEOUT),
+                    )
                     if result is not None and hasattr(result, 'content') and len(result.content):
                         return result.content[0].text
                     else:

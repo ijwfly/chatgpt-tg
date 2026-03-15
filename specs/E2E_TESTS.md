@@ -62,7 +62,9 @@ tests/
 │   ├── test_context_management.py  # Reset, expiration, reply branching (3 tests)
 │   ├── test_settings.py            # Settings menu and toggles (3 tests)
 │   ├── test_forwarded_messages.py  # Forwarded message context (1 test)
-│   └── test_error_handling.py      # Error conditions (1 test)
+│   ├── test_error_handling.py      # Error conditions (1 test)
+│   ├── test_agent_runtime.py      # Agent runtime, plans, background tasks (26 tests)
+│   └── test_scheduled_tasks.py    # Scheduled task CRUD and execution (9 tests)
 ```
 
 ---
@@ -214,6 +216,18 @@ Auto-incrementing counters for `update_id` and `message_id`.
 
 **Pipeline covered:** `process_batch exception handler -> message.answer with error`
 
+### test_agent_runtime.py (26 tests)
+
+Covers: AgentRuntime (simple response, multi-turn tool loop, iteration limit), PlanManager (create, get, update step, auto-complete, delete, no active plan), BackgroundTaskManager (spawn, check, cancel, timeout), AgentTools (SpawnTask, CheckTask, CreatePlan, UpdatePlanStep, GetPlan, DeletePlan via mock LLM tool calls).
+
+**Pipeline covered:** `MessageProcessor -> AgentRuntime._agent_loop -> PlanManager -> BackgroundTaskManager -> agent tools -> DB`
+
+### test_scheduled_tasks.py (9 tests)
+
+Covers: ScheduleTask creation (one-time via dateparser, recurring via cron), ListScheduledTasks, CancelScheduledTask, SchedulerService (poll, execute, disable after one-time execution, recurring next_execution update, error handling).
+
+**Pipeline covered:** `ScheduleTask tool -> DB -> SchedulerService.poll -> execute_task -> AgentRuntime`
+
 ---
 
 ## Not Yet Covered
@@ -226,7 +240,7 @@ Auto-incrementing counters for `update_id` and `message_id`.
 | Access control (role gating) | Needs user with insufficient role | Low |
 | Cancellation (streaming stop) | Needs streaming mock + callback query | Low |
 | Anthropic models | Needs `AnthropicChatGPT` path + different mock shape | Low |
-| MCP tool calling | Needs MCP server mock | Low |
+| MCP tool calling | Agent tools are tested, but MCP protocol-level calls need MCP server mock | Low |
 
 ---
 
@@ -248,6 +262,8 @@ Applied in `conftest.py` before any app imports:
 | `ENABLE_OBSIDIAN_ECHO_ADMIN_INTEGRATION` | `False` | No external API calls |
 | `ENABLE_USER_ROLE_MANAGER_CHAT` | `False` | No admin notifications |
 | `MCP_SERVERS` | `[]` | No MCP connections |
+| `ENABLE_AGENT_RUNTIME` | `True` | Agent mode enabled in tests |
+| `MCP_SERVERS_AGENT` | `[]` | No agent MCP connections |
 
 ---
 

@@ -3,7 +3,6 @@ from typing import List, Any, Optional, Callable, Union
 
 import pydantic
 
-import settings
 from app.bot.utils import get_image_base64, merge_dicts
 from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage, FunctionCall, ToolCall
 from app.openai_helpers.function_storage import FunctionStorage
@@ -103,7 +102,6 @@ class AnthropicChatGPT:
         resp = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
             messages=messages,
-            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             **additional_fields,
         )
         completion_usage = CompletionUsage(
@@ -127,7 +125,6 @@ class AnthropicChatGPT:
         resp_generator = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
             messages=messages,
-            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             stream=True,
             **additional_fields,
         )

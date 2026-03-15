@@ -30,6 +30,7 @@ class User(pydantic.BaseModel):
     tts_voice: str
     system_prompt_settings: Optional[str]
     system_prompt_settings_enabled: Optional[bool]
+    agent_mode: bool = False
 
 
 class MessageType(Enum):
@@ -75,18 +76,20 @@ class DB:
         return User(**record)
 
     async def update_user(self, user: User):
-        sql = '''UPDATE chatgpttg.user 
+        sql = '''UPDATE chatgpttg.user
         SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
         voice_as_prompt = $4, use_functions = $5, auto_summarize = $6,
         full_name = $7, username = $8, role = $9, streaming_answers = $10,
         function_call_verbose = $11, image_generation = $12, tts_voice = $13,
-        system_prompt_settings = $14, system_prompt_settings_enabled = $15 WHERE id = $16 RETURNING *'''
+        system_prompt_settings = $14, system_prompt_settings_enabled = $15,
+        agent_mode = $16 WHERE id = $17 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
             user.voice_as_prompt, user.use_functions, user.auto_summarize,
             user.full_name, user.username, user.role.value, user.streaming_answers,
             user.function_call_verbose, user.image_generation, user.tts_voice,
-            user.system_prompt_settings, user.system_prompt_settings_enabled, user.id,
+            user.system_prompt_settings, user.system_prompt_settings_enabled,
+            user.agent_mode, user.id,
         ))
 
     async def create_user(self, telegram_user_id: int, role: UserRole):
@@ -341,6 +344,83 @@ class DB:
             })
 
         return result
+
+
+    async def create_plan(self, chat_id: int, title: str, steps: list) -> dict:
+        sql = '''INSERT INTO chatgpttg.plan (chat_id, title, steps)
+        VALUES ($1, $2, $3::jsonb) RETURNING *'''
+        record = await self.connection_pool.fetchrow(sql, chat_id, title, json.dumps(steps))
+        return dict(record)
+
+    async def get_active_plan(self, chat_id: int) -> Optional[dict]:
+        sql = '''SELECT * FROM chatgpttg.plan
+        WHERE chat_id = $1 AND status = 'active'
+        ORDER BY created_at DESC LIMIT 1'''
+        record = await self.connection_pool.fetchrow(sql, chat_id)
+        if record is None:
+            return None
+        return dict(record)
+
+    async def update_plan_steps(self, plan_id: int, steps: list) -> None:
+        sql = '''UPDATE chatgpttg.plan SET steps = $1::jsonb, updated_at = NOW()
+        WHERE id = $2'''
+        await self.connection_pool.execute(sql, json.dumps(steps), plan_id)
+
+    async def update_plan_status(self, plan_id: int, status: str) -> None:
+        sql = '''UPDATE chatgpttg.plan SET status = $1, updated_at = NOW()
+        WHERE id = $2'''
+        await self.connection_pool.execute(sql, status, plan_id)
+
+    # --- Scheduled tasks ---
+
+    async def get_user_by_id(self, user_id: int) -> Optional[User]:
+        sql = 'SELECT * FROM chatgpttg.user WHERE id = $1'
+        record = await self.connection_pool.fetchrow(sql, user_id)
+        if record is None:
+            return None
+        return User(**record)
+
+    async def create_scheduled_task(self, chat_id: int, user_id: int, title: str, prompt: str,
+                                    schedule_type: str, run_at, cron_expression: str,
+                                    next_execution) -> dict:
+        sql = '''INSERT INTO chatgpttg.scheduled_task
+        (chat_id, user_id, title, prompt, schedule_type, run_at, cron_expression, next_execution)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *'''
+        record = await self.connection_pool.fetchrow(
+            sql, chat_id, user_id, title, prompt, schedule_type,
+            run_at, cron_expression, next_execution
+        )
+        return dict(record)
+
+    async def get_scheduled_tasks(self, chat_id: int, enabled_only: bool = True) -> list:
+        if enabled_only:
+            sql = '''SELECT * FROM chatgpttg.scheduled_task
+            WHERE chat_id = $1 AND enabled = TRUE ORDER BY next_execution'''
+        else:
+            sql = '''SELECT * FROM chatgpttg.scheduled_task
+            WHERE chat_id = $1 ORDER BY created_at DESC'''
+        records = await self.connection_pool.fetch(sql, chat_id)
+        return [dict(r) for r in records]
+
+    async def get_due_tasks(self, before) -> list:
+        sql = '''SELECT * FROM chatgpttg.scheduled_task
+        WHERE enabled = TRUE AND next_execution <= $1
+        ORDER BY next_execution'''
+        records = await self.connection_pool.fetch(sql, before)
+        return [dict(r) for r in records]
+
+    async def update_scheduled_task_execution(self, task_id: int, last_execution, next_execution) -> None:
+        sql = '''UPDATE chatgpttg.scheduled_task
+        SET last_execution = $1, next_execution = $2 WHERE id = $3'''
+        await self.connection_pool.execute(sql, last_execution, next_execution, task_id)
+
+    async def disable_scheduled_task(self, task_id: int) -> None:
+        sql = 'UPDATE chatgpttg.scheduled_task SET enabled = FALSE WHERE id = $1'
+        await self.connection_pool.execute(sql, task_id)
+
+    async def delete_scheduled_task(self, task_id: int) -> None:
+        sql = 'DELETE FROM chatgpttg.scheduled_task WHERE id = $1'
+        await self.connection_pool.execute(sql, task_id)
 
 
 class DBFactory:

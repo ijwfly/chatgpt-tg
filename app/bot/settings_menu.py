@@ -103,6 +103,7 @@ class Settings:
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
             'function_call_verbose': OnOffSetting('Verbose function calls', 'function_call_verbose'),
             'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
+            'agent_mode': OnOffSetting('Agent mode', 'agent_mode'),
             # 'auto_summarize': OnOffSetting('Auto summarize', 'auto_summarize'),
             # 'forward_as_prompt': OnOffSetting('Forward as prompt', 'forward_as_prompt'),
         }

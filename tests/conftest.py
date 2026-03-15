@@ -124,6 +124,8 @@ async def clean_db(db_pool):
         'chatgpttg.whisper_usage',
         'chatgpttg.completion_usage',
         'chatgpttg.message',
+        'chatgpttg.scheduled_task',
+        'chatgpttg.plan',
         'chatgpttg.user',
     ]
     for table in tables:
@@ -185,6 +187,8 @@ async def bot_app(mock_bot, db, db_pool):
         _test_bot_ref = None
 
         # Stop scheduled tasks but DON'T close the DB pool
+        if telegram_bot.scheduler_service:
+            await telegram_bot.scheduler_service.stop()
         if telegram_bot.monthly_usage_task:
             await telegram_bot.monthly_usage_task.stop()
 
