@@ -29,6 +29,18 @@ from app.storage.user_role import check_access_conditions
 
 logger = logging.getLogger(__name__)
 
+PLAN_TOOL_NAMES = frozenset({"CreatePlan", "UpdatePlanStep", "GetPlan", "DeletePlan"})
+
+
+def _has_plan_tool_call(dialog_message: DialogMessage) -> bool:
+    if dialog_message.function_call and dialog_message.function_call.name in PLAN_TOOL_NAMES:
+        return True
+    if dialog_message.tool_calls:
+        for tc in dialog_message.tool_calls:
+            if tc.function.name in PLAN_TOOL_NAMES:
+                return True
+    return False
+
 
 class AgentRuntime:
     def __init__(self, db: DB, user: User, side_effects: SideEffectHandler,
@@ -105,7 +117,7 @@ class AgentRuntime:
         try:
             async for event in self._agent_loop(
                 chat_gpt, chat_gpt_manager, context_manager, function_storage,
-                bg_manager, plan_manager, system_prompt, is_cancelled,
+                bg_manager, plan_manager, is_cancelled,
             ):
                 yield event
         finally:
@@ -115,10 +127,12 @@ class AgentRuntime:
     async def _agent_loop(
         self, chat_gpt, chat_gpt_manager: ChatGptManager, context_manager: ContextManager,
         function_storage: FunctionStorage, bg_manager: BackgroundTaskManager,
-        plan_manager: PlanManager, base_system_prompt: str,
+        plan_manager: PlanManager,
         is_cancelled: Callable[[], bool],
     ) -> AsyncGenerator[RuntimeEvent, None]:
         iteration = 0
+        iterations_since_plan_tool = 0
+        plan_exists = plan_manager._plan is not None
         while iteration < settings.AGENT_MAX_ITERATIONS:
             if is_cancelled():
                 return
@@ -136,15 +150,23 @@ class AgentRuntime:
                 ack_msg = DialogMessage(role="assistant", content="Acknowledged background results.")
                 await context_manager.add_message(ack_msg, -1)
 
-            # B) Update system prompt with current plan state
-            plan_text = await plan_manager.get_plan()
-            if plan_text and plan_text != "No active plan.":
-                chat_gpt.system_prompt = (
-                    base_system_prompt
-                    + f"\n\n<current-plan>\n{plan_text}\n</current-plan>"
-                )
-            else:
-                chat_gpt.system_prompt = base_system_prompt
+            # B) Inject plan reminder into context if needed
+            should_inject_plan = False
+            if iteration == 0 and plan_exists:
+                should_inject_plan = True
+            elif plan_exists and iterations_since_plan_tool >= settings.AGENT_PLAN_REMINDER_INTERVAL:
+                should_inject_plan = True
+
+            if should_inject_plan:
+                plan_text = await plan_manager.get_plan()
+                if plan_text and plan_text != "No active plan.":
+                    user_msg = DialogUtils.prepare_user_message(
+                        f"<plan-reminder>\n{plan_text}\n</plan-reminder>"
+                    )
+                    await context_manager.add_message(user_msg, -1)
+                    ack_msg = DialogMessage(role="assistant", content="Acknowledged current plan state.")
+                    await context_manager.add_message(ack_msg, -1)
+                    iterations_since_plan_tool = 0
 
             # C) Get context and call LLM
             context_dialog_messages = await context_manager.get_context_messages()
@@ -241,6 +263,13 @@ class AgentRuntime:
 
                 if not pass_tool_response_to_gpt:
                     break
+
+            # F) Update plan tracking counters
+            if _has_plan_tool_call(dialog_message):
+                iterations_since_plan_tool = 0
+                plan_exists = plan_manager._plan is not None
+            else:
+                iterations_since_plan_tool += 1
 
             iteration += 1
 
