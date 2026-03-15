@@ -38,6 +38,9 @@ app/runtime/
 ├── __init__.py                 # Public exports
 ├── runtime.py                  # LLMRuntime protocol
 ├── default_runtime.py          # DefaultLLMRuntime — current implementation
+├── agent_runtime.py            # AgentRuntime — multi-turn agent with plans and background tasks
+├── plan_manager.py             # PlanManager — plan state machine and DB persistence
+├── background_task_manager.py  # BackgroundTaskManager — sub-agent lifecycle
 ├── conversation_session.py     # ConversationSession dataclass
 ├── user_input.py               # UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription
 ├── events.py                   # RuntimeEvent hierarchy
@@ -243,9 +246,48 @@ This split exists because the runtime is transport-agnostic and cannot know the 
 
 ---
 
+## 6a. AgentRuntime
+
+`AgentRuntime` (`app/runtime/agent_runtime.py`) is an alternative to `DefaultLLMRuntime` for agent mode — a multi-turn LLM loop with plan management and background sub-agents.
+
+### Key differences from DefaultLLMRuntime
+
+| Aspect | DefaultLLMRuntime | AgentRuntime |
+|--------|------------------|--------------|
+| Tool call loop | Up to `SUCCESSIVE_FUNCTION_CALLS_LIMIT` (12) | Up to `AGENT_MAX_ITERATIONS` (30) |
+| Plan management | No | `PlanManager` with DB persistence, periodic reminders |
+| Background tasks | No | `SpawnTask` creates sub-agents with own tool access |
+| MCP servers | `MCP_SERVERS` | `MCP_SERVERS` + `MCP_SERVERS_AGENT` |
+| System prompt | gpt_mode + tool additions | `AGENT_SYSTEM_PROMPT` + gpt_mode + tool additions |
+| Context saving | Split between runtime and adapter | Same split pattern |
+
+### Agent Loop
+
+1. Load tools: MCP tools + agent tools (plan, task, schedule)
+2. Build system prompt with `AGENT_SYSTEM_PROMPT` prefix
+3. Loop (up to `AGENT_MAX_ITERATIONS`):
+   - Inject plan reminder if due (every `AGENT_PLAN_REMINDER_INTERVAL` iterations)
+   - Inject completed background task results
+   - Call LLM → yield `StreamingContentDelta` events
+   - If tool calls: execute, yield `FunctionCall` events, continue loop
+   - If content: yield `FinalResponse`, break
+
+### Plan Reminders
+
+Plan state is injected as context messages (not system prompt) to preserve prompt caching:
+- Iteration 0: always inject if plan exists
+- Every N iterations: re-inject if no plan tool was called
+- Format: `<plan-reminder>...</plan-reminder>` as user message + assistant acknowledgment
+
+### Background Sub-Agents
+
+`SpawnTask` creates a sub-agent that runs in a separate coroutine with its own LLM call loop (up to `AGENT_SUB_AGENT_MAX_ITERATIONS`). Results are delivered via `<background-results>` messages when the main agent's next iteration begins.
+
+---
+
 ## 7. Adding a New Runtime
 
-To add an alternative runtime (e.g., Anthropic Agents SDK):
+To add an alternative runtime (e.g., Anthropic Agents SDK). For a real-world example, see `AgentRuntime` (`app/runtime/agent_runtime.py`) which implements a multi-turn agent loop with plan management and background sub-agents while following the same `LLMRuntime` protocol.
 
 ### Step 1: Implement the protocol
 
