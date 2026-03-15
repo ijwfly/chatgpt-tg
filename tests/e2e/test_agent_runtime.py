@@ -246,8 +246,8 @@ class TestAgentRuntime:
         plan = await telegram_bot.db.get_active_plan(user_id)
         assert plan is None
 
-    async def test_agent_mode_check_task_no_tasks(self, bot_app):
-        """CheckTask with no background tasks returns appropriate message."""
+    async def test_agent_mode_wait_task_no_tasks(self, bot_app):
+        """WaitTask with no background tasks returns appropriate message."""
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
         user_id = 70006
@@ -260,7 +260,7 @@ class TestAgentRuntime:
             tool_calls=[{
                 'id': 'call_ct',
                 'function': {
-                    'name': 'CheckTask',
+                    'name': 'WaitTask',
                     'arguments': '{}',
                 },
             }],
@@ -306,7 +306,7 @@ class TestAgentRuntime:
                 {
                     'id': 'call_multi_2',
                     'function': {
-                        'name': 'CheckTask',
+                        'name': 'WaitTask',
                         'arguments': '{}',
                     },
                 },

@@ -48,7 +48,7 @@ class SpawnTask(AgentFunction):
 
     @classmethod
     def get_description(cls) -> str:
-        return "Spawn a background sub-agent that runs autonomously with its own tool access. Returns task_id immediately. Use check_task to monitor progress, or results will be delivered automatically."
+        return "Spawn a background sub-agent that runs autonomously with its own tool access. Returns task_id immediately. Use WaitTask to block until a task completes, or results will be delivered automatically."
 
     @classmethod
     def get_system_prompt_addition(cls) -> Optional[str]:
@@ -61,21 +61,24 @@ class SpawnTask(AgentFunction):
         )
 
 
-# --- CheckTask ---
+# --- WaitTask ---
 
-class CheckTaskParams(OpenAIFunctionParams):
-    task_id: Optional[str] = Field(None, description="Task ID to check, or omit to list all tasks")
+class WaitTaskParams(OpenAIFunctionParams):
+    pass
 
 
-class CheckTask(AgentFunction):
-    PARAMS_SCHEMA = CheckTaskParams
+class WaitTask(AgentFunction):
+    PARAMS_SCHEMA = WaitTaskParams
 
-    async def run(self, params: CheckTaskParams) -> Optional[str]:
-        return self.agent_ctx.bg_manager.check(params.task_id)
+    async def run(self, params: WaitTaskParams) -> Optional[str]:
+        bg = self.agent_ctx.bg_manager
+        if bg.has_pending():
+            await bg.wait_for_any()
+        return bg.check()
 
     @classmethod
     def get_description(cls) -> str:
-        return "Check the status of background tasks. Provide task_id to check a specific task, or omit to list all."
+        return "Wait for any background task to complete. Blocks until at least one running task finishes, then returns status of all tasks. If no tasks are running, returns immediately."
 
 
 # --- CreatePlan ---
@@ -288,6 +291,6 @@ class CancelScheduledTask(OpenAIFunction):
 
 # All agent tool classes for registration
 AGENT_TOOLS = [
-    SpawnTask, CheckTask, CreatePlan, UpdatePlanStep, GetPlan, DeletePlan,
+    SpawnTask, WaitTask, CreatePlan, UpdatePlanStep, GetPlan, DeletePlan,
     ScheduleTask, ListScheduledTasks, CancelScheduledTask,
 ]

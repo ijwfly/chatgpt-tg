@@ -103,6 +103,16 @@ class BackgroundTaskManager:
         if pending:
             await asyncio.wait(pending, timeout=timeout)
 
+    async def wait_for_any(self, timeout: float = None) -> None:
+        """Wait for at least one running task to complete."""
+        pending = [
+            info.asyncio_task for info in self.tasks.values()
+            if info.status == "running" and info.asyncio_task is not None
+        ]
+        if pending:
+            timeout = timeout or self._timeout
+            await asyncio.wait(pending, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+
     async def cancel_all(self) -> None:
         """Cancel all running tasks."""
         for info in self.tasks.values():
