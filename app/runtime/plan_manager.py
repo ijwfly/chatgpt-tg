@@ -1,9 +1,12 @@
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, List
 
 from app.storage.db import DB
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,10 +31,12 @@ VALID_STEP_STATUSES = {"pending", "in_progress", "completed", "skipped"}
 
 
 class PlanManager:
-    def __init__(self, db: DB, chat_id: int):
+    def __init__(self, db: DB, chat_id: int, side_effects=None):
         self.db = db
         self.chat_id = chat_id
+        self.side_effects = side_effects
         self._plan: Optional[Plan] = None
+        self._message_id: Optional[int] = None
 
     async def load(self) -> Optional[Plan]:
         """Load the active plan from DB."""
@@ -80,6 +85,7 @@ class PlanManager:
             created_at=record['created_at'],
             updated_at=record['updated_at'],
         )
+        await self._sync_to_chat()
         return self._format_plan()
 
     async def update_step(self, step_id: str, status: str) -> str:
@@ -105,6 +111,7 @@ class PlanManager:
             self._plan.status = 'completed'
             await self.db.update_plan_status(self._plan.db_id, 'completed')
 
+        await self._sync_to_chat()
         return self._format_plan()
 
     async def get_plan(self) -> str:
@@ -119,7 +126,21 @@ class PlanManager:
             return "No active plan to delete."
         await self.db.update_plan_status(self._plan.db_id, 'cancelled')
         self._plan = None
+        await self._sync_to_chat()
         return "Plan cancelled."
+
+    async def _sync_to_chat(self) -> None:
+        """Send or update plan message in the chat."""
+        if self.side_effects is None:
+            return
+        plan_text = self._format_plan()
+        try:
+            if self._message_id is None:
+                self._message_id = await self.side_effects.send_message(plan_text)
+            else:
+                await self.side_effects.edit_message(self._message_id, plan_text)
+        except Exception as e:
+            logger.error(f"Failed to sync plan to chat: {e}")
 
     def _format_plan(self) -> str:
         if self._plan is None:

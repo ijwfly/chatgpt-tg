@@ -78,7 +78,7 @@ class AgentRuntime:
 
         # Create per-turn managers
         bg_manager = BackgroundTaskManager(timeout=settings.AGENT_BG_TASK_TIMEOUT)
-        plan_manager = PlanManager(self.db, session.chat_id)
+        plan_manager = PlanManager(self.db, session.chat_id, side_effects=self.side_effects)
         await plan_manager.load()
 
         # Create LLM client (same pattern as DefaultLLMRuntime)

@@ -8,3 +8,6 @@ class SideEffectHandler(Protocol):
 
     async def send_photo(self, photo_bytes: bytes, caption: Optional[str] = None) -> int:
         ...
+
+    async def edit_message(self, message_id: int, text: str) -> None:
+        ...

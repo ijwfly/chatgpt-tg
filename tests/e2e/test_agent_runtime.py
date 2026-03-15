@@ -449,6 +449,58 @@ class TestAgentRuntime:
         for tr in tool_results:
             assert 'started' in tr.get('content', ''), f"Expected 'started' but got: {tr.get('content')}"
 
+    async def test_agent_mode_plan_sends_and_edits_message(self, bot_app):
+        """Plan creation sends a message, step update edits it."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 70011
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+
+        mock_llm = MockLLMClient()
+        # Create plan, then update a step
+        mock_llm.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_pv1',
+                'function': {
+                    'name': 'CreatePlan',
+                    'arguments': json.dumps({
+                        'title': 'Visual Plan',
+                        'steps': ['Do X', 'Do Y'],
+                    }),
+                },
+            }],
+        )
+        mock_llm.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_pv2',
+                'function': {
+                    'name': 'UpdatePlanStep',
+                    'arguments': json.dumps({'step_id': '1', 'status': 'completed'}),
+                },
+            }],
+        )
+        mock_llm.add_response(content="Step 1 done.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Plan and execute', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(0.3)
+
+        # Plan message should have been sent (sendMessage with plan text)
+        all_sent = spy.get_all_sent_texts()
+        plan_messages = [t for t in all_sent if 'Visual Plan' in t]
+        assert len(plan_messages) >= 1, f"Expected plan message in sent texts: {all_sent}"
+
+        # Plan message should have been edited (editMessageText with updated status)
+        all_edited = spy.get_all_edited_texts()
+        edited_plan = [t for t in all_edited if 'Visual Plan' in t]
+        assert len(edited_plan) >= 1, f"Expected plan edit in edited texts: {all_edited}"
+        # The edited version should show step 1 as completed
+        assert any('completed' in t for t in edited_plan)
+
     async def test_agent_settings_toggle(self, bot_app):
         """Agent mode can be toggled via settings."""
         telegram_bot, dp, mock_bot = bot_app
