@@ -371,6 +371,57 @@ class DB:
         WHERE id = $2'''
         await self.connection_pool.execute(sql, status, plan_id)
 
+    # --- Scheduled tasks ---
+
+    async def get_user_by_id(self, user_id: int) -> Optional[User]:
+        sql = 'SELECT * FROM chatgpttg.user WHERE id = $1'
+        record = await self.connection_pool.fetchrow(sql, user_id)
+        if record is None:
+            return None
+        return User(**record)
+
+    async def create_scheduled_task(self, chat_id: int, user_id: int, title: str, prompt: str,
+                                    schedule_type: str, run_at, cron_expression: str,
+                                    next_execution) -> dict:
+        sql = '''INSERT INTO chatgpttg.scheduled_task
+        (chat_id, user_id, title, prompt, schedule_type, run_at, cron_expression, next_execution)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *'''
+        record = await self.connection_pool.fetchrow(
+            sql, chat_id, user_id, title, prompt, schedule_type,
+            run_at, cron_expression, next_execution
+        )
+        return dict(record)
+
+    async def get_scheduled_tasks(self, chat_id: int, enabled_only: bool = True) -> list:
+        if enabled_only:
+            sql = '''SELECT * FROM chatgpttg.scheduled_task
+            WHERE chat_id = $1 AND enabled = TRUE ORDER BY next_execution'''
+        else:
+            sql = '''SELECT * FROM chatgpttg.scheduled_task
+            WHERE chat_id = $1 ORDER BY created_at DESC'''
+        records = await self.connection_pool.fetch(sql, chat_id)
+        return [dict(r) for r in records]
+
+    async def get_due_tasks(self, before) -> list:
+        sql = '''SELECT * FROM chatgpttg.scheduled_task
+        WHERE enabled = TRUE AND next_execution <= $1
+        ORDER BY next_execution'''
+        records = await self.connection_pool.fetch(sql, before)
+        return [dict(r) for r in records]
+
+    async def update_scheduled_task_execution(self, task_id: int, last_execution, next_execution) -> None:
+        sql = '''UPDATE chatgpttg.scheduled_task
+        SET last_execution = $1, next_execution = $2 WHERE id = $3'''
+        await self.connection_pool.execute(sql, last_execution, next_execution, task_id)
+
+    async def disable_scheduled_task(self, task_id: int) -> None:
+        sql = 'UPDATE chatgpttg.scheduled_task SET enabled = FALSE WHERE id = $1'
+        await self.connection_pool.execute(sql, task_id)
+
+    async def delete_scheduled_task(self, task_id: int) -> None:
+        sql = 'DELETE FROM chatgpttg.scheduled_task WHERE id = $1'
+        await self.connection_pool.execute(sql, task_id)
+
 
 class DBFactory:
     connection_pool = None

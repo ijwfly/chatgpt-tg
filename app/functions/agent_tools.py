@@ -159,5 +159,135 @@ class DeletePlan(AgentFunction):
         return "Cancel and delete the current active plan."
 
 
+# --- ScheduleTask ---
+
+class ScheduleTaskParams(OpenAIFunctionParams):
+    title: str = Field(..., description="Short title for the scheduled task")
+    prompt: str = Field(..., description="Natural language description of what to do when the task fires")
+    schedule_type: str = Field(..., description="'once' for one-time or 'recurring' for repeated execution")
+    when: Optional[str] = Field(None, description="For one-time tasks: natural language time expression, passed directly from user (e.g. 'через 5 минут', 'следующий вторник в 10:00', 'tomorrow at 9am')")
+    cron_expression: Optional[str] = Field(None, description="Cron expression for recurring tasks (e.g. '0 10 * * *' for daily at 10:00)")
+
+
+class ScheduleTask(OpenAIFunction):
+    PARAMS_SCHEMA = ScheduleTaskParams
+
+    async def run(self, params: ScheduleTaskParams) -> Optional[str]:
+        from datetime import datetime, timezone
+        from croniter import croniter
+        import dateparser
+
+        chat_id = self.context_manager.session.chat_id
+        now = datetime.now(timezone.utc)
+
+        if params.schedule_type == 'once':
+            if not params.when:
+                return "Error: 'when' is required for one-time tasks"
+            parsed = dateparser.parse(params.when, settings={
+                'PREFER_DATES_FROM': 'future',
+                'RETURN_AS_TIMEZONE_AWARE': True,
+            })
+            if parsed is None:
+                return f"Error: Could not parse date/time from '{params.when}'"
+            if parsed <= now:
+                return f"Error: Parsed time {parsed.isoformat()} is in the past (current time: {now.isoformat()})"
+            run_at = parsed
+            next_execution = run_at
+            cron_expression = None
+        elif params.schedule_type == 'recurring':
+            if not params.cron_expression:
+                return "Error: cron_expression is required for recurring tasks"
+            try:
+                next_execution = croniter(params.cron_expression, now).get_next(datetime)
+            except (ValueError, KeyError) as e:
+                return f"Error: Invalid cron expression: {e}"
+            run_at = None
+            cron_expression = params.cron_expression
+        else:
+            return f"Error: schedule_type must be 'once' or 'recurring', got '{params.schedule_type}'"
+
+        record = await self.db.create_scheduled_task(
+            chat_id=chat_id,
+            user_id=self.user.id,
+            title=params.title,
+            prompt=params.prompt,
+            schedule_type=params.schedule_type,
+            run_at=run_at,
+            cron_expression=cron_expression,
+            next_execution=next_execution,
+        )
+        next_str = next_execution.strftime('%Y-%m-%d %H:%M UTC')
+        return f"Scheduled task #{record['id']} '{params.title}' created. Next execution: {next_str}"
+
+    @classmethod
+    def get_description(cls) -> str:
+        return "Schedule a task for later execution. Use 'once' with 'when' for one-time tasks, or 'recurring' with cron_expression for repeated tasks."
+
+    @classmethod
+    def get_system_prompt_addition(cls) -> Optional[str]:
+        return (
+            "You can schedule tasks using ScheduleTask. "
+            "For one-time tasks, use schedule_type='once' and pass the user's time expression "
+            "directly as the 'when' parameter — it supports natural language in any language "
+            "(e.g. 'через 5 минут', 'следующий вторник в 10:00', 'завтра утром', "
+            "'in 2 hours', 'next monday at 14:30'). The tool resolves the date automatically. "
+            "For recurring tasks, use schedule_type='recurring' with a cron expression "
+            "(e.g. '0 10 * * *' = daily at 10:00, '0 9 * * 1' = every Monday at 9:00, "
+            "'30 14 * * 2' = every Tuesday at 14:30). "
+            "The prompt field should contain a complete description of what to do when the task fires. "
+            "Use ListScheduledTasks to see existing schedules and CancelScheduledTask to remove them."
+        )
+
+
+# --- ListScheduledTasks ---
+
+class ListScheduledTasksParams(OpenAIFunctionParams):
+    pass
+
+
+class ListScheduledTasks(OpenAIFunction):
+    PARAMS_SCHEMA = ListScheduledTasksParams
+
+    async def run(self, params: ListScheduledTasksParams) -> Optional[str]:
+        chat_id = self.context_manager.session.chat_id
+        tasks = await self.db.get_scheduled_tasks(chat_id, enabled_only=True)
+        if not tasks:
+            return "No scheduled tasks."
+        lines = ["Scheduled tasks:"]
+        for t in tasks:
+            schedule_info = t.get('cron_expression') or (t['run_at'].strftime('%Y-%m-%d %H:%M') if t.get('run_at') else '?')
+            next_exec = t['next_execution'].strftime('%Y-%m-%d %H:%M') if t.get('next_execution') else '?'
+            lines.append(
+                f"  #{t['id']} [{t['schedule_type']}] {t['title']} "
+                f"(schedule: {schedule_info}, next: {next_exec})"
+            )
+        return "\n".join(lines)
+
+    @classmethod
+    def get_description(cls) -> str:
+        return "List all active scheduled tasks for this chat."
+
+
+# --- CancelScheduledTask ---
+
+class CancelScheduledTaskParams(OpenAIFunctionParams):
+    task_id: int = Field(..., description="ID of the scheduled task to cancel")
+
+
+class CancelScheduledTask(OpenAIFunction):
+    PARAMS_SCHEMA = CancelScheduledTaskParams
+
+    async def run(self, params: CancelScheduledTaskParams) -> Optional[str]:
+        await self.db.disable_scheduled_task(params.task_id)
+        return f"Scheduled task #{params.task_id} cancelled."
+
+    @classmethod
+    def get_description(cls) -> str:
+        return "Cancel a scheduled task by its ID."
+
+
 # All agent tool classes for registration
-AGENT_TOOLS = [SpawnTask, CheckTask, CreatePlan, UpdatePlanStep, GetPlan, DeletePlan]
+AGENT_TOOLS = [
+    SpawnTask, CheckTask, CreatePlan, UpdatePlanStep, GetPlan, DeletePlan,
+    ScheduleTask, ListScheduledTasks, CancelScheduledTask,
+]
