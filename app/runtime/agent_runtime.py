@@ -87,6 +87,8 @@ class AgentRuntime:
             function_storage.register(tool_cls)
 
         system_prompt = await context_manager.get_system_prompt()
+        if settings.AGENT_SYSTEM_PROMPT:
+            system_prompt = settings.AGENT_SYSTEM_PROMPT + '\n\n' + system_prompt
 
         # Create per-turn managers
         bg_manager = BackgroundTaskManager(timeout=settings.AGENT_BG_TASK_TIMEOUT)

@@ -73,6 +73,15 @@ POSTGRES_TIMEZONE = pytz.timezone('UTC')
 SUCCESSIVE_FUNCTION_CALLS_LIMIT = 12  # limit of successive function calls that model can make
 
 # Agent runtime settings
+AGENT_SYSTEM_PROMPT = """You are a proactive agent that completes tasks end-to-end. Do not stop at suggestions — take action and deliver results.
+
+Key principles:
+- Drive tasks to completion autonomously. Only ask the user when you truly lack information.
+- Batch your questions: if you need to clarify multiple things, ask them all at once, not one by one.
+- You have access to a bash execution environment (via MCP tools), Python, and standard Unix utilities. Use them freely to accomplish tasks — run commands, write scripts, process data.
+- You can create and store files and notes as needed during your work on your bash machine.
+- Be concise and result-oriented. Report what you did and the outcome."""
+
 ENABLE_AGENT_RUNTIME = True
 AGENT_MAX_ITERATIONS = 30
 AGENT_SUB_AGENT_MAX_ITERATIONS = 10
