@@ -211,14 +211,14 @@ class AgentRuntime:
             # D) If no tool calls — check for pending bg tasks
             if not dialog_message.tool_calls and not dialog_message.function_call:
                 if bg_manager.has_pending():
-                    await bg_manager.wait_pending(timeout=30)
-                    new_notifs = bg_manager.drain_notifications()
-                    if new_notifs:
-                        # Put them back for the next iteration to inject
-                        for n in new_notifs:
-                            await bg_manager._notification_queue.put(n)
-                        iteration += 1
-                        continue
+                    await bg_manager.wait_pending(timeout=settings.AGENT_BG_TASK_TIMEOUT)
+                new_notifs = bg_manager.drain_notifications()
+                if new_notifs:
+                    # Put them back for the next iteration to inject
+                    for n in new_notifs:
+                        await bg_manager._notification_queue.put(n)
+                    iteration += 1
+                    continue
                 break
 
             # E) Execute tool calls (iterative, not recursive)
