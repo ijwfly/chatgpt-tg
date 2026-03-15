@@ -646,8 +646,7 @@ class TestPlanManager:
         result = await pm.create_plan("My Plan", ["Step 1", "Step 2"])
 
         assert "My Plan" in result
-        assert "Step 1" in result
-        assert "Step 2" in result
+        assert "2 steps" in result
 
         plan_text = await pm.get_plan()
         assert "My Plan" in plan_text

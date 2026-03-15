@@ -86,7 +86,7 @@ class PlanManager:
             updated_at=record['updated_at'],
         )
         await self._sync_to_chat()
-        return self._format_plan()
+        return f"Plan '{title}' created with {len(steps)} steps."
 
     async def update_step(self, step_id: str, status: str) -> str:
         """Update a plan step's status."""
@@ -112,7 +112,9 @@ class PlanManager:
             await self.db.update_plan_status(self._plan.db_id, 'completed')
 
         await self._sync_to_chat()
-        return self._format_plan()
+        if all_done:
+            return "OK. Plan completed."
+        return f"OK. Step {step_id} → {status}."
 
     async def get_plan(self) -> str:
         """Get the current plan as formatted text."""
