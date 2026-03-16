@@ -27,7 +27,7 @@ class GenericAsyncOpenAIClient(BaseLLMClient):
 
     async def chat_completions_create(self, model: str, messages, **additional_fields):
         if not settings.LANGFUSE_ENABLED:
-            additional_fields = {k: v for k, v in additional_fields.items() if not k.startswith('langfuse_')}
+            additional_fields.pop('metadata', None)
         return await self.client.chat.completions.create(model=model, messages=messages, **additional_fields)
 
 
@@ -37,7 +37,7 @@ class OpenAISpecificAsyncOpenAIClient(GenericAsyncOpenAIClient):
     """
     async def chat_completions_create(self, model: str, messages, **additional_fields):
         if not settings.LANGFUSE_ENABLED:
-            additional_fields = {k: v for k, v in additional_fields.items() if not k.startswith('langfuse_')}
+            additional_fields.pop('metadata', None)
         inner_additional_fields = {}
         if additional_fields.get("stream"):
             inner_additional_fields["stream_options"] = {
