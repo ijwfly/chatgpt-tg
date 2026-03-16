@@ -63,5 +63,7 @@ uvicorn==0.35.0
 yarl==1.9.2
 croniter==1.4.1
 dateparser==1.2.0
+langfuse>=3.0.0
+opentelemetry-instrumentation-anthropic
 pytest==8.3.4
 pytest-asyncio==0.24.0

@@ -153,6 +153,14 @@ VECTARA_CORPUS_ID = -1
 # Accepts LLModel instances or dicts (legacy format). See settings_local.py.example.
 EXTRA_MODELS: list = []
 
+# Langfuse observability (https://langfuse.com)
+# Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY to enable
+import os
+LANGFUSE_PUBLIC_KEY = os.getenv('LANGFUSE_PUBLIC_KEY', '')
+LANGFUSE_SECRET_KEY = os.getenv('LANGFUSE_SECRET_KEY', '')
+LANGFUSE_BASE_URL = os.getenv('LANGFUSE_BASE_URL', 'https://cloud.langfuse.com')
+LANGFUSE_ENABLED = bool(LANGFUSE_PUBLIC_KEY)
+
 # Local overrides — create settings_local.py (gitignored) to override any setting
 try:
     from settings_local import *

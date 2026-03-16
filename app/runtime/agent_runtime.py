@@ -23,6 +23,7 @@ from app.runtime.events import (
     RuntimeEvent, StreamingContentDelta, FinalResponse,
     FunctionCallStarted, FunctionCallCompleted, ErrorEvent,
 )
+from app.runtime.langfuse_utils import build_langfuse_metadata
 from app.runtime.plan_manager import PlanManager
 from app.runtime.side_effects import SideEffectHandler
 from app.runtime.user_input import UserInput
@@ -109,10 +110,11 @@ class AgentRuntime:
             system_prompt = settings.AGENT_SYSTEM_PROMPT + '\n\n' + system_prompt
 
         # Create LLM client (same pattern as DefaultLLMRuntime)
+        langfuse_metadata = build_langfuse_metadata(self.user)
         if self.user.current_model == llm_model.ANTHROPIC_CLAUDE_35_SONNET:
-            chat_gpt = AnthropicChatGPT(llm_model, system_prompt, function_storage)
+            chat_gpt = AnthropicChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata)
         else:
-            chat_gpt = ChatGPT(llm_model, system_prompt, function_storage)
+            chat_gpt = ChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata)
         chat_gpt_manager = ChatGptManager(chat_gpt, self.db)
 
         # Build sub-agent runner
@@ -339,10 +341,11 @@ class AgentRuntime:
             sub_system_prompt += f"Current plan:\n{plan_text}\n\n"
         sub_system_prompt += f"Task: {prompt}"
 
+        langfuse_metadata = build_langfuse_metadata(self.user)
         if llm_model.ANTHROPIC_CLAUDE_35_SONNET == self.user.current_model:
-            sub_chatgpt = AnthropicChatGPT(llm_model, sub_system_prompt, sub_function_storage)
+            sub_chatgpt = AnthropicChatGPT(llm_model, sub_system_prompt, sub_function_storage, langfuse_metadata=langfuse_metadata)
         else:
-            sub_chatgpt = ChatGPT(llm_model, sub_system_prompt, sub_function_storage)
+            sub_chatgpt = ChatGPT(llm_model, sub_system_prompt, sub_function_storage, langfuse_metadata=langfuse_metadata)
 
         # No context swapping — sub-agent shares parent's _agent_context.
         # SpawnTask is not in sub_function_storage, so nesting is impossible.

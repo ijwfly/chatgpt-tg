@@ -2,6 +2,7 @@ from typing import Callable, AsyncGenerator, Optional
 
 import settings
 from app.bot.chatgpt_manager import ChatGptManager
+from app.runtime.langfuse_utils import build_langfuse_metadata
 from app.context.context_manager import ContextManager, build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.llm_models import get_model_by_name
@@ -47,10 +48,11 @@ class DefaultLLMRuntime:
         system_prompt = await context_manager.get_system_prompt()
 
         # HACK: TODO: refactor to factory
+        langfuse_metadata = build_langfuse_metadata(self.user)
         if self.user.current_model == llm_model.ANTHROPIC_CLAUDE_35_SONNET:
-            chat_gpt_manager = ChatGptManager(AnthropicChatGPT(llm_model, system_prompt, function_storage), self.db)
+            chat_gpt_manager = ChatGptManager(AnthropicChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata), self.db)
         else:
-            chat_gpt_manager = ChatGptManager(ChatGPT(llm_model, system_prompt, function_storage), self.db)
+            chat_gpt_manager = ChatGptManager(ChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata), self.db)
 
         context_dialog_messages = await context_manager.get_context_messages()
         response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)

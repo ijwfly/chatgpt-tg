@@ -14,9 +14,31 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
+def _init_langfuse():
+    """Initialize Langfuse observability if configured."""
+    if not settings.LANGFUSE_ENABLED:
+        return
+
+    import os
+    os.environ.setdefault('LANGFUSE_PUBLIC_KEY', settings.LANGFUSE_PUBLIC_KEY)
+    os.environ.setdefault('LANGFUSE_SECRET_KEY', settings.LANGFUSE_SECRET_KEY)
+    os.environ.setdefault('LANGFUSE_HOST', settings.LANGFUSE_BASE_URL)
+
+    try:
+        from opentelemetry.instrumentation.anthropic import AnthropicInstrumentor
+        AnthropicInstrumentor().instrument()
+        logger.info('Langfuse: Anthropic instrumentation enabled')
+    except ImportError:
+        logger.warning('Langfuse: opentelemetry-instrumentation-anthropic not installed, Anthropic calls won\'t be traced')
+
+    logger.info(f'Langfuse observability enabled (base_url={settings.LANGFUSE_BASE_URL})')
+
+
 if __name__ == '__main__':
     # needed for whisper and tts capabilities
     OpenAIAsync.init(settings.OPENAI_TOKEN, settings.OPENAI_BASE_URL)
+
+    _init_langfuse()
 
     # HACK: find if image_proxy is hosted on another machine or not
     image_proxy_url = get_image_proxy_url()
