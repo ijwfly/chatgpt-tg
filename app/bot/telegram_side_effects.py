@@ -16,3 +16,7 @@ class TelegramSideEffectHandler:
     async def send_photo(self, photo_bytes: bytes, caption: Optional[str] = None) -> int:
         response = await send_photo(self.message, photo_bytes, caption)
         return response.message_id
+
+    async def edit_message(self, message_id: int, text: str) -> None:
+        chat_id = self.message.chat.id
+        await self.message.bot.edit_message_text(text, chat_id, message_id)

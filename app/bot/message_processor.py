@@ -1,3 +1,4 @@
+import settings
 from app.bot.telegram_runtime_adapter import TelegramRuntimeAdapter
 from app.bot.telegram_side_effects import TelegramSideEffectHandler
 from app.bot.utils import message_is_forward
@@ -38,6 +39,10 @@ class MessageProcessor:
         context_manager = await build_context_manager(self.db, self.user, session)
 
         side_effects = TelegramSideEffectHandler(self.message)
-        runtime = DefaultLLMRuntime(self.db, self.user, side_effects, context_manager)
+        if self.user.agent_mode and settings.ENABLE_AGENT_RUNTIME:
+            from app.runtime.agent_runtime import AgentRuntime
+            runtime = AgentRuntime(self.db, self.user, side_effects, context_manager)
+        else:
+            runtime = DefaultLLMRuntime(self.db, self.user, side_effects, context_manager)
         adapter = TelegramRuntimeAdapter(self.message, self.user, context_manager)
         await adapter.handle_turn(runtime, user_input, session, is_cancelled)

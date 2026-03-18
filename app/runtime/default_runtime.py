@@ -176,9 +176,12 @@ class DefaultLLMRuntime:
             tool_call_id=tool_call_id,
         )
 
-        function_class = function_storage.get_function_class(function_name)
-        function = function_class(self.user, self.db, context_manager, self.side_effects, tool_call_id)
-        function_response_raw = await function.run_str_args(function_args)
+        try:
+            function_class = function_storage.get_function_class(function_name)
+            function = function_class(self.user, self.db, context_manager, self.side_effects, tool_call_id)
+            function_response_raw = await function.run_str_args(function_args)
+        except Exception as e:
+            function_response_raw = f"Error: {e}"
 
         yield FunctionCallCompleted(
             function_name=function_name,

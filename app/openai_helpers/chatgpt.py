@@ -4,7 +4,6 @@ from contextlib import suppress
 from decimal import Decimal
 from typing import List, Any, Optional, Callable, Union
 
-import settings
 from app.bot.utils import merge_dicts, get_image_base64
 from app.openai_helpers.count_tokens import count_messages_tokens, count_tokens_from_functions, count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
@@ -64,7 +63,13 @@ class DialogMessage(pydantic.BaseModel):
         new = self.copy()
         new.thinking = None
         if isinstance(new.content, str):
-            new.content = re.sub(r'<(?:think|thinking)>.*?</(?:think|thinking)>', '', new.content, flags=re.DOTALL).strip()
+            # Remove complete <think>...</think> blocks
+            new.content = re.sub(r'<(?:think|thinking)>.*?</(?:think|thinking)>', '', new.content, flags=re.DOTALL)
+            # Remove unclosed <think> blocks (e.g. when tool_call interrupts thinking)
+            new.content = re.sub(r'<(?:think|thinking)>.*$', '', new.content, flags=re.DOTALL)
+            # Remove orphaned </think> tags (continuation from previous turn)
+            new.content = re.sub(r'</(?:think|thinking)>', '', new.content)
+            new.content = new.content.strip()
         return new
 
     def openai_message(self):
@@ -140,15 +145,22 @@ def parse_thinking(content: str) -> tuple:
     if not content:
         return '', '', False
 
+    close_idx, close_len = _find_think_close(content)
     open_idx, open_len = _find_think_open(content)
+
     if open_idx == -1:
+        if close_idx != -1:
+            # Standalone </think> — strip it from visible content
+            visible = (content[:close_idx] + content[close_idx + close_len:]).strip()
+            return visible, '', False
         return content, '', False
 
-    close_idx, close_len = _find_think_close(content)
-    if close_idx == -1:
+    if close_idx == -1 or close_idx < open_idx:
         # Tag opened but not closed — model is still thinking
         thinking_text = content[open_idx + open_len:]
         visible = content[:open_idx]
+        if close_idx != -1 and close_idx < open_idx:
+            visible = (content[:close_idx] + content[close_idx + close_len:open_idx]).strip()
         return visible, thinking_text, True
 
     # Tag closed — thinking is complete
@@ -195,7 +207,6 @@ class ChatGPT:
         resp = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
             messages=messages,
-            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             **additional_fields,
         )
         completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp.usage))
@@ -216,7 +227,6 @@ class ChatGPT:
         resp_generator = await LLMClientFactory.get_client(self.llm_model.model_name).chat_completions_create(
             model=self.llm_model.model_name,
             messages=messages,
-            temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
             stream=True,
             **additional_fields,
         )
@@ -282,7 +292,10 @@ class ChatGPT:
                         )
                     )
 
-                dialog_message = DialogMessage(tool_calls=tool_calls_list)
+                tool_call_kwargs = {'tool_calls': tool_calls_list}
+                if 'content' in result_dict:
+                    tool_call_kwargs['content'] = result_dict['content']
+                dialog_message = DialogMessage(**tool_call_kwargs)
                 # TODO: find more accurate way to calculate completion length for function calls
                 completion_tokens = count_string_tokens(json.dumps(result_dict), model=self.llm_model.model_name)
 
@@ -374,7 +387,6 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
     resp = await LLMClientFactory.get_client(model).chat_completions_create(
         model=model,
         messages=prompt_messages,
-        temperature=settings.OPENAI_CHAT_COMPLETION_TEMPERATURE,
     )
     completion_usage = CompletionUsage(model=model, **dict(resp.usage))
     return resp.choices[0].message.content, completion_usage

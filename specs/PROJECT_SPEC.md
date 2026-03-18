@@ -72,7 +72,8 @@ app/
 │   │
 ├── runtime/           ← LLM Runtime layer (transport-agnostic)
 │   │                    Runtime protocol, events, user input types,
-│   │                    DefaultLLMRuntime, side effects protocol
+│   │                    DefaultLLMRuntime, AgentRuntime,
+│   │                    plan management, background tasks, side effects protocol
 │   │
 ├── context/           ← Context orchestration (transport-agnostic)
 │   │                    Conversation management, function aggregation
@@ -110,6 +111,8 @@ bot → runtime → context → openai_helpers → storage
 | Registry | `FunctionStorage` | `openai_helpers/function_storage.py` | Function registry for LLM tool-calling |
 | Batching/Debounce | `BatchedInputHandler` | `bot/batched_input_handler.py` | 300ms batching of multi-messages |
 | Cancellation Token | `CancellationManager` | `bot/cancellation_manager.py` | Cooperative cancellation of streaming responses |
+| Agent Loop | `AgentRuntime` | `runtime/agent_runtime.py` | Multi-turn agent with plan management and background sub-agents |
+| State Machine | `PlanManager` | `runtime/plan_manager.py` | Plan lifecycle (active → completed/cancelled) |
 
 ---
 
@@ -181,6 +184,24 @@ User sends message(s) to Telegram
 │     (up to SUCCESSIVE_FUNCTION_CALLS_LIMIT)   │
 │  7. Usage tracking (tokens, price) to DB      │
 └──────────────────────────────────────────────┘
+```
+
+### 3.1a Agent Mode Flow (alternative)
+
+When `ENABLE_AGENT_RUNTIME` is True and user has agent mode enabled, `MessageProcessor` creates `AgentRuntime` instead of `DefaultLLMRuntime`.
+
+```
+AgentRuntime._agent_loop():
+1. Load MCP tools (MCP_SERVERS + MCP_SERVERS_AGENT)
+2. Register agent tools (plan, task, schedule management)
+3. Build system prompt (AGENT_SYSTEM_PROMPT + gpt_mode + tool additions)
+4. LLM call loop (up to AGENT_MAX_ITERATIONS):
+   a. Inject plan reminder every AGENT_PLAN_REMINDER_INTERVAL iterations
+   b. Check for completed background tasks → inject results
+   c. Call LLM → yield streaming events
+   d. If tool calls → execute → pass results back → continue loop
+   e. If content response → yield FinalResponse → break
+5. Cancel remaining background tasks
 ```
 
 > For full runtime architecture details, see [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md).
@@ -263,6 +284,23 @@ chatgpttg.tts_usage                    └────────────�
 └────────────────────────┘
 ```
 
+```
+chatgpttg.plan                         chatgpttg.scheduled_task
+┌──────────────────────────┐          ┌──────────────────────────────┐
+│ id (bigserial PK)        │          │ id (bigserial PK)            │
+│ chat_id (bigint)         │          │ chat_id (bigint)             │
+│ title (text)             │          │ user_id (bigint)             │
+│ steps (jsonb)            │          │ title (text)                 │
+│ status (text)            │          │ prompt (text)                │
+│ created_at (timestamptz) │          │ schedule_type (text)         │
+│ updated_at (timestamptz) │          │ run_at (timestamptz)         │
+└──────────────────────────┘          │ cron_expression (text)       │
+                                      │ next_execution (timestamptz) │
+                                      │ enabled (bool)               │
+                                      │ created_at (timestamptz)     │
+                                      └──────────────────────────────┘
+```
+
 ### 4.2 Enum Types
 
 ```sql
@@ -295,6 +333,8 @@ chatgpttg.user_roles:    ('admin', 'advanced', 'basic', 'stranger')
 | 0010 | `0010_gpt_4_turbo_alias.sql` | GPT-4 Turbo alias |
 | 0011 | `0011_gpt_4_turbo_release.sql` | GPT-4 Turbo release model |
 | 0012 | `0012_add_price_to_usage.sql` | Price field in usage tables |
+| 0014 | `0014_agent_mode_and_plans.sql` | Plan management tables |
+| 0015 | `0015_scheduled_tasks.sql` | Scheduled task tables |
 
 > Migrations are forward-only — no rollback mechanism exists.
 
@@ -432,7 +472,25 @@ class MCPServerConfig:
     headers: Optional[dict[str, str]] = None    # custom HTTP headers
 ```
 
-### 6.4 Function Registration Flow
+### 6.4 Agent Tools
+
+File: `functions/agent_tools.py`
+
+Available only in agent mode. Inherit from `AgentFunction` (base class with `AgentToolContext` providing access to `PlanManager`, `BackgroundTaskManager`, and sub-agent runner).
+
+| Class | Description |
+|-------|-------------|
+| `SpawnTask` | Spawn a background sub-agent with its own tool access and LLM call loop |
+| `CheckTask` | Check status of background tasks (by ID or list all) |
+| `CreatePlan` | Create an execution plan with numbered steps |
+| `UpdatePlanStep` | Update a step's status (pending, in_progress, completed, skipped) |
+| `GetPlan` | Retrieve the current plan with all steps and statuses |
+| `DeletePlan` | Cancel and delete the active plan |
+| `ScheduleTask` | Schedule a one-time (natural language dates via `dateparser`) or recurring (cron) task |
+| `ListScheduledTasks` | List all active scheduled tasks for the chat |
+| `CancelScheduledTask` | Cancel a scheduled task by ID |
+
+### 6.5 Function Registration Flow
 
 `FunctionManager.process_functions()`:
 
@@ -614,6 +672,18 @@ File: `settings.py`
 | `MESSAGE_EXPIRATION_WINDOW` | 3600 sec | Conversation lifetime window |
 | `SUCCESSIVE_FUNCTION_CALLS_LIMIT` | 12 | Recursive function calls limit |
 
+**Agent runtime:**
+| Parameter | Default | Description |
+|-----------|---------|-----------|
+| `AGENT_SYSTEM_PROMPT` | (long text) | System prompt prepended in agent mode |
+| `ENABLE_AGENT_RUNTIME` | `True` | Enable agent mode |
+| `AGENT_MAX_ITERATIONS` | `30` | Max LLM call iterations per turn |
+| `AGENT_SUB_AGENT_MAX_ITERATIONS` | `10` | Max iterations for sub-agents |
+| `AGENT_BG_TASK_TIMEOUT` | `300` | Background task timeout (seconds) |
+| `AGENT_PLAN_REMINDER_INTERVAL` | `5` | Iterations between plan reminders |
+| `MCP_TOOL_CALL_TIMEOUT` | `300` | MCP tool call read timeout (seconds) |
+| `MCP_SERVERS_AGENT` | `[]` | MCP servers available only in agent mode |
+
 **Local overrides pattern:** at the end of `settings.py`, variables are overridden for local development. For production, environment variables should be used.
 
 ---
@@ -749,12 +819,17 @@ chatgpt-tg/
 │   │   ├── user_role_manager.py   # UserRoleManager: role management via admin chat
 │   │   ├── user_middleware.py     # UserMiddleware: user creation/update, access control
 │   │   ├── scheduled_tasks.py     # Monthly usage reporting task
+│   │   ├── scheduler_service.py   # SchedulerService: polls and executes scheduled tasks
+│   │   ├── bot_side_effects.py    # BotSideEffectHandler: side effects without user message
 │   │   ├── cancellation_manager.py  # CancellationManager: streaming cancellation tokens
 │   │   └── utils.py              # Utilities: send/edit message, TypingWorker, Timer, etc.
 │   │
 │   ├── runtime/
 │   │   ├── runtime.py             # LLMRuntime protocol
 │   │   ├── default_runtime.py     # DefaultLLMRuntime: current LLM logic (streaming, tool calls)
+│   │   ├── agent_runtime.py       # AgentRuntime: multi-turn agent with plans, background tasks
+│   │   ├── plan_manager.py        # PlanManager: plan lifecycle and DB persistence
+│   │   ├── background_task_manager.py # BackgroundTaskManager: sub-agent task execution
 │   │   ├── conversation_session.py # ConversationSession dataclass
 │   │   ├── user_input.py          # UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription
 │   │   ├── events.py              # RuntimeEvent hierarchy (deltas, final, function events)
@@ -785,6 +860,7 @@ chatgpt-tg/
 │   │   ├── obsidian_echo.py      # CreateObsidianNote: Obsidian note creation
 │   │   ├── vectara_search.py     # VectorSearch: RAG search via Vectara
 │   │   ├── save_user_settings.py # SaveUserSettings: saving user preferences
+│   │   ├── agent_tools.py       # Agent-specific tools (plan, task, schedule management)
 │   │   └── mcp/
 │   │       └── mcp_function_storage.py  # MCPFunctionManager + MCPFunction: MCP client
 │   │
@@ -796,7 +872,7 @@ chatgpt-tg/
 │   └── llm_models.py            # LLModel class, get_models() registry, LLMPrice/Capabilities/Context
 │
 ├── migrations/
-│   ├── sql/                      # 13 SQL migration files (0000–0012)
+│   ├── sql/                      # 16 SQL migration files (0000–0015)
 │   ├── pg_init.sh                # PostgreSQL initialization script
 │   ├── entrypoint.sh             # Docker entrypoint for migrations
 │   └── wait-for-it.sh            # PostgreSQL readiness wait utility
@@ -810,6 +886,8 @@ chatgpt-tg/
 │   └── e2e/
 │       ├── test_simple_message.py  # Text message → LLM response (4 tests)
 │       ├── test_commands.py        # /reset, /usage (2 tests)
+│       ├── test_agent_runtime.py  # Agent runtime, plans, background tasks (26 tests)
+│       ├── test_scheduled_tasks.py # Scheduled task CRUD and execution (9 tests)
 │       └── test_sub_dialogue.py    # Multi-message dialogue context (1 test)
 │
 ├── scripts/
@@ -833,7 +911,7 @@ chatgpt-tg/
 |------|-------------|
 | **Anthropic tokenizer** | GPT-4 tokenizer is used as an approximation — inaccurate token counting for Claude |
 | **Image token hack** | Image token count is encoded in the proxy URL (`file_id_1000.jpg`) instead of metadata in `DialogMessage` |
-| **MCP connections** | Each MCP tool call opens a new HTTP connection (TODO: `ClientSessionGroup` for reuse) |
+| **MCP connections** | Each MCP tool call opens a new HTTP connection (TODO: `ClientSessionGroup` for reuse). Tool calls have a read timeout (`MCP_TOOL_CALL_TIMEOUT`) |
 | **Anthropic summarization** | Summarization for Anthropic models falls back to GPT-4o (cross-provider dependency) |
 | **CancellationManager** | Memory leak: if a message is not cancelled, the token is not deleted |
 | **TTS model** | Hardcoded `tts-1` (TODO: selection via user settings) |

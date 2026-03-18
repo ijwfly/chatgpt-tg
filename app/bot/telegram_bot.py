@@ -10,6 +10,7 @@ from app.bot.batched_input_handler import BatchedInputHandler
 from app.bot.cancellation_manager import CancellationManager
 from app.bot.models_menu import ModelsMenu
 from app.bot.scheduled_tasks import build_monthly_usage_task
+from app.bot.scheduler_service import SchedulerService
 from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
@@ -43,6 +44,7 @@ class TelegramBot:
         self.cancellation_manager = None
         self.role_manager = None
         self.monthly_usage_task = None
+        self.scheduler_service = None
         self.batched_handler = None
 
     async def on_startup(self, _):
@@ -59,6 +61,9 @@ class TelegramBot:
         self.monthly_usage_task = build_monthly_usage_task(self.bot, self.db)
         self.monthly_usage_task.start()
 
+        self.scheduler_service = SchedulerService(self.bot, self.db)
+        self.scheduler_service.start()
+
         self.batched_handler = BatchedInputHandler(self.bot, self.db, self.cancellation_manager)
         self.dispatcher.register_message_handler(self.batched_handler.handle, content_types=[
             types.ContentType.TEXT, types.ContentType.VIDEO, types.ContentType.PHOTO, types.ContentType.VOICE,
@@ -70,6 +75,8 @@ class TelegramBot:
         await self.bot.set_my_commands(commands)
 
     async def on_shutdown(self, _):
+        if self.scheduler_service:
+            await self.scheduler_service.stop()
         if self.monthly_usage_task:
             await self.monthly_usage_task.stop()
         await DBFactory().close_database()
