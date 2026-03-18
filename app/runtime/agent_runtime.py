@@ -7,7 +7,9 @@ from app.bot.chatgpt_manager import ChatGptManager
 from app.context.context_manager import ContextManager, build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.functions.agent_tools import (
-    AgentFunction, AgentToolContext, AGENT_TOOLS,
+    AgentFunction, AgentToolContext,
+    AGENT_TOOLS_CORE, PLAN_TOOLS_NO_PLAN, PLAN_TOOLS_WITH_PLAN,
+    SUB_AGENT_EXCLUDED_TOOLS,
 )
 from app.functions.mcp.mcp_function_storage import MCPFunctionManager
 from app.llm_models import get_model_by_name
@@ -30,6 +32,15 @@ from app.storage.user_role import check_access_conditions
 logger = logging.getLogger(__name__)
 
 PLAN_TOOL_NAMES = frozenset({"CreatePlan", "UpdatePlanStep", "GetPlan", "DeletePlan"})
+
+
+def _sync_plan_tools(function_storage: FunctionStorage, plan_exists: bool):
+    """Register the right set of plan tools based on whether a plan exists."""
+    for name in PLAN_TOOL_NAMES:
+        function_storage.functions.pop(name, None)
+    tools = PLAN_TOOLS_WITH_PLAN if plan_exists else PLAN_TOOLS_NO_PLAN
+    for tool_cls in tools:
+        function_storage.register(tool_cls)
 
 
 def _has_plan_tool_call(dialog_message: DialogMessage) -> bool:
@@ -81,19 +92,21 @@ class AgentRuntime:
                 except Exception as e:
                     logger.error(f"Error loading agent MCP tools from {mcp_config.url}: {e}")
 
-        # Register agent tools BEFORE building system prompt so their
-        # get_system_prompt_addition() is included
-        for tool_cls in AGENT_TOOLS:
+        # Register core agent tools
+        for tool_cls in AGENT_TOOLS_CORE:
             function_storage.register(tool_cls)
+
+        # Create per-turn managers and load plan state
+        bg_manager = BackgroundTaskManager(timeout=settings.AGENT_BG_TASK_TIMEOUT)
+        plan_manager = PlanManager(self.db, session.chat_id, side_effects=self.side_effects)
+        await plan_manager.load()
+
+        # Register plan tools based on current plan state (before building system prompt)
+        _sync_plan_tools(function_storage, plan_manager._plan is not None)
 
         system_prompt = await context_manager.get_system_prompt()
         if settings.AGENT_SYSTEM_PROMPT:
             system_prompt = settings.AGENT_SYSTEM_PROMPT + '\n\n' + system_prompt
-
-        # Create per-turn managers
-        bg_manager = BackgroundTaskManager(timeout=settings.AGENT_BG_TASK_TIMEOUT)
-        plan_manager = PlanManager(self.db, session.chat_id, side_effects=self.side_effects)
-        await plan_manager.load()
 
         # Create LLM client (same pattern as DefaultLLMRuntime)
         if self.user.current_model == llm_model.ANTHROPIC_CLAUDE_35_SONNET:
@@ -170,13 +183,16 @@ class AgentRuntime:
                     await context_manager.add_message(ack_msg, -1)
                     iterations_since_plan_tool = 0
 
-            # C) Get context and call LLM
+            # C) Sync plan tools based on current state
+            _sync_plan_tools(function_storage, plan_exists)
+
+            # D) Get context and call LLM
             context_dialog_messages = await context_manager.get_context_messages()
             response_generator = await chat_gpt_manager.send_user_message(
                 self.user, context_dialog_messages, is_cancelled
             )
 
-            # C) Consume streaming response and yield deltas
+            # E) Consume streaming response and yield deltas
             dialog_message = None
             first_iteration = True
             async for dialog_message in response_generator:
@@ -208,7 +224,7 @@ class AgentRuntime:
                 needs_context_save=has_content and not has_tool_calls,
             )
 
-            # D) If no tool calls — check for pending bg tasks
+            # F) If no tool calls — check for pending bg tasks
             if not dialog_message.tool_calls and not dialog_message.function_call:
                 if bg_manager.has_pending():
                     await bg_manager.wait_pending(timeout=settings.AGENT_BG_TASK_TIMEOUT)
@@ -221,7 +237,7 @@ class AgentRuntime:
                     continue
                 break
 
-            # E) Execute tool calls (iterative, not recursive)
+            # G) Execute tool calls (iterative, not recursive)
             if dialog_message.function_call:
                 await context_manager.add_message(dialog_message, -1)
 
@@ -265,7 +281,7 @@ class AgentRuntime:
                 if not pass_tool_response_to_gpt:
                     break
 
-            # F) Update plan tracking counters
+            # H) Update plan tracking counters
             if _has_plan_tool_call(dialog_message):
                 iterations_since_plan_tool = 0
                 plan_exists = plan_manager._plan is not None
@@ -305,22 +321,23 @@ class AgentRuntime:
         self, prompt: str, llm_model, parent_function_storage: FunctionStorage,
         parent_context_manager: ContextManager,
     ) -> str:
-        """Run a sub-agent loop with tools but without SpawnTask (no nesting).
+        """Run a sub-agent loop with limited tools and plan context.
 
-        Uses the same _agent_context as the parent — SpawnTask is excluded from
-        the sub-agent's function_storage, which prevents recursive spawning
-        without touching the shared class variable.
+        Uses the same _agent_context as the parent. Excluded tools prevent
+        recursive spawning and plan creation/deletion by sub-agents.
         """
-        # Build a function_storage for the sub-agent: same tools minus SpawnTask
+        # Build a function_storage for the sub-agent: exclude management tools
         sub_function_storage = FunctionStorage()
         for func_name, func_data in parent_function_storage.functions.items():
-            if func_name != 'SpawnTask':
+            if func_name not in SUB_AGENT_EXCLUDED_TOOLS:
                 sub_function_storage.functions[func_name] = func_data
 
-        sub_system_prompt = (
-            f"You are a sub-agent working on a specific task. Complete it and return your result.\n\n"
-            f"Task: {prompt}"
-        )
+        # Build system prompt with optional plan context
+        sub_system_prompt = "You are a sub-agent working on a specific task. Complete it and return your result.\n\n"
+        plan_text = await AgentFunction._agent_context.plan_manager.get_plan()
+        if plan_text and plan_text != "No active plan.":
+            sub_system_prompt += f"Current plan:\n{plan_text}\n\n"
+        sub_system_prompt += f"Task: {prompt}"
 
         if llm_model.ANTHROPIC_CLAUDE_35_SONNET == self.user.current_model:
             sub_chatgpt = AnthropicChatGPT(llm_model, sub_system_prompt, sub_function_storage)
