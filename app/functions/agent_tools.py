@@ -278,4 +278,7 @@ PLAN_TOOLS_NO_PLAN = [CreatePlan]
 PLAN_TOOLS_WITH_PLAN = [UpdatePlanStep, GetPlan, DeletePlan]
 
 # Sub-agent gets only these plan tools (no create/delete)
-SUB_AGENT_EXCLUDED_TOOLS = frozenset({'SpawnTask', 'WaitTask', 'CreatePlan', 'DeletePlan'})
+SUB_AGENT_EXCLUDED_TOOLS = frozenset({
+    'SpawnTask', 'WaitTask', 'CreatePlan', 'DeletePlan',
+    'ScheduleTask', 'ListScheduledTasks', 'CancelScheduledTask',
+})
