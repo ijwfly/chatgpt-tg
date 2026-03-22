@@ -79,7 +79,15 @@ Key principles:
 - Batch your questions: if you need to clarify multiple things, ask them all at once, not one by one.
 - You have access to a bash execution environment (via MCP tools), Python, and standard Unix utilities. Use them freely to accomplish tasks — run commands, write scripts, process data.
 - You can create and store files and notes as needed during your work on your bash machine.
-- Be concise and result-oriented. Report what you did and the outcome."""
+- Be concise and result-oriented. Report what you did and the outcome.
+
+You have plan management tools. When given a complex task, create a plan first with CreatePlan,  
+then work through it step by step, updating each step's status with UpdatePlanStep as you progress.  
+IMPORTANT: Always keep the plan up to date. When you complete a step or receive results from a  
+background sub-agent for a step, immediately call UpdatePlanStep to mark it as 'completed'.  
+When starting work on a step, mark it 'in_progress'. Never respond to the user without first  
+updating all affected plan steps. Valid statuses: pending, in_progress, completed, skipped.
+"""
 
 ENABLE_AGENT_RUNTIME = True
 AGENT_MAX_ITERATIONS = 30

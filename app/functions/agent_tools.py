@@ -53,11 +53,7 @@ class SpawnTask(AgentFunction):
     @classmethod
     def get_system_prompt_addition(cls) -> Optional[str]:
         return (
-            "You can spawn background sub-agents using SpawnTask. Each sub-agent gets its own LLM call loop "
-            "with tool access and works independently. Use this for parallelizable work — research, analysis, "
-            "or any task that can run concurrently. Results are automatically delivered to you via "
-            "<background-results> messages. When you receive background results, you MUST update the "
-            "corresponding plan steps using UpdatePlanStep before responding to the user."
+            "Use SpawnTask for parallelizable work. Results arrive via <background-results> messages."
         )
 
 
@@ -97,17 +93,6 @@ class CreatePlan(AgentFunction):
     @classmethod
     def get_description(cls) -> str:
         return "Create an execution plan with numbered steps. Replaces any existing active plan."
-
-    @classmethod
-    def get_system_prompt_addition(cls) -> Optional[str]:
-        return (
-            "You have plan management tools. When given a complex task, create a plan first with CreatePlan, "
-            "then work through it step by step, updating each step's status with UpdatePlanStep as you progress. "
-            "IMPORTANT: Always keep the plan up to date. When you complete a step or receive results from a "
-            "background sub-agent for a step, immediately call UpdatePlanStep to mark it as 'completed'. "
-            "When starting work on a step, mark it 'in_progress'. Never respond to the user without first "
-            "updating all affected plan steps. Valid statuses: pending, in_progress, completed, skipped."
-        )
 
 
 # --- UpdatePlanStep ---
@@ -168,8 +153,8 @@ class ScheduleTaskParams(OpenAIFunctionParams):
     title: str = Field(..., description="Short title for the scheduled task")
     prompt: str = Field(..., description="Natural language description of what to do when the task fires")
     schedule_type: str = Field(..., description="'once' for one-time or 'recurring' for repeated execution")
-    when: Optional[str] = Field(None, description="For one-time tasks: natural language time expression, passed directly from user (e.g. 'через 5 минут', 'следующий вторник в 10:00', 'tomorrow at 9am')")
-    cron_expression: Optional[str] = Field(None, description="Cron expression for recurring tasks (e.g. '0 10 * * *' for daily at 10:00)")
+    when: Optional[str] = Field(None, description="For one-time tasks: natural language time in any language (e.g. 'через 5 минут', 'следующий вторник в 10:00', 'tomorrow at 9am', 'in 2 hours', 'next monday at 14:30'). Resolved automatically.")
+    cron_expression: Optional[str] = Field(None, description="Cron expression for recurring tasks (e.g. '0 10 * * *' = daily at 10:00, '0 9 * * 1' = every Monday at 9:00, '30 14 * * 2' = every Tuesday at 14:30)")
 
 
 class ScheduleTask(OpenAIFunction):
@@ -229,16 +214,9 @@ class ScheduleTask(OpenAIFunction):
     @classmethod
     def get_system_prompt_addition(cls) -> Optional[str]:
         return (
-            "You can schedule tasks using ScheduleTask. "
-            "For one-time tasks, use schedule_type='once' and pass the user's time expression "
-            "directly as the 'when' parameter — it supports natural language in any language "
-            "(e.g. 'через 5 минут', 'следующий вторник в 10:00', 'завтра утром', "
-            "'in 2 hours', 'next monday at 14:30'). The tool resolves the date automatically. "
-            "For recurring tasks, use schedule_type='recurring' with a cron expression "
-            "(e.g. '0 10 * * *' = daily at 10:00, '0 9 * * 1' = every Monday at 9:00, "
-            "'30 14 * * 2' = every Tuesday at 14:30). "
-            "The prompt field should contain a complete description of what to do when the task fires. "
-            "Use ListScheduledTasks to see existing schedules and CancelScheduledTask to remove them."
+            "Use ScheduleTask for deferred execution. For one-time tasks use schedule_type='once' "
+            "with natural language 'when'. For recurring use schedule_type='recurring' with cron_expression. "
+            "Use ListScheduledTasks/CancelScheduledTask to manage."
         )
 
 
@@ -289,8 +267,18 @@ class CancelScheduledTask(OpenAIFunction):
         return "Cancel a scheduled task by its ID."
 
 
-# All agent tool classes for registration
-AGENT_TOOLS = [
-    SpawnTask, WaitTask, CreatePlan, UpdatePlanStep, GetPlan, DeletePlan,
+# Core agent tools (always registered)
+AGENT_TOOLS_CORE = [
+    SpawnTask, WaitTask,
     ScheduleTask, ListScheduledTasks, CancelScheduledTask,
 ]
+
+# Plan tools: only one set is active at a time depending on plan state
+PLAN_TOOLS_NO_PLAN = [CreatePlan]
+PLAN_TOOLS_WITH_PLAN = [UpdatePlanStep, GetPlan, DeletePlan]
+
+# Sub-agent gets only these plan tools (no create/delete)
+SUB_AGENT_EXCLUDED_TOOLS = frozenset({
+    'SpawnTask', 'WaitTask', 'CreatePlan', 'DeletePlan',
+    'ScheduleTask', 'ListScheduledTasks', 'CancelScheduledTask',
+})
