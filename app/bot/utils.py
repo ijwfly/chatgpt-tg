@@ -229,10 +229,10 @@ def generate_document_id(chat_id, message_id):
 def get_image_proxy_url():
     public_url = f'{settings.IMAGE_PROXY_URL}:{settings.IMAGE_PROXY_PORT}'
     docker_url = f'http://image_proxy:{settings.IMAGE_PROXY_BIND_PORT}'
-    # try:
-    #     requests.get(public_url)
-    # except requests.ConnectionError:
-    #     return docker_url
+    try:
+        requests.get(public_url)
+    except requests.ConnectionError:
+        return docker_url
     return public_url
 
 
