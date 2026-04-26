@@ -39,3 +39,7 @@ class CreateObsidianNote(OpenAIFunction):
     @classmethod
     def get_system_prompt_addition(cls) -> Optional[str]:
         return "You can create notes in Obsidian notebook using the `create_obsidian_note` function if user asks you to do so."
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Saving Obsidian note...'

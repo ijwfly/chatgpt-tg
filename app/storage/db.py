@@ -26,6 +26,7 @@ class User(pydantic.BaseModel):
     role: Optional[UserRole]
     streaming_answers: bool
     function_call_verbose: bool
+    function_call_hints: bool = True
     image_generation: bool
     tts_voice: str
     system_prompt_settings: Optional[str]
@@ -82,14 +83,14 @@ class DB:
         full_name = $7, username = $8, role = $9, streaming_answers = $10,
         function_call_verbose = $11, image_generation = $12, tts_voice = $13,
         system_prompt_settings = $14, system_prompt_settings_enabled = $15,
-        agent_mode = $16 WHERE id = $17 RETURNING *'''
+        agent_mode = $16, function_call_hints = $17 WHERE id = $18 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
             user.voice_as_prompt, user.use_functions, user.auto_summarize,
             user.full_name, user.username, user.role.value, user.streaming_answers,
             user.function_call_verbose, user.image_generation, user.tts_voice,
             user.system_prompt_settings, user.system_prompt_settings_enabled,
-            user.agent_mode, user.id,
+            user.agent_mode, user.function_call_hints, user.id,
         ))
 
     async def create_user(self, telegram_user_id: int, role: UserRole):

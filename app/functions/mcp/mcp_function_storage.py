@@ -83,6 +83,10 @@ class MCPFunction(OpenAIFunction):
     def get_system_prompt_addition(self) -> Optional[str]:
         return None
 
+    def get_status_message(self) -> str:
+        humanized = self.name.replace('_', ' ').replace('-', ' ').strip()
+        return f'Running {humanized}...'
+
 
 
 class MCPFunctionManager:

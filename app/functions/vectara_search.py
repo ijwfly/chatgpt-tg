@@ -53,3 +53,7 @@ class VectorSearch(OpenAIFunction):
     @classmethod
     def get_system_prompt_addition(cls):
         return 'You are an assistant tasked with helping user in working with documents. Your role involves extracting relevant information from provided documents to answer their questions. If the documents lack the necessary information, you must inform the office worker of this and then offer an answer based on common sense and your existing knowledge base if you have one.'
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Searching documents...'

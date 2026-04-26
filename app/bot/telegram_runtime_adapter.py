@@ -63,6 +63,7 @@ class TelegramRuntimeAdapter:
         previous_time = None
         message_too_long_for_telegram = False
         was_thinking = False
+        function_hint_message_id = None
 
         keyboard = InlineKeyboardMarkup()
         keyboard.add(get_cancel_button())
@@ -148,7 +149,21 @@ class TelegramRuntimeAdapter:
                 previous_content = None
                 previous_time = None
 
+            elif isinstance(event, FunctionCallStarted):
+                if self.user.function_call_hints and function_hint_message_id is None:
+                    hint_text = event.status_message or f'Running {event.function_name}...'
+                    with suppress(BadRequest):
+                        resp = await send_telegram_message(self.message, hint_text, reply_markup=keyboard)
+                        if chat_id is None:
+                            chat_id = self.message.chat.id
+                        function_hint_message_id = resp.message_id
+
             elif isinstance(event, FunctionCallCompleted):
+                if function_hint_message_id is not None:
+                    with suppress(BadRequest):
+                        await self.message.bot.delete_message(chat_id, function_hint_message_id)
+                    function_hint_message_id = None
+
                 if self.user.function_call_verbose:
                     with suppress(BadRequest):
                         function_response_text = f'Function call: {event.function_name}({event.function_args})\n\nResponse: {event.result}'

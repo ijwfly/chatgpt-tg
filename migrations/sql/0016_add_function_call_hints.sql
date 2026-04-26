@@ -1,0 +1,1 @@
+ALTER TABLE chatgpttg.user ADD COLUMN IF NOT EXISTS function_call_hints BOOLEAN NOT NULL DEFAULT TRUE;

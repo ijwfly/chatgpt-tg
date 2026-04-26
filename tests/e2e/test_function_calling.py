@@ -103,6 +103,99 @@ class TestFunctionCalling:
 
         spy.assert_sent_text_contains("Function call: save_user_settings")
 
+    async def test_function_call_hints_show_and_disappear(self, bot_app):
+        """With function_call_hints=True, bot sends a status hint that is deleted on completion."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+
+        user_id = 44447
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("Hello!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Hi', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(0.1)
+
+        user = await telegram_bot.db.get_user(user_id)
+        user.use_functions = True
+        user.system_prompt_settings_enabled = True
+        # function_call_hints defaults to True; assert it explicitly
+        assert user.function_call_hints is True
+        await telegram_bot.db.update_user(user)
+
+        mock_llm2 = MockLLMClient()
+        mock_llm2.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_hint',
+                'function': {
+                    'name': 'save_user_settings',
+                    'arguments': json.dumps({'settings_text': 'Name: Hint'}),
+                },
+            }],
+        )
+        mock_llm2.add_response(content="OK!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
+
+        update2 = make_text_message('Save my name as Hint', user_id=user_id)
+        await dp.process_update(update2)
+        await asyncio.sleep(0.2)
+
+        # Hint message uses the function-specific status from SaveUserSettings
+        spy.assert_sent_text_contains("Saving user info...")
+
+        # Hint message must be deleted after completion
+        delete_calls = spy.get_calls_for_method('deleteMessage')
+        assert len(delete_calls) >= 1, (
+            f"Expected at least one deleteMessage call after function completion, got: {delete_calls}"
+        )
+
+    async def test_function_call_hints_disabled(self, bot_app):
+        """With function_call_hints=False, no hint message is sent."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+
+        user_id = 44448
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("Hello!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Hi', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(0.1)
+
+        user = await telegram_bot.db.get_user(user_id)
+        user.use_functions = True
+        user.system_prompt_settings_enabled = True
+        user.function_call_hints = False
+        await telegram_bot.db.update_user(user)
+
+        mock_llm2 = MockLLMClient()
+        mock_llm2.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_no_hint',
+                'function': {
+                    'name': 'save_user_settings',
+                    'arguments': json.dumps({'settings_text': 'Name: NoHint'}),
+                },
+            }],
+        )
+        mock_llm2.add_response(content="OK!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
+
+        update2 = make_text_message('Save my name as NoHint', user_id=user_id)
+        await dp.process_update(update2)
+        await asyncio.sleep(0.2)
+
+        all_texts = spy.get_all_sent_texts() + spy.get_all_edited_texts()
+        assert not any('Saving user info...' in t for t in all_texts), (
+            f"Expected no hint message when hints disabled, got: {all_texts}"
+        )
+
     async def test_successive_function_call_limit(self, bot_app):
         """Exceeding SUCCESSIVE_FUNCTION_CALLS_LIMIT produces an error."""
         telegram_bot, dp, mock_bot = bot_app
