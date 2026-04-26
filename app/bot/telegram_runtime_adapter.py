@@ -1,12 +1,12 @@
 from contextlib import suppress
-from datetime import datetime
 from typing import Callable
 
 from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
 from aiogram.utils.exceptions import BadRequest
 
 from app.bot.cancellation_manager import get_cancel_button
-from app.bot.utils import send_telegram_message, edit_telegram_message
+from app.bot.service_message import ChatServiceMessage, ServiceState
+from app.bot.utils import send_telegram_message
 from app.context.context_manager import ContextManager
 from app.runtime.conversation_session import ConversationSession
 from app.runtime.events import (
@@ -21,6 +21,7 @@ WAIT_BETWEEN_MESSAGE_UPDATES = 1
 TELEGRAM_MESSAGE_LENGTH_CUTOFF = 4080
 THINKING_EMOJI = '\U0001f9e0'
 THINKING_MAX_CHARS = 300
+MIN_STREAMING_CONTENT_LEN = 50
 
 
 def _format_thinking_display(thinking_text: str) -> str:
@@ -57,118 +58,114 @@ class TelegramRuntimeAdapter:
         session: ConversationSession,
         is_cancelled: Callable[[], bool],
     ):
-        message_id = None
-        chat_id = None
-        previous_content = None
-        previous_time = None
-        message_too_long_for_telegram = False
-        was_thinking = False
-        function_hint_message_id = None
+        service = ChatServiceMessage(self.message)
+        state = ServiceState.IDLE
+        typing_action_sent = False
 
         keyboard = InlineKeyboardMarkup()
         keyboard.add(get_cancel_button())
 
-        final_dialog_message = None
+        async def ensure_typing_action():
+            nonlocal typing_action_sent
+            if not typing_action_sent and service.is_attached:
+                with suppress(BadRequest):
+                    await self.message.bot.send_chat_action(service.chat_id, 'typing')
+                typing_action_sent = True
 
-        async for event in runtime.process_turn(user_input, session, is_cancelled):
-            if isinstance(event, StreamingContentDelta):
-                if message_too_long_for_telegram:
-                    continue
-
-                if event.is_thinking:
-                    was_thinking = True
-                    thinking_display = _format_thinking_display(event.thinking_text)
-                    if not message_id:
-                        resp = await send_telegram_message(self.message, thinking_display, reply_markup=keyboard)
-                        chat_id = self.message.chat.id
-                        await self.message.bot.send_chat_action(chat_id, 'typing')
-                        message_id = resp.message_id
-                        previous_content = thinking_display
-                        previous_time = datetime.now()
+        try:
+            async for event in runtime.process_turn(user_input, session, is_cancelled):
+                if isinstance(event, StreamingContentDelta):
+                    if state == ServiceState.STREAMING_OVERFLOW:
                         continue
 
-                    time_passed_seconds = (datetime.now() - previous_time).seconds
-                    if previous_content != thinking_display and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES:
-                        await self.message.bot.edit_message_text(thinking_display, chat_id, message_id, reply_markup=keyboard)
-                        previous_content = thinking_display
-                        previous_time = datetime.now()
-                    continue
+                    if event.is_thinking:
+                        thinking_display = _format_thinking_display(event.thinking_text)
+                        throttle = WAIT_BETWEEN_MESSAGE_UPDATES if state == ServiceState.THINKING else 0
+                        await service.set_text(
+                            thinking_display,
+                            reply_markup=keyboard,
+                            throttle_seconds=throttle,
+                        )
+                        state = ServiceState.THINKING
+                        await ensure_typing_action()
+                        continue
 
-                # Transition from thinking to normal content
-                if was_thinking:
-                    was_thinking = False
-                    previous_time = None
+                    new_content = ' '.join(event.visible_text.strip().split(' ')[:-1]) if event.visible_text else ''
+                    if len(new_content) < MIN_STREAMING_CONTENT_LEN:
+                        continue
 
-                new_content = ' '.join(event.visible_text.strip().split(' ')[:-1]) if event.visible_text else ''
-                if len(new_content) < 50:
-                    continue
-
-                if not message_id:
-                    resp = await send_telegram_message(self.message, new_content, reply_markup=keyboard)
-                    chat_id = self.message.chat.id
-                    await self.message.bot.send_chat_action(chat_id, 'typing')
-                    message_id = resp.message_id
-                    previous_content = new_content
-                    previous_time = datetime.now()
-                    continue
-
-                time_passed_seconds = (datetime.now() - previous_time).seconds if previous_time else WAIT_BETWEEN_MESSAGE_UPDATES
-                if previous_content != new_content and time_passed_seconds >= WAIT_BETWEEN_MESSAGE_UPDATES:
                     if len(new_content) > TELEGRAM_MESSAGE_LENGTH_CUTOFF:
-                        message_too_long_for_telegram = True
-                        new_content = f'{new_content[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]} \u23f3...'
-                    await self.message.bot.edit_message_text(new_content, chat_id, message_id, reply_markup=keyboard)
-                    previous_content = new_content
-                    previous_time = datetime.now()
+                        truncated = f'{new_content[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]} ⏳...'
+                        await service.set_text(truncated, reply_markup=keyboard)
+                        service.freeze()
+                        state = ServiceState.STREAMING_OVERFLOW
+                        await ensure_typing_action()
+                        continue
 
-            elif isinstance(event, FinalResponse):
-                final_dialog_message = event.dialog_message
+                    throttle = WAIT_BETWEEN_MESSAGE_UPDATES if state == ServiceState.STREAMING else 0
+                    await service.set_text(
+                        new_content,
+                        reply_markup=keyboard,
+                        throttle_seconds=throttle,
+                    )
+                    state = ServiceState.STREAMING
+                    await ensure_typing_action()
 
-                # Delete orphaned thinking message if no content to show (thinking-only + tool_call)
-                if message_id is not None and (not final_dialog_message or not final_dialog_message.content):
-                    with suppress(BadRequest):
-                        await self.message.bot.delete_message(chat_id, message_id)
+                elif isinstance(event, FinalResponse):
+                    final_dialog_message = event.dialog_message
 
-                if final_dialog_message and final_dialog_message.content:
-                    dialog_messages = self._split_dialog_message(final_dialog_message)
-                    for dm in dialog_messages:
-                        parse_mode = ParseMode.MARKDOWN
-                        if message_id is not None:
-                            response = await edit_telegram_message(self.message, dm.content, message_id, parse_mode)
-                            message_id = None
-                        else:
-                            response = await send_telegram_message(self.message, dm.content, parse_mode)
-                        # Save content message to context with real Telegram message_id
-                        if event.needs_context_save:
-                            await self.context_manager.add_message(dm, response.message_id)
+                    if final_dialog_message and final_dialog_message.content:
+                        dialog_messages = self._split_dialog_message(final_dialog_message)
+                        first, rest = dialog_messages[0], dialog_messages[1:]
 
-                # Reset streaming state for next round (after tool calls)
-                message_id = None
-                message_too_long_for_telegram = False
-                was_thinking = False
-                previous_content = None
-                previous_time = None
+                        finalize_id = await service.finalize(
+                            first.content,
+                            parse_mode=ParseMode.MARKDOWN,
+                            reply_markup=None,
+                        )
+                        if event.needs_context_save and finalize_id is not None:
+                            await self.context_manager.add_message(first, finalize_id)
 
-            elif isinstance(event, FunctionCallStarted):
-                if self.user.function_call_hints and function_hint_message_id is None:
-                    hint_text = event.status_message or f'Running {event.function_name}...'
-                    with suppress(BadRequest):
-                        resp = await send_telegram_message(self.message, hint_text, reply_markup=keyboard)
-                        if chat_id is None:
-                            chat_id = self.message.chat.id
-                        function_hint_message_id = resp.message_id
+                        for dm in rest:
+                            response = await send_telegram_message(
+                                self.message, dm.content, parse_mode=ParseMode.MARKDOWN,
+                            )
+                            if event.needs_context_save:
+                                await self.context_manager.add_message(dm, response.message_id)
 
-            elif isinstance(event, FunctionCallCompleted):
-                if function_hint_message_id is not None:
-                    with suppress(BadRequest):
-                        await self.message.bot.delete_message(chat_id, function_hint_message_id)
-                    function_hint_message_id = None
+                        # Detach the finalized message and start fresh for any
+                        # following phase (e.g. another agent iteration).
+                        service = ChatServiceMessage(self.message)
+                        typing_action_sent = False
+                        state = ServiceState.IDLE
+                    else:
+                        # Tool-only / empty response — keep service alive for next event.
+                        pass
 
-                if self.user.function_call_verbose:
-                    with suppress(BadRequest):
-                        function_response_text = f'Function call: {event.function_name}({event.function_args})\n\nResponse: {event.result}'
-                        function_response_text = function_response_text[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]
-                        await send_telegram_message(self.message, function_response_text)
+                elif isinstance(event, FunctionCallStarted):
+                    if self.user.function_call_hints:
+                        hint_text = event.status_message or f'Running {event.function_name}...'
+                        await service.set_text(
+                            hint_text,
+                            reply_markup=keyboard,
+                            throttle_seconds=0,
+                        )
+                        state = ServiceState.FUNCTION_HINT
+                        await ensure_typing_action()
+
+                elif isinstance(event, FunctionCallCompleted):
+                    if self.user.function_call_verbose:
+                        with suppress(BadRequest):
+                            text = (
+                                f'Function call: {event.function_name}({event.function_args})'
+                                f'\n\nResponse: {event.result}'
+                            )
+                            text = text[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]
+                            await send_telegram_message(self.message, text)
+        finally:
+            if state in (ServiceState.THINKING, ServiceState.STREAMING, ServiceState.FUNCTION_HINT) \
+                    and service.is_attached and not service.is_detached:
+                await service.clear()
 
     @staticmethod
     def _split_dialog_message(dialog_message, max_content_length=TELEGRAM_MESSAGE_LENGTH_CUTOFF):
