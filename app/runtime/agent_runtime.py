@@ -299,14 +299,24 @@ class AgentRuntime:
         function_name = function_call.name
         function_args = function_call.arguments
 
+        function_class = None
+        status_message = f'Running {function_name}...'
+        try:
+            function_class = function_storage.get_function_class(function_name)
+            status_message = function_class.get_status_message()
+        except Exception:
+            pass
+
         yield FunctionCallStarted(
             function_name=function_name,
             function_args=function_args,
             tool_call_id=tool_call_id,
+            status_message=status_message,
         )
 
         try:
-            function_class = function_storage.get_function_class(function_name)
+            if function_class is None:
+                function_class = function_storage.get_function_class(function_name)
             function = function_class(self.user, self.db, context_manager, self.side_effects, tool_call_id)
             function_response_raw = await function.run_str_args(function_args)
         except Exception as e:
