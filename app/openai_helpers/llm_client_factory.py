@@ -13,5 +13,7 @@ class LLMClientFactory:
             }
             if llm_model.base_url:
                 params['base_url'] = llm_model.base_url
+            if llm_model.extra_completion_params:
+                params['extra_completion_params'] = llm_model.extra_completion_params
             cls._model_clients[model_name] = llm_model.api_client(**params)
         return cls._model_clients[model_name]

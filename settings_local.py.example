@@ -75,5 +75,12 @@ TELEGRAM_BOT_TOKEN = ''
 #         capabilities=LLMCapabilities(
 #             streaming_responses=True,
 #         ),
+#         # Optional: arbitrary kwargs forwarded to chat.completions.create()
+#         # for this model. Use `extra_body` to pass vendor-specific params
+#         # (e.g. vLLM / SGLang chat_template_kwargs). Runtime values set by
+#         # the bot (tools, stream, metadata) take precedence over these.
+#         # extra_completion_params={
+#         #     'extra_body': {'chat_template_kwargs': {'enable_thinking': False}},
+#         # },
 #     ),
 # ]

@@ -42,7 +42,7 @@ class LLModel:
     OPENROUTER_WIZARDLM2 = 'microsoft/wizardlm-2-8x22b'
 
     def __init__(self, *, model_name: str, api_key, context_configuration, model_readable_name=None, model_price=None, base_url=None,
-                 capabilities=None, minimum_user_role=UserRole.STRANGER, api_client=None):
+                 capabilities=None, minimum_user_role=UserRole.STRANGER, api_client=None, extra_completion_params=None):
         if model_readable_name is None:
             model_readable_name = model_name
 
@@ -64,6 +64,7 @@ class LLModel:
         self.capabilities = capabilities
         self.minimum_user_role = minimum_user_role
         self.api_client = api_client
+        self.extra_completion_params = extra_completion_params or {}
 
 
 @lru_cache
