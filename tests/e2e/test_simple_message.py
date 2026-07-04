@@ -1,7 +1,9 @@
 import asyncio
+import datetime
 
 import pytest
 
+import settings
 from app.openai_helpers.llm_client_factory import LLMClientFactory
 from tests.helpers.mock_llm_client import MockLLMClient
 from tests.helpers.telegram_factory import make_text_message
@@ -76,5 +78,9 @@ class TestSimpleMessage:
         assert len(mock_llm.calls) == 1
         messages = mock_llm.calls[0]['messages']
         # First message is system prompt, last should contain user text
+        system_prompt = str(messages[0].get('content', ''))
+        assert messages[0].get('role') == 'system'
+        today = datetime.datetime.now(settings.POSTGRES_TIMEZONE)
+        assert f'Current date: {today.strftime("%A, %Y-%m-%d")}' in system_prompt
         user_messages = [m for m in messages if m.get('role') == 'user']
         assert any('What is 2+2?' in str(m.get('content', '')) for m in user_messages)
