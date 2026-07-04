@@ -56,6 +56,10 @@ class SpawnTask(AgentFunction):
             "Use SpawnTask for parallelizable work. Results arrive via <background-results> messages."
         )
 
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Spawning sub-agent...'
+
 
 # --- WaitTask ---
 
@@ -76,6 +80,10 @@ class WaitTask(AgentFunction):
     def get_description(cls) -> str:
         return "Wait for any background task to complete. Blocks until at least one running task finishes, then returns status of all tasks. If no tasks are running, returns immediately."
 
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Waiting for background tasks...'
+
 
 # --- CreatePlan ---
 
@@ -93,6 +101,10 @@ class CreatePlan(AgentFunction):
     @classmethod
     def get_description(cls) -> str:
         return "Create an execution plan with numbered steps. Replaces any existing active plan."
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Creating plan...'
 
 
 # --- UpdatePlanStep ---
@@ -112,6 +124,10 @@ class UpdatePlanStep(AgentFunction):
     def get_description(cls) -> str:
         return "Update a plan step's status. The plan auto-completes when all steps are completed or skipped."
 
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Updating plan...'
+
 
 # --- GetPlan ---
 
@@ -129,6 +145,10 @@ class GetPlan(AgentFunction):
     def get_description(cls) -> str:
         return "Retrieve the current execution plan with all steps and their statuses."
 
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Reading plan...'
+
 
 # --- DeletePlan ---
 
@@ -145,6 +165,10 @@ class DeletePlan(AgentFunction):
     @classmethod
     def get_description(cls) -> str:
         return "Cancel and delete the current active plan."
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Deleting plan...'
 
 
 # --- ScheduleTask ---
@@ -212,6 +236,10 @@ class ScheduleTask(OpenAIFunction):
         return "Schedule a task for later execution. Use 'once' with 'when' for one-time tasks, or 'recurring' with cron_expression for repeated tasks."
 
     @classmethod
+    def get_status_message(cls) -> str:
+        return 'Scheduling task...'
+
+    @classmethod
     def get_system_prompt_addition(cls) -> Optional[str]:
         return (
             "Use ScheduleTask for deferred execution. For one-time tasks use schedule_type='once' "
@@ -248,6 +276,10 @@ class ListScheduledTasks(OpenAIFunction):
     def get_description(cls) -> str:
         return "List all active scheduled tasks for this chat."
 
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Listing scheduled tasks...'
+
 
 # --- CancelScheduledTask ---
 
@@ -265,6 +297,10 @@ class CancelScheduledTask(OpenAIFunction):
     @classmethod
     def get_description(cls) -> str:
         return "Cancel a scheduled task by its ID."
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Cancelling scheduled task...'
 
 
 # Core agent tools (always registered)

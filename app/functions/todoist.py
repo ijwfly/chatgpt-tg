@@ -45,3 +45,7 @@ class TodoistAddTask(OpenAIFunction):
     @classmethod
     def get_system_prompt_addition(cls) -> Optional[str]:
         return "You have todoist integration. Todoist is integrated to user's calendar. Add tasks to todoist only if you asked to add task or calendar event. Don't ask for optional details, add task with minimum information."
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Adding Todoist task...'

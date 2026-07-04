@@ -59,3 +59,12 @@ class OpenAIFunction(ABC):
         additional instructions about how to use this function.
         """
         return None
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        """
+        Short, user-facing hint shown in chat while the function is running
+        (e.g. "Searching the web..."). Override per function for clarity.
+        """
+        name = cls.get_name().replace('_', ' ').strip()
+        return f'Running {name}...'

@@ -52,3 +52,7 @@ class QueryWolframAlpha(OpenAIFunction):
     @classmethod
     def get_description(cls) -> str:
         return "Query WolframAlpha for currencies, weather, statistical info and math/calculus problems."
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Querying WolframAlpha...'

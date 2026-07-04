@@ -27,6 +27,7 @@ class FunctionCallStarted(RuntimeEvent):
     function_name: str
     function_args: str
     tool_call_id: Optional[str] = None
+    status_message: Optional[str] = None
 
 
 @dataclass

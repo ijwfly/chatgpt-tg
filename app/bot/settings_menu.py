@@ -101,6 +101,7 @@ class Settings:
             'system_prompt_settings_enabled': OnOffSetting('User info saving', 'system_prompt_settings_enabled'),
             'tts-voice': ChoiceSetting('TTS voice', 'tts_voice', TTS_VOICES),
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
+            'function_call_hints': OnOffSetting('Function call hints', 'function_call_hints'),
             'function_call_verbose': OnOffSetting('Verbose function calls', 'function_call_verbose'),
             'streaming_answers': OnOffSetting('Streaming answers', 'streaming_answers'),
             'agent_mode': OnOffSetting('Agent mode', 'agent_mode'),

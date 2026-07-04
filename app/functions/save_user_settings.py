@@ -27,3 +27,7 @@ class SaveUserSettings(OpenAIFunction):
     @classmethod
     def get_description(cls) -> str:
         return "Save user info or user settings when user asks to do so. Rewrite the text of the UserSettings in system prompt."
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Saving user info...'
