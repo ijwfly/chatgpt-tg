@@ -1,3 +1,4 @@
+import datetime
 from typing import List, Optional
 
 import settings
@@ -41,6 +42,9 @@ class ContextManager:
         if not gpt_mode:
             raise ValueError(f"Unknown GPT mode: {self.user.gpt_mode}")
         system_prompt = gpt_mode["system"]
+
+        now = datetime.datetime.now(settings.POSTGRES_TIMEZONE)
+        system_prompt += f'\n\nCurrent date: {now.strftime("%A, %Y-%m-%d")}'
 
         function_storage = await self.get_function_storage()
         if function_storage is not None:
