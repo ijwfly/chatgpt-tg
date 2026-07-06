@@ -227,6 +227,126 @@ class TestScheduleTaskTool:
         assert any('Error' in str(m.get('content', '')) for m in tool_results)
 
 
+class TestScheduledTaskContext:
+
+    async def test_schedule_task_stores_context_snapshot(self, bot_app):
+        """ScheduleTask stores the dialog branch it was created in, trimmed of the tool call itself."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80006
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_ctx1',
+                'function': {
+                    'name': 'ScheduleTask',
+                    'arguments': json.dumps({
+                        'title': 'Context Test',
+                        'prompt': 'Do the thing we discussed',
+                        'schedule_type': 'once',
+                        'when': 'in 2 hours',
+                    }),
+                },
+            }],
+        )
+        mock_llm.add_response(content="Scheduled with context!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Schedule the thing we discussed', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(0.3)
+
+        tasks = await telegram_bot.db.get_scheduled_tasks(user_id)
+        assert len(tasks) == 1
+        context_ids = tasks[0]['context_message_ids']
+        assert context_ids, "context snapshot must be stored on the task"
+
+        # Snapshot holds the conversation branch: Hi / Hello! / the scheduling request,
+        # with the trailing ScheduleTask tool-call message trimmed off
+        messages = await telegram_bot.db.get_messages_by_ids(context_ids)
+        assert len(messages) == 3
+        assert messages[-1].message.role == 'user'
+        assert 'Schedule the thing we discussed' in str(messages[-1].message.content)
+        assert not messages[-1].message.tool_calls
+
+    async def test_scheduled_task_fires_with_creation_context(self, bot_app):
+        """When a task fires, the LLM sees the conversation the task was created in,
+        and the result is persisted into that dialog branch."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 80007
+
+        user = await _create_agent_user(telegram_bot, dp, user_id)
+
+        # Conversation with a distinctive fact, then scheduling
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(content="Noted, turquoise it is.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        update = make_text_message('My favorite color is turquoise', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(0.2)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_ctx2',
+                'function': {
+                    'name': 'ScheduleTask',
+                    'arguments': json.dumps({
+                        'title': 'Color Reminder',
+                        'prompt': 'Remind me about my favorite color',
+                        'schedule_type': 'once',
+                        'when': 'in 2 hours',
+                    }),
+                },
+            }],
+        )
+        mock_llm.add_response(content="Will remind you!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Remind me about it later', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(0.3)
+
+        tasks = await telegram_bot.db.get_scheduled_tasks(user_id)
+        assert len(tasks) == 1
+        context_ids = tasks[0]['context_message_ids']
+        assert context_ids
+
+        # Fire the task directly (bypassing the poll loop)
+        fire_llm = MockLLMClient()
+        fire_llm.add_response(content="Your favorite color is turquoise!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = fire_llm
+
+        await telegram_bot.scheduler_service._execute_task(tasks[0])
+        await asyncio.sleep(0.2)
+
+        # The LLM saw the creation-time conversation
+        assert len(fire_llm.calls) == 1
+        llm_messages_str = str(fire_llm.calls[0]['messages'])
+        assert 'turquoise' in llm_messages_str
+        assert 'Remind me about my favorite color' in llm_messages_str
+
+        # Notification and result were sent to the chat
+        spy.assert_sent_text_contains("⏰ Scheduled task: Color Reminder")
+        spy.assert_sent_text_contains("Your favorite color is turquoise!")
+
+        # The result is persisted as a continuation of the creation branch,
+        # so the user can reply to it and keep the conversation going
+        last_message = await telegram_bot.db.get_last_message(user.id, user_id)
+        assert 'Your favorite color is turquoise!' in str(last_message.message.content)
+        assert last_message.tg_message_id > 0
+        assert set(context_ids).issubset(set(last_message.previous_message_ids))
+
+        # One-time task got disabled after firing
+        tasks_after = await telegram_bot.db.get_scheduled_tasks(user_id, enabled_only=True)
+        assert len(tasks_after) == 0
+
+
 class TestSchedulerServiceDB:
 
     async def test_get_due_tasks(self, db):
@@ -286,6 +406,26 @@ class TestSchedulerServiceDB:
         assert len(tasks) == 1
         assert tasks[0]['last_execution'] is not None
         assert tasks[0]['next_execution'] > now
+
+    async def test_create_task_with_context_message_ids(self, db):
+        """context_message_ids round-trips through the DB; omitted defaults to empty."""
+        user = await db.create_user(99805, settings.USER_ROLE_DEFAULT)
+
+        future_time = datetime.now(timezone.utc) + timedelta(hours=1)
+        record = await db.create_scheduled_task(
+            chat_id=99805, user_id=user.id, title='With Context',
+            prompt='Something', schedule_type='once',
+            run_at=future_time, cron_expression=None, next_execution=future_time,
+            context_message_ids=[101, 102, 103],
+        )
+        assert record['context_message_ids'] == [101, 102, 103]
+
+        record_no_ctx = await db.create_scheduled_task(
+            chat_id=99805, user_id=user.id, title='No Context',
+            prompt='Something', schedule_type='once',
+            run_at=future_time, cron_expression=None, next_execution=future_time,
+        )
+        assert record_no_ctx['context_message_ids'] == []
 
     async def test_get_user_by_id(self, db):
         """get_user_by_id returns user by primary key."""

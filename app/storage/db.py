@@ -383,13 +383,13 @@ class DB:
 
     async def create_scheduled_task(self, chat_id: int, user_id: int, title: str, prompt: str,
                                     schedule_type: str, run_at, cron_expression: str,
-                                    next_execution) -> dict:
+                                    next_execution, context_message_ids: Optional[List[int]] = None) -> dict:
         sql = '''INSERT INTO chatgpttg.scheduled_task
-        (chat_id, user_id, title, prompt, schedule_type, run_at, cron_expression, next_execution)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *'''
+        (chat_id, user_id, title, prompt, schedule_type, run_at, cron_expression, next_execution, context_message_ids)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *'''
         record = await self.connection_pool.fetchrow(
             sql, chat_id, user_id, title, prompt, schedule_type,
-            run_at, cron_expression, next_execution
+            run_at, cron_expression, next_execution, context_message_ids or []
         )
         return dict(record)
 

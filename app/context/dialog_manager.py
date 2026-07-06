@@ -20,6 +20,12 @@ class DialogManager:
     async def process_dialog(self, session: ConversationSession) -> List[DialogMessage]:
         self.chat_id = session.chat_id
 
+        if session.context_message_ids:
+            # explicit branch requested (e.g. scheduled task firing with its creation-time context)
+            dialog_messages = await self.db.get_messages_by_ids(session.context_message_ids)
+            self.messages = await self.summarize_messages_if_needed(dialog_messages)
+            return self.get_dialog_messages()
+
         if session.reply_to_message_id is not None and not session.is_forwarded:
             is_reply = True
             db_message = await self.db.get_telegram_message(self.chat_id, session.reply_to_message_id)

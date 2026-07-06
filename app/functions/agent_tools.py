@@ -184,6 +184,25 @@ class ScheduleTaskParams(OpenAIFunctionParams):
 class ScheduleTask(OpenAIFunction):
     PARAMS_SCHEMA = ScheduleTaskParams
 
+    def _snapshot_context_message_ids(self) -> list:
+        """Snapshot the current dialog branch so the task fires with the conversation it was born in.
+
+        Trailing messages of an unfinished tool exchange (including the ScheduleTask call itself)
+        are trimmed — the stored branch must end on a plain user/assistant message to be a valid
+        LLM context on its own.
+        """
+        dialog_manager = self.context_manager.dialog_manager
+        if dialog_manager is None or not dialog_manager.messages:
+            return []
+        messages = list(dialog_manager.messages)
+        while messages and (
+            messages[-1].message.role in ('tool', 'function')
+            or messages[-1].message.tool_calls
+            or messages[-1].message.function_call
+        ):
+            messages.pop()
+        return [m.id for m in messages]
+
     async def run(self, params: ScheduleTaskParams) -> Optional[str]:
         from datetime import datetime, timezone
         from croniter import croniter
@@ -227,6 +246,7 @@ class ScheduleTask(OpenAIFunction):
             run_at=run_at,
             cron_expression=cron_expression,
             next_execution=next_execution,
+            context_message_ids=self._snapshot_context_message_ids(),
         )
         next_str = next_execution.strftime('%Y-%m-%d %H:%M UTC')
         return f"Scheduled task #{record['id']} '{params.title}' created. Next execution: {next_str}"

@@ -85,23 +85,34 @@ class SchedulerService:
             side_effects = BotSideEffectHandler(self.bot, chat_id)
             notify_msg_id = await side_effects.send_message(f"⏰ Scheduled task: {title}")
 
-            # Build synthetic input and session
+            # Build synthetic input and session; load the conversation branch
+            # the task was created in (falls back to default context loading
+            # for tasks created before context snapshots existed)
             user_input = UserInput(text_inputs=[
                 TextInput(text=f"[Scheduled task: {title}]\n{prompt}")
             ])
-            session = ConversationSession(chat_id=chat_id)
+            session = ConversationSession(
+                chat_id=chat_id,
+                context_message_ids=task_record.get('context_message_ids') or None,
+            )
 
             # Run full agent turn
             context_manager = await build_context_manager(self.db, user, session)
             runtime = AgentRuntime(self.db, user, side_effects, context_manager)
 
-            final_text = ""
+            final_event = None
             async for event in runtime.process_turn(user_input, session, lambda: False):
                 if isinstance(event, FinalResponse) and event.dialog_message.content:
-                    final_text = event.dialog_message.get_text_content()
+                    final_event = event
 
-            if final_text:
-                await self.bot.send_message(chat_id, final_text)
+            if final_event is not None:
+                final_text = final_event.dialog_message.get_text_content()
+                if final_text:
+                    sent_message_id = await side_effects.send_message(final_text)
+                    if final_event.needs_context_save:
+                        # persist the result into the dialog branch so the user
+                        # can reply to it and continue the conversation
+                        await context_manager.add_message(final_event.dialog_message, sent_message_id)
 
             logger.info(f"Scheduled task {task_id} '{title}' executed for chat {chat_id}")
 
