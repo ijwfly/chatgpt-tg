@@ -2,6 +2,8 @@ import asyncio
 import json
 from datetime import datetime, timezone, timedelta
 
+import pytz
+
 import settings
 from app.openai_helpers.llm_client_factory import LLMClientFactory
 from tests.helpers.mock_llm_client import MockLLMClient
@@ -225,6 +227,100 @@ class TestScheduleTaskTool:
         assert len(mock_llm.calls) >= 2
         tool_results = [m for m in mock_llm.calls[1]['messages'] if m.get('role') == 'tool']
         assert any('Error' in str(m.get('content', '')) for m in tool_results)
+
+
+class TestScheduledTaskTimezone:
+
+    async def test_once_task_uses_configured_timezone(self, bot_app):
+        """'tomorrow at 10:00' with USER_TIMEZONE=Europe/Moscow schedules 10:00 MSK (07:00 UTC)."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80008
+        moscow = pytz.timezone('Europe/Moscow')
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+
+        original_tz = settings.USER_TIMEZONE
+        settings.USER_TIMEZONE = 'Europe/Moscow'
+        try:
+            mock_llm = MockLLMClient()
+            mock_llm.add_response(
+                content=None,
+                tool_calls=[{
+                    'id': 'call_tz1',
+                    'function': {
+                        'name': 'ScheduleTask',
+                        'arguments': json.dumps({
+                            'title': 'Morning Task',
+                            'prompt': 'Do the morning thing',
+                            'schedule_type': 'once',
+                            'when': 'tomorrow at 10:00',
+                        }),
+                    },
+                }],
+            )
+            mock_llm.add_response(content="Scheduled!")
+            LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+            update = make_text_message('Schedule for tomorrow morning', user_id=user_id)
+            await dp.process_update(update)
+            await asyncio.sleep(0.3)
+
+            tasks = await telegram_bot.db.get_scheduled_tasks(user_id)
+            assert len(tasks) == 1
+            next_execution = tasks[0]['next_execution']
+
+            local = next_execution.astimezone(moscow)
+            assert (local.hour, local.minute) == (10, 0)
+            assert local.date() == (datetime.now(moscow) + timedelta(days=1)).date()
+            # Moscow is UTC+3, so the stored UTC instant is 07:00
+            assert next_execution.astimezone(timezone.utc).hour == 7
+
+            # Tool result reports the time in the configured zone
+            tool_results = [m for m in mock_llm.calls[1]['messages'] if m.get('role') == 'tool']
+            assert any('(Europe/Moscow)' in str(m.get('content', '')) for m in tool_results)
+        finally:
+            settings.USER_TIMEZONE = original_tz
+
+    async def test_recurring_task_cron_in_configured_timezone(self, bot_app):
+        """Cron '0 10 * * *' with USER_TIMEZONE=Europe/Moscow means 10:00 MSK, not UTC."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80009
+        moscow = pytz.timezone('Europe/Moscow')
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+
+        original_tz = settings.USER_TIMEZONE
+        settings.USER_TIMEZONE = 'Europe/Moscow'
+        try:
+            mock_llm = MockLLMClient()
+            mock_llm.add_response(
+                content=None,
+                tool_calls=[{
+                    'id': 'call_tz2',
+                    'function': {
+                        'name': 'ScheduleTask',
+                        'arguments': json.dumps({
+                            'title': 'Daily Local',
+                            'prompt': 'Daily thing',
+                            'schedule_type': 'recurring',
+                            'cron_expression': '0 10 * * *',
+                        }),
+                    },
+                }],
+            )
+            mock_llm.add_response(content="Scheduled daily!")
+            LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+            update = make_text_message('Schedule daily task', user_id=user_id)
+            await dp.process_update(update)
+            await asyncio.sleep(0.3)
+
+            tasks = await telegram_bot.db.get_scheduled_tasks(user_id)
+            assert len(tasks) == 1
+            local = tasks[0]['next_execution'].astimezone(moscow)
+            assert (local.hour, local.minute) == (10, 0)
+        finally:
+            settings.USER_TIMEZONE = original_tz
 
 
 class TestScheduledTaskContext:

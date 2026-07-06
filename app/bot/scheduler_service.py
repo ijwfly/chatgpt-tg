@@ -9,6 +9,7 @@ from aiogram import Bot
 import settings
 from app.bot.bot_side_effects import BotSideEffectHandler
 from app.context.context_manager import build_context_manager
+from app.functions.agent_tools import get_user_timezone
 from app.runtime.agent_runtime import AgentRuntime
 from app.runtime.conversation_session import ConversationSession
 from app.runtime.events import FinalResponse
@@ -19,9 +20,13 @@ logger = logging.getLogger(__name__)
 
 
 def compute_next_cron(cron_expression: str, base_time: datetime = None) -> datetime:
-    """Compute next execution time from a cron expression."""
+    """Compute next execution time from a cron expression.
+
+    Cron wall times are interpreted in settings.USER_TIMEZONE, so schedules stay on
+    the configured local clock across DST shifts.
+    """
     if base_time is None:
-        base_time = datetime.now(timezone.utc)
+        base_time = datetime.now(get_user_timezone())
     return croniter(cron_expression, base_time).get_next(datetime)
 
 
@@ -69,7 +74,7 @@ class SchedulerService:
             if task_record['schedule_type'] == 'once':
                 await self.db.disable_scheduled_task(task_id)
             else:
-                next_exec = compute_next_cron(task_record['cron_expression'], now)
+                next_exec = compute_next_cron(task_record['cron_expression'])
                 await self.db.update_scheduled_task_execution(task_id, now, next_exec)
 
             user = await self.db.get_user_by_id(task_record['user_id'])
