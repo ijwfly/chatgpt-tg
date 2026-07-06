@@ -264,7 +264,10 @@ class ScheduleTask(OpenAIFunction):
         return (
             "Use ScheduleTask for deferred execution. For one-time tasks use schedule_type='once' "
             "with natural language 'when'. For recurring use schedule_type='recurring' with cron_expression. "
-            "Use ListScheduledTasks/CancelScheduledTask to manage."
+            "Use ListScheduledTasks/CancelScheduledTask to manage. "
+            "When you receive a <scheduled_task_execution> message, a previously scheduled task has fired: "
+            "execute its instructions immediately — never call ScheduleTask to re-schedule it "
+            "(recurring tasks re-schedule themselves automatically)."
         )
 
 

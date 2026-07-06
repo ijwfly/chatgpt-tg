@@ -89,7 +89,17 @@ class SchedulerService:
             # the task was created in (falls back to default context loading
             # for tasks created before context snapshots existed)
             user_input = UserInput(text_inputs=[
-                TextInput(text=f"[Scheduled task: {title}]\n{prompt}")
+                TextInput(text=(
+                    f'<scheduled_task_execution>\n'
+                    f'Scheduled task #{task_id} "{title}" is due NOW. This message is an automatic '
+                    f'trigger from the scheduler, not a user request.\n'
+                    f'The conversation above is historical context from when this task was created — '
+                    f'use it for reference only.\n'
+                    f'This task is already scheduled and has just fired: do NOT call ScheduleTask '
+                    f'for it again. Execute the task now and report the result.\n'
+                    f'Task instructions:\n{prompt}\n'
+                    f'</scheduled_task_execution>'
+                ))
             ])
             session = ConversationSession(
                 chat_id=chat_id,

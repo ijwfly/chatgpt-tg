@@ -330,6 +330,8 @@ class TestScheduledTaskContext:
         llm_messages_str = str(fire_llm.calls[0]['messages'])
         assert 'turquoise' in llm_messages_str
         assert 'Remind me about my favorite color' in llm_messages_str
+        # The trigger is explicitly marked as an execution, not a scheduling request
+        assert '<scheduled_task_execution>' in llm_messages_str
 
         # Notification and result were sent to the chat
         spy.assert_sent_text_contains("⏰ Scheduled task: Color Reminder")
