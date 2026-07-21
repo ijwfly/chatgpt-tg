@@ -22,6 +22,14 @@ async def add_user_input_to_context(user_input: UserInput, context_manager: Cont
         dialog_message = DialogUtils.prepare_user_message(doc_info)
         await context_manager.add_message(dialog_message, doc.tg_message_id, MessageType.DOCUMENT)
 
+    # Add sandbox workspace files
+    # Note: plain MESSAGE type, not DOCUMENT — DOCUMENT messages trigger VectorSearch registration
+    for sf in user_input.sandbox_files:
+        dialog_message = DialogUtils.prepare_user_message(
+            f'[file uploaded to agent workspace] {sf.filename} ({sf.size} bytes)'
+        )
+        await context_manager.add_message(dialog_message, sf.tg_message_id)
+
     # Add text/image messages
     for text_input in user_input.text_inputs:
         if text_input.images:

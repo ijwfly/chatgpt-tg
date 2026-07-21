@@ -10,6 +10,20 @@ services:
       - ./:/usr/src/app/
     depends_on:
       - postgres
+      - sandbox
+
+  sandbox:
+    restart: always
+    build: ./sandbox
+    volumes:
+      - sandbox_workspace:/workspace
+    environment:
+      BASH_TIMEOUT_MAX: 300
+      USER_MAX_PROCS: 256
+      USER_MAX_MEM_MB: 4096
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
 
   update_keyboards:
     restart: "no"
@@ -43,4 +57,6 @@ services:
 
 volumes:
     db:
+      driver: local
+    sandbox_workspace:
       driver: local

@@ -1,5 +1,6 @@
 import base64
 import dataclasses
+import io
 import re
 import asyncio
 from datetime import date
@@ -160,6 +161,16 @@ async def send_photo(message: types.Message, photo_bytes, caption=None, reply_ma
         send_message = message.reply_photo
 
     return await send_message(photo_bytes, caption=caption, reply_markup=reply_markup)
+
+
+async def send_document(message: types.Message, document_bytes, filename, caption=None):
+    document = types.InputFile(io.BytesIO(document_bytes), filename=filename)
+    if message.reply_to_message is None:
+        send_message = message.answer_document
+    else:
+        send_message = message.reply_document
+
+    return await send_message(document, caption=caption)
 
 
 def merge_dicts(dict_1, dict_2):
