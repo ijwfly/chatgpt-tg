@@ -9,6 +9,7 @@ from aiogram import Bot
 import settings
 from app.bot.bot_side_effects import BotSideEffectHandler
 from app.context.context_manager import build_context_manager
+from app.functions.agent_tools import get_user_timezone
 from app.runtime.agent_runtime import AgentRuntime
 from app.runtime.conversation_session import ConversationSession
 from app.runtime.events import FinalResponse
@@ -19,9 +20,13 @@ logger = logging.getLogger(__name__)
 
 
 def compute_next_cron(cron_expression: str, base_time: datetime = None) -> datetime:
-    """Compute next execution time from a cron expression."""
+    """Compute next execution time from a cron expression.
+
+    Cron wall times are interpreted in settings.USER_TIMEZONE, so schedules stay on
+    the configured local clock across DST shifts.
+    """
     if base_time is None:
-        base_time = datetime.now(timezone.utc)
+        base_time = datetime.now(get_user_timezone())
     return croniter(cron_expression, base_time).get_next(datetime)
 
 
@@ -69,7 +74,7 @@ class SchedulerService:
             if task_record['schedule_type'] == 'once':
                 await self.db.disable_scheduled_task(task_id)
             else:
-                next_exec = compute_next_cron(task_record['cron_expression'], now)
+                next_exec = compute_next_cron(task_record['cron_expression'])
                 await self.db.update_scheduled_task_execution(task_id, now, next_exec)
 
             user = await self.db.get_user_by_id(task_record['user_id'])
@@ -85,23 +90,44 @@ class SchedulerService:
             side_effects = BotSideEffectHandler(self.bot, chat_id)
             notify_msg_id = await side_effects.send_message(f"⏰ Scheduled task: {title}")
 
-            # Build synthetic input and session
+            # Build synthetic input and session; load the conversation branch
+            # the task was created in (falls back to default context loading
+            # for tasks created before context snapshots existed)
             user_input = UserInput(text_inputs=[
-                TextInput(text=f"[Scheduled task: {title}]\n{prompt}")
+                TextInput(text=(
+                    f'<scheduled_task_execution>\n'
+                    f'Scheduled task #{task_id} "{title}" is due NOW. This message is an automatic '
+                    f'trigger from the scheduler, not a user request.\n'
+                    f'The conversation above is historical context from when this task was created — '
+                    f'use it for reference only.\n'
+                    f'This task is already scheduled and has just fired: do NOT call ScheduleTask '
+                    f'for it again. Execute the task now and report the result.\n'
+                    f'Task instructions:\n{prompt}\n'
+                    f'</scheduled_task_execution>'
+                ))
             ])
-            session = ConversationSession(chat_id=chat_id)
+            session = ConversationSession(
+                chat_id=chat_id,
+                context_message_ids=task_record.get('context_message_ids') or None,
+            )
 
             # Run full agent turn
             context_manager = await build_context_manager(self.db, user, session)
             runtime = AgentRuntime(self.db, user, side_effects, context_manager)
 
-            final_text = ""
+            final_event = None
             async for event in runtime.process_turn(user_input, session, lambda: False):
                 if isinstance(event, FinalResponse) and event.dialog_message.content:
-                    final_text = event.dialog_message.get_text_content()
+                    final_event = event
 
-            if final_text:
-                await self.bot.send_message(chat_id, final_text)
+            if final_event is not None:
+                final_text = final_event.dialog_message.get_text_content()
+                if final_text:
+                    sent_message_id = await side_effects.send_message(final_text)
+                    if final_event.needs_context_save:
+                        # persist the result into the dialog branch so the user
+                        # can reply to it and continue the conversation
+                        await context_manager.add_message(final_event.dialog_message, sent_message_id)
 
             logger.info(f"Scheduled task {task_id} '{title}' executed for chat {chat_id}")
 

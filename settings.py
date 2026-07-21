@@ -96,6 +96,7 @@ AGENT_BG_TASK_TIMEOUT = 300
 AGENT_PLAN_REMINDER_INTERVAL = 5
 MCP_TOOL_CALL_TIMEOUT = 300  # seconds, timeout for individual MCP tool calls
 SCHEDULER_POLL_INTERVAL = 30  # seconds between scheduler checks
+USER_TIMEZONE = 'UTC'  # IANA timezone users are assumed to be in (e.g. 'Europe/Moscow'); used for scheduled task times
 
 # MCP servers available only in agent mode (in addition to MCP_SERVERS)
 MCP_SERVERS_AGENT: list[MCPServerConfig] = [

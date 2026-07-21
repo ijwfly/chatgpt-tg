@@ -46,6 +46,11 @@ TELEGRAM_BOT_TOKEN = ''
 # === Image proxy ===
 # IMAGE_PROXY_URL = 'http://your-server-ip'
 
+# === Scheduled tasks timezone ===
+# IANA timezone your users are in; "tomorrow at 10am" and cron expressions
+# are interpreted in this zone (default is UTC).
+# USER_TIMEZONE = 'Europe/Moscow'
+
 # === MCP servers ===
 # from settings import MCPServerConfig
 # MCP_SERVERS = [

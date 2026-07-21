@@ -1,13 +1,27 @@
+import logging
 from dataclasses import dataclass
 from typing import Optional, List, ClassVar
 
 import pydantic
+import pytz
 from pydantic import Field
 
+import settings
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
 from app.runtime.background_task_manager import BackgroundTaskManager
 from app.runtime.plan_manager import PlanManager
 from app.runtime.side_effects import SideEffectHandler
+
+logger = logging.getLogger(__name__)
+
+
+def get_user_timezone():
+    """Resolve settings.USER_TIMEZONE to a tzinfo, falling back to UTC on invalid values."""
+    try:
+        return pytz.timezone(settings.USER_TIMEZONE)
+    except pytz.UnknownTimeZoneError:
+        logger.warning(f"Invalid USER_TIMEZONE '{settings.USER_TIMEZONE}', falling back to UTC")
+        return pytz.utc
 
 
 @dataclass
@@ -184,6 +198,25 @@ class ScheduleTaskParams(OpenAIFunctionParams):
 class ScheduleTask(OpenAIFunction):
     PARAMS_SCHEMA = ScheduleTaskParams
 
+    def _snapshot_context_message_ids(self) -> list:
+        """Snapshot the current dialog branch so the task fires with the conversation it was born in.
+
+        Trailing messages of an unfinished tool exchange (including the ScheduleTask call itself)
+        are trimmed — the stored branch must end on a plain user/assistant message to be a valid
+        LLM context on its own.
+        """
+        dialog_manager = self.context_manager.dialog_manager
+        if dialog_manager is None or not dialog_manager.messages:
+            return []
+        messages = list(dialog_manager.messages)
+        while messages and (
+            messages[-1].message.role in ('tool', 'function')
+            or messages[-1].message.tool_calls
+            or messages[-1].message.function_call
+        ):
+            messages.pop()
+        return [m.id for m in messages]
+
     async def run(self, params: ScheduleTaskParams) -> Optional[str]:
         from datetime import datetime, timezone
         from croniter import croniter
@@ -191,6 +224,8 @@ class ScheduleTask(OpenAIFunction):
 
         chat_id = self.context_manager.session.chat_id
         now = datetime.now(timezone.utc)
+        user_tz = get_user_timezone()
+        local_now = datetime.now(user_tz)
 
         if params.schedule_type == 'once':
             if not params.when:
@@ -198,6 +233,9 @@ class ScheduleTask(OpenAIFunction):
             parsed = dateparser.parse(params.when, settings={
                 'PREFER_DATES_FROM': 'future',
                 'RETURN_AS_TIMEZONE_AWARE': True,
+                'TIMEZONE': str(user_tz),
+                'TO_TIMEZONE': 'UTC',
+                'RELATIVE_BASE': local_now.replace(tzinfo=None),
             })
             if parsed is None:
                 return f"Error: Could not parse date/time from '{params.when}'"
@@ -210,7 +248,7 @@ class ScheduleTask(OpenAIFunction):
             if not params.cron_expression:
                 return "Error: cron_expression is required for recurring tasks"
             try:
-                next_execution = croniter(params.cron_expression, now).get_next(datetime)
+                next_execution = croniter(params.cron_expression, local_now).get_next(datetime)
             except (ValueError, KeyError) as e:
                 return f"Error: Invalid cron expression: {e}"
             run_at = None
@@ -227,8 +265,9 @@ class ScheduleTask(OpenAIFunction):
             run_at=run_at,
             cron_expression=cron_expression,
             next_execution=next_execution,
+            context_message_ids=self._snapshot_context_message_ids(),
         )
-        next_str = next_execution.strftime('%Y-%m-%d %H:%M UTC')
+        next_str = next_execution.astimezone(user_tz).strftime('%Y-%m-%d %H:%M') + f' ({user_tz})'
         return f"Scheduled task #{record['id']} '{params.title}' created. Next execution: {next_str}"
 
     @classmethod
@@ -244,7 +283,12 @@ class ScheduleTask(OpenAIFunction):
         return (
             "Use ScheduleTask for deferred execution. For one-time tasks use schedule_type='once' "
             "with natural language 'when'. For recurring use schedule_type='recurring' with cron_expression. "
-            "Use ListScheduledTasks/CancelScheduledTask to manage."
+            f"Times in 'when' and cron expressions are interpreted in the bot's timezone ({settings.USER_TIMEZONE}): "
+            "pass the user's times as-is, do not convert them to UTC. "
+            "Use ListScheduledTasks/CancelScheduledTask to manage. "
+            "When you receive a <scheduled_task_execution> message, a previously scheduled task has fired: "
+            "execute its instructions immediately — never call ScheduleTask to re-schedule it "
+            "(recurring tasks re-schedule themselves automatically)."
         )
 
 
@@ -262,10 +306,11 @@ class ListScheduledTasks(OpenAIFunction):
         tasks = await self.db.get_scheduled_tasks(chat_id, enabled_only=True)
         if not tasks:
             return "No scheduled tasks."
-        lines = ["Scheduled tasks:"]
+        user_tz = get_user_timezone()
+        lines = [f"Scheduled tasks (times in {user_tz}):"]
         for t in tasks:
-            schedule_info = t.get('cron_expression') or (t['run_at'].strftime('%Y-%m-%d %H:%M') if t.get('run_at') else '?')
-            next_exec = t['next_execution'].strftime('%Y-%m-%d %H:%M') if t.get('next_execution') else '?'
+            schedule_info = t.get('cron_expression') or (t['run_at'].astimezone(user_tz).strftime('%Y-%m-%d %H:%M') if t.get('run_at') else '?')
+            next_exec = t['next_execution'].astimezone(user_tz).strftime('%Y-%m-%d %H:%M') if t.get('next_execution') else '?'
             lines.append(
                 f"  #{t['id']} [{t['schedule_type']}] {t['title']} "
                 f"(schedule: {schedule_info}, next: {next_exec})"
