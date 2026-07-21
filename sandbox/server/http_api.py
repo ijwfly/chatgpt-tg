@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import time
+from urllib.parse import quote
 
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
@@ -203,10 +204,12 @@ async def _stream_download(linux_user, abs_path):
 
     filename = os.path.basename(abs_path).replace('"', "")
     logger.info("files download user=%s path=%s", linux_user, abs_path)
+    # RFC 5987 filename* encoding: HTTP headers must be latin-1, filenames may be unicode
+    disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
     return StreamingResponse(
         body(),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": disposition},
     )
 
 

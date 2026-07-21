@@ -222,7 +222,8 @@ class BatchedInputHandler:
     @staticmethod
     def _sanitize_workspace_filename(filename: str) -> str:
         safe_name = os.path.basename(filename or '')
-        safe_name = re.sub(r'[^A-Za-z0-9._-]', '_', safe_name)
+        # \w is unicode-aware: keeps letters in any alphabet (incl. cyrillic) and digits
+        safe_name = re.sub(r'[^\w.-]', '_', safe_name)
         if not safe_name.strip('._'):
             safe_name = 'file'
         return safe_name

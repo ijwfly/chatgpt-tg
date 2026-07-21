@@ -250,6 +250,22 @@ class TestSandboxDocumentUpload:
         all_contents = [str(m.get('content', '')) for m in mock_llm.calls[0]['messages']]
         assert any('[file uploaded to agent workspace] my_report.csv' in c for c in all_contents)
 
+    async def test_document_cyrillic_name_preserved(self, bot_app):
+        """Unicode (cyrillic) filenames are kept, only unsafe chars are replaced."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 80008
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+        _mock_document_download(mock_bot, b'pdf-bytes')
+
+        update = make_document_message('Собеседование CTO (финал).pdf', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(0.3)
+
+        assert 'Собеседование_CTO__финал_.pdf' in FakeSandboxClient.uploads
+        spy.assert_sent_text_contains('Saved to agent workspace: Собеседование_CTO__финал_.pdf')
+
     async def test_document_name_collision_gets_suffix(self, bot_app):
         """Uploading a file with an existing name gets a numeric suffix."""
         telegram_bot, dp, mock_bot = bot_app

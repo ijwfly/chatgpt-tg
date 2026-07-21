@@ -7,7 +7,7 @@ the sandbox maps it to an isolated linux user with a private workspace.
 import os
 import re
 from typing import Optional, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import httpx
 
@@ -120,9 +120,13 @@ class SandboxClient:
 
                     filename = os.path.basename(rel_path)
                     disposition = response.headers.get('content-disposition', '')
-                    match = re.search(r'filename="([^"]+)"', disposition)
+                    match = re.search(r"filename\*=UTF-8''([^;]+)", disposition)
                     if match:
-                        filename = match.group(1)
+                        filename = unquote(match.group(1))
+                    else:
+                        match = re.search(r'filename="([^"]+)"', disposition)
+                        if match:
+                            filename = match.group(1)
                     return b''.join(chunks), filename
         except httpx.HTTPError as e:
             raise SandboxError(f'Sandbox unavailable: {e}')
