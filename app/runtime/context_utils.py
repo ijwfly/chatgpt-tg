@@ -1,4 +1,3 @@
-import json
 from urllib.parse import urljoin
 
 import settings
@@ -6,7 +5,6 @@ from app.context.context_manager import ContextManager
 from app.context.dialog_manager import DialogUtils
 from app.openai_helpers.count_tokens import calculate_image_tokens
 from app.runtime.user_input import UserInput
-from app.storage.db import MessageType
 
 
 async def add_user_input_to_context(user_input: UserInput, context_manager: ContextManager):
@@ -16,14 +14,7 @@ async def add_user_input_to_context(user_input: UserInput, context_manager: Cont
         dialog_message = DialogUtils.prepare_user_message(vt.text)
         await context_manager.add_message(dialog_message, vt.tg_message_id)
 
-    # Add documents
-    for doc in user_input.documents:
-        doc_info = json.dumps({"document_id": doc.document_id, "document_name": doc.document_name})
-        dialog_message = DialogUtils.prepare_user_message(doc_info)
-        await context_manager.add_message(dialog_message, doc.tg_message_id, MessageType.DOCUMENT)
-
     # Add sandbox workspace files
-    # Note: plain MESSAGE type, not DOCUMENT — DOCUMENT messages trigger VectorSearch registration
     for sf in user_input.sandbox_files:
         dialog_message = DialogUtils.prepare_user_message(
             f'[file uploaded to agent workspace] {sf.filename} ({sf.size} bytes)'

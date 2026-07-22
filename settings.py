@@ -59,7 +59,6 @@ USER_ROLE_CHOOSE_MODEL = UserRole.BASIC  # minimum role needed to choose model (
 USER_ROLE_STREAMING_ANSWERS = UserRole.BASIC  # minimum role needed to use streaming gpt responses
 USER_ROLE_IMAGE_GENERATION = UserRole.BASIC  # minimum role needed to generate images
 USER_ROLE_TTS = UserRole.BASIC  # minimum role needed to use text-to-speech
-USER_ROLE_RAG = UserRole.BASIC  # minimum role needed to use RAG
 
 # Plugins settings
 ENABLE_WOLFRAMALPHA = False
@@ -143,15 +142,6 @@ POSTGRES_DATABASE = 'chatgpttg'
 IMAGE_PROXY_BIND_HOST = '0.0.0.0'
 IMAGE_PROXY_BIND_PORT = 8321
 
-# Todoist feature for bot admin
-ENABLE_TODOIST_ADMIN_INTEGRATION = False
-TODOIST_TOKEN = ''
-
-# Obsidian Echo integration for bot admin
-ENABLE_OBSIDIAN_ECHO_ADMIN_INTEGRATION = False
-OBSIDIAN_ECHO_BASE_URL = ''
-OBSIDIAN_ECHO_VAULT_TOKEN = ''
-
 # MCP servers configuration
 # Each server can have its own minimum role requirement and custom headers
 MCP_SERVERS: list[MCPServerConfig] = [
@@ -162,15 +152,6 @@ MCP_SERVERS: list[MCPServerConfig] = [
     #     headers={'Authorization': 'Bearer token123'}
     # ),
 ]
-
-# Vectara RAG settings
-# this feature is highly experimental and not recommended to be used in it's current state
-# currently it even doesn't have instructions on how to setup, use it only if you feel experimenalish
-# maybe it will be removed or redone in the future
-VECTARA_RAG_ENABLED = False
-VECTARA_CUSTOMER_ID = -1
-VECTARA_API_KEY = 'YOUR KEY'
-VECTARA_CORPUS_ID = -1
 
 # Extra models configuration — define custom LLM models in settings_local.py
 # Accepts LLModel instances or dicts (legacy format). See settings_local.py.example.

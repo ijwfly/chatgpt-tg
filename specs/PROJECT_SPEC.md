@@ -6,7 +6,7 @@
 
 ## 1. General Description
 
-**chatgpt-tg** — a self-hosted Telegram bot that proxies user conversations to multiple LLM providers. The bot supports multimodal input (text, images, voice, documents), image generation, text-to-speech, a plugin system via function calling and MCP, as well as RAG via Vectara.
+**chatgpt-tg** — a self-hosted Telegram bot that proxies user conversations to multiple LLM providers. The bot supports multimodal input (text, images, voice, documents), image generation, text-to-speech, and a plugin system via function calling and MCP.
 
 **Target audience:** personal use, small teams, self-hosted operators.
 
@@ -56,9 +56,6 @@
 │  • Anthropic (Claude)                        │
 │  • OpenRouter (third-party models)           │
 │  • WolframAlpha (optional)                   │
-│  • Todoist (optional, admin)                 │
-│  • Obsidian Echo (optional, admin)           │
-│  • Vectara (optional, RAG)                   │
 │  • MCP Servers (optional, dynamic tools)     │
 └─────────────────────────────────────────────┘
 ```
@@ -85,7 +82,7 @@ app/
 │   │                    Base class, built-in functions, MCP
 │   │
 ├── storage/           ← Data access layer
-│   │                    PostgreSQL queries, roles, Vectara
+│   │                    PostgreSQL queries, roles
 │   │
 └── llm_models.py      ← Model registry
 ```
@@ -144,7 +141,6 @@ User sends message(s) to Telegram
 │  • Sort by message_id                        │
 │  • Transport preprocessing (builds UserInput):│
 │    voice/audio → Whisper → VoiceTranscription │
-│    document → Vectara upload → DocumentInput  │
 │    photo → ImageInput (file_id + dimensions)  │
 │    text → TextInput                           │
 │    forwarded → TextInput (with attribution)   │
@@ -444,9 +440,6 @@ class OpenAIFunction(ABC):
 |-------|------|---------------------|-------------|
 | `GenerateImageDalle3` | `functions/dalle_3.py` | `user.image_generation` AND role check | DALL-E 3 image generation (1024×1024, 1024×1792, 1792×1024). Adds system prompt for tailored prompts. Returns `None` (adds result to context itself) |
 | `QueryWolframAlpha` | `functions/wolframalpha.py` | `ENABLE_WOLFRAMALPHA` | Queries to WolframAlpha API. Extracts Input interpretation, Result, Results fields |
-| `TodoistAddTask` | `functions/todoist.py` | Admin-only (`USER_ROLE_MANAGER_CHAT_ID`) | Task creation in Todoist with optional date and duration |
-| `CreateObsidianNote` | `functions/obsidian_echo.py` | Admin-only | Note creation via Obsidian Echo API (Bearer auth) |
-| `VectorSearch` | `functions/vectara_search.py` | `VECTARA_RAG_ENABLED` AND documents in context | RAG search via Vectara. Input: query + document_ids. Returns top 5 results |
 | `SaveUserSettings` | `functions/save_user_settings.py` | `user.system_prompt_settings_enabled` | Saving user settings to `system_prompt_settings` |
 
 ### 6.3 MCP Client
@@ -496,10 +489,8 @@ Available only in agent mode. Inherit from `AgentFunction` (base class with `Age
 
 1. **Static functions** — enabled unconditionally (WolframAlpha when `ENABLE_WOLFRAMALPHA`)
 2. **Conditional functions** — depend on user settings and roles:
-   - Todoist, Obsidian Echo → admin-only
    - DALL-E 3 → `user.image_generation` + role check
    - SaveUserSettings → `user.system_prompt_settings_enabled`
-   - VectorSearch → `VECTARA_RAG_ENABLED` + documents in context
 3. **MCP functions** — for each server from `settings.MCP_SERVERS`:
    - Check `check_access_conditions(mcp_config.min_role, user.role)`
    - HTTP request to server, `list_tools()`
@@ -531,11 +522,8 @@ Check: `check_access_conditions(required_role, user_role)` — comparison of ind
 | Streaming responses | `USER_ROLE_STREAMING_ANSWERS` | `BASIC` |
 | Image generation | `USER_ROLE_IMAGE_GENERATION` | `BASIC` |
 | Text-to-Speech | `USER_ROLE_TTS` | `BASIC` |
-| RAG (document upload) | `USER_ROLE_RAG` | `BASIC` |
 | /usage_all (all users stats) | hardcoded | `ADMIN` |
 | Full model list | hardcoded | `ADMIN` |
-| Todoist integration | `USER_ROLE_MANAGER_CHAT_ID` | Admin (by telegram_id) |
-| Obsidian Echo | `USER_ROLE_MANAGER_CHAT_ID` | Admin (by telegram_id) |
 | Each MCP server | `MCPServerConfig.min_role` | Configurable per-server |
 
 ### 7.3 Role Management
@@ -598,7 +586,7 @@ Opened via `/models`:
 | **Text** | Added to context as `DialogMessage(role="user")` |
 | **Photo** | Largest resolution → image proxy URL with token count → sent to vision-capable model |
 | **Voice/Audio** | Download → convert to MP3 (pydub) → Whisper STT → text to context. `voice_as_prompt` setting determines whether this is a prompt |
-| **Document** | Extension check → upload to Vectara corpus → metadata to context as `MessageType.DOCUMENT` (25MB limit) |
+| **Document** | With `agent_mode=on` and sandbox enabled — saved to the user's sandbox workspace; otherwise not accepted |
 | **Forwarded** | Added with attribution `@username:\n{text}`. `forward_as_prompt` setting determines whether this is a prompt |
 | **Caption** | Processed as text (`message.caption → message.text`) |
 
@@ -654,15 +642,11 @@ File: `settings.py`
 | `USER_ROLE_STREAMING_ANSWERS` | `BASIC` | Minimum role for streaming |
 | `USER_ROLE_IMAGE_GENERATION` | `BASIC` | Minimum role for image gen |
 | `USER_ROLE_TTS` | `BASIC` | Minimum role for TTS |
-| `USER_ROLE_RAG` | `BASIC` | Minimum role for RAG |
 
 **Integrations (optional):**
 | Parameter | Description |
 |-----------|-----------|
 | `ENABLE_WOLFRAMALPHA` / `WOLFRAMALPHA_APPID` | WolframAlpha |
-| `ENABLE_TODOIST_ADMIN_INTEGRATION` / `TODOIST_TOKEN` | Todoist (admin) |
-| `ENABLE_OBSIDIAN_ECHO_ADMIN_INTEGRATION` / `OBSIDIAN_ECHO_*` | Obsidian Echo (admin) |
-| `VECTARA_RAG_ENABLED` / `VECTARA_*` | Vectara RAG (experimental) |
 | `MCP_SERVERS` | List of MCP servers |
 
 **Tuning:**
@@ -831,7 +815,7 @@ chatgpt-tg/
 │   │   ├── plan_manager.py        # PlanManager: plan lifecycle and DB persistence
 │   │   ├── background_task_manager.py # BackgroundTaskManager: sub-agent task execution
 │   │   ├── conversation_session.py # ConversationSession dataclass
-│   │   ├── user_input.py          # UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription
+│   │   ├── user_input.py          # UserInput, TextInput, ImageInput, VoiceTranscription
 │   │   ├── events.py              # RuntimeEvent hierarchy (deltas, final, function events)
 │   │   ├── side_effects.py        # SideEffectHandler protocol
 │   │   └── context_utils.py       # add_user_input_to_context() shared utility
@@ -856,9 +840,6 @@ chatgpt-tg/
 │   │   ├── base.py               # OpenAIFunction ABC: base class for all tool functions
 │   │   ├── dalle_3.py            # GenerateImageDalle3: DALL-E 3 image generation
 │   │   ├── wolframalpha.py       # QueryWolframAlpha: WolframAlpha queries
-│   │   ├── todoist.py            # TodoistAddTask: Todoist task creation
-│   │   ├── obsidian_echo.py      # CreateObsidianNote: Obsidian note creation
-│   │   ├── vectara_search.py     # VectorSearch: RAG search via Vectara
 │   │   ├── save_user_settings.py # SaveUserSettings: saving user preferences
 │   │   ├── agent_tools.py       # Agent-specific tools (plan, task, schedule management)
 │   │   └── mcp/
@@ -866,8 +847,7 @@ chatgpt-tg/
 │   │
 │   ├── storage/
 │   │   ├── db.py                 # DB class: all SQL queries, User/Message Pydantic models
-│   │   ├── user_role.py          # UserRole enum, ROLE_ORDER, check_access_conditions()
-│   │   └── vectara.py            # VectaraCorpusClient: document upload/search
+│   │   └── user_role.py          # UserRole enum, ROLE_ORDER, check_access_conditions()
 │   │
 │   └── llm_models.py            # LLModel class, get_models() registry, LLMPrice/Capabilities/Context
 │
@@ -894,8 +874,7 @@ chatgpt-tg/
 │   ├── test.sh                   # Run tests locally (postgres in docker, pytest on host)
 │   ├── test_docker.sh            # Run tests fully in docker
 │   ├── update_keyboards.py       # Update bot commands for all users
-│   ├── send_management_menus.py  # Send role management menus
-│   └── create_vectara_corpus.py  # Initialize Vectara RAG corpus
+│   └── send_management_menus.py  # Send role management menus
 │
 ├── specs/                        # Project specifications
 │

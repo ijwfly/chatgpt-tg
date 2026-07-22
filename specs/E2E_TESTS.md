@@ -14,7 +14,7 @@ E2E tests exercise the full message pipeline — from "user sends message" to "b
 | LLM APIs | **Mocked** (`MockLLMClient` injected via `LLMClientFactory._model_clients`) | Deterministic, no API costs |
 | Telegram transport | **Mocked** (`Bot.request` AsyncMock) | No real bot token needed |
 | Batching Timer | **Patched** to 0.001s | Fast tests without 0.3s waits |
-| Functions (WolframAlpha, Todoist, etc.) | **Disabled** via settings | Not needed for core flow tests |
+| Functions (WolframAlpha, etc.) | **Disabled** via settings | Not needed for core flow tests |
 | MCP Servers | **Disabled** (`MCP_SERVERS = []`) | Not needed for core flow tests |
 
 ### Key approach: `dp.process_update()`
@@ -257,9 +257,6 @@ Applied in `conftest.py` before any app imports:
 | `USER_ROLE_DEFAULT` | `UserRole.ADMIN` | Test users get full access |
 | `USER_ROLE_BOT_ACCESS` | `UserRole.STRANGER` | No access gating |
 | `ENABLE_WOLFRAMALPHA` | `False` | No external API calls |
-| `VECTARA_RAG_ENABLED` | `False` | No external API calls |
-| `ENABLE_TODOIST_ADMIN_INTEGRATION` | `False` | No external API calls |
-| `ENABLE_OBSIDIAN_ECHO_ADMIN_INTEGRATION` | `False` | No external API calls |
 | `ENABLE_USER_ROLE_MANAGER_CHAT` | `False` | No admin notifications |
 | `MCP_SERVERS` | `[]` | No MCP connections |
 | `ENABLE_AGENT_RUNTIME` | `True` | Agent mode enabled in tests |

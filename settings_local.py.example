@@ -40,9 +40,6 @@ TELEGRAM_BOT_TOKEN = ''
 # ENABLE_WOLFRAMALPHA = False
 # WOLFRAMALPHA_APPID = ''
 
-# ENABLE_TODOIST_ADMIN_INTEGRATION = False
-# TODOIST_TOKEN = ''
-
 # === Image proxy ===
 # IMAGE_PROXY_URL = 'http://your-server-ip'
 
