@@ -11,6 +11,7 @@ from app.functions.agent_tools import (
     AGENT_TOOLS_CORE, PLAN_TOOLS_NO_PLAN, PLAN_TOOLS_WITH_PLAN,
     SUB_AGENT_EXCLUDED_TOOLS,
 )
+from app.functions.bash_sandbox import SANDBOX_TOOLS
 from app.functions.mcp.mcp_function_storage import MCPFunctionManager
 from app.llm_models import get_model_by_name
 from app.openai_helpers.anthropic_chatgpt import AnthropicChatGPT
@@ -96,6 +97,11 @@ class AgentRuntime:
         # Register core agent tools
         for tool_cls in AGENT_TOOLS_CORE:
             function_storage.register(tool_cls)
+
+        # Register bash sandbox tools
+        if settings.ENABLE_BASH_SANDBOX:
+            for tool_cls in SANDBOX_TOOLS:
+                function_storage.register(tool_cls)
 
         # Create per-turn managers and load plan state
         bg_manager = BackgroundTaskManager(timeout=settings.AGENT_BG_TASK_TIMEOUT)

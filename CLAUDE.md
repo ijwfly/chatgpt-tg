@@ -9,7 +9,7 @@ A Telegram bot that provides access to multiple LLM providers (OpenAI, Anthropic
 ## Running the Project
 
 ```bash
-docker-compose up -d          # Start all services (app, postgres, image_proxy, pgweb)
+docker-compose up -d          # Start all services (app, postgres, image_proxy, sandbox, pgweb)
 docker-compose up -d --build  # Rebuild and start
 docker-compose logs -f app    # View app logs
 ```
@@ -57,6 +57,13 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - Built-in functions: `wolframalpha`, `dalle_3`, `todoist`, `obsidian_echo`, `save_user_settings`, `vectara_search`
 - MCP integration: `app/functions/mcp/` — dynamically loads tools from configured MCP servers
 
+### Bash Sandbox (agent mode)
+- `sandbox/` — separate docker-compose service (ubuntu-based, internal network only, no published ports). Per-user isolation via Linux users + `sudo -u`, personal workspace `/workspace/user_<telegram_id>` (chmod 700), lazy provisioning on every request (`ensure_user`). HTTP API: `POST /exec` (bash with process-group-kill timeout), `POST /fileop` (read/write/edit/stat/list/delete via `file_helper.py` under sudo), `GET/PUT /files/{path}` (streaming). Caller identified by `X-User-Id` header — trusted internal network, no auth
+- `app/sandbox/client.py` — `SandboxClient` (httpx), raises `SandboxError`
+- `app/functions/bash_sandbox.py` — agent tools: `bash_exec`, `read_file`, `write_file`, `edit_file`, `send_file_to_chat`. Registered in `AgentRuntime` when `settings.ENABLE_BASH_SANDBOX` (off by default) — so available only with `agent_mode=on`
+- Incoming Telegram documents: when user has `agent_mode=on` and sandbox is enabled, `BatchedInputHandler.handle_document_sandbox` saves them into the user's workspace (Vectara path applies only with agent_mode off); the agent is notified via a `[file uploaded to agent workspace]` context message (plain MESSAGE type — DOCUMENT type would trigger VectorSearch registration)
+- Outgoing files: `send_file_to_chat` downloads from the sandbox and sends via the `send_document` side effect (`SideEffectHandler` protocol + `TelegramSideEffectHandler`)
+
 ### Database
 - PostgreSQL via `asyncpg`, no ORM
 - `app/storage/db.py` — `DB` class with raw SQL queries, `DBFactory` manages connection pool
@@ -80,7 +87,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 bash scripts/test.sh
 ```
 
-The script starts a test PostgreSQL container, runs all tests, and tears down the container. All 23 tests must pass before considering the work done. If a test fails, fix the issue before committing.
+The script starts a test PostgreSQL container, runs all tests, and tears down the container. All tests must pass before considering the work done. If a test fails, fix the issue before committing.
 
 Test details: `specs/E2E_TESTS.md`
 

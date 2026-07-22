@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import asyncio
+import re
 import tempfile
 from typing import List
 
@@ -14,7 +15,9 @@ from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer,
 from app.llm_models import get_model_by_name
 from app.openai_helpers.utils import calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
-from app.runtime.user_input import UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription
+from app.runtime.user_input import UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription, \
+    SandboxFileInput
+from app.sandbox.client import SandboxClient, SandboxError
 from app.storage.db import User, MessageType
 from app.storage.user_role import check_access_conditions
 from app.storage.vectara import VectaraCorpusClient, VECTARA_SUPPORTED_EXTENSIONS
@@ -145,6 +148,10 @@ class BatchedInputHandler:
             raise
 
     async def handle_document(self, message: types.Message, user: User, user_input: UserInput):
+        if user.agent_mode and settings.ENABLE_BASH_SANDBOX:
+            await self.handle_document_sandbox(message, user, user_input)
+            return
+
         if not settings.VECTARA_RAG_ENABLED:
             await message.reply('Documents are not supported')
             return
@@ -179,6 +186,57 @@ class BatchedInputHandler:
                         document_name=message.document.file_name,
                         tg_message_id=message.message_id,
                     ))
+
+    async def handle_document_sandbox(self, message: types.Message, user: User, user_input: UserInput):
+        """Saves an incoming document to the user's bash sandbox workspace (agent mode)."""
+        file = await self.bot.get_file(message.document.file_id)
+        max_size = settings.SANDBOX_UPLOAD_MAX_MB * 1024 * 1024
+        if file.file_size > max_size:
+            await message.reply(f'Document file is too big (max {settings.SANDBOX_UPLOAD_MAX_MB} MB)')
+            return
+
+        sandbox_client = SandboxClient()
+        try:
+            async with TypingWorker(self.bot, message.chat.id, TypingWorker.ACTION_UPLOAD_DOCUMENT).typing_context():
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    temp_filepath = os.path.join(temp_dir, 'document')
+                    await self.bot.download_file(file.file_path, destination=temp_filepath)
+
+                    safe_name = self._sanitize_workspace_filename(message.document.file_name)
+                    safe_name = await self._unique_workspace_name(sandbox_client, user.telegram_id, safe_name)
+
+                    with open(temp_filepath, 'rb') as f:
+                        data = f.read()
+                    result = await sandbox_client.upload_file(user.telegram_id, safe_name, data)
+
+            user_input.sandbox_files.append(SandboxFileInput(
+                filename=safe_name,
+                size=result.get('size', len(data)),
+                tg_message_id=message.message_id,
+            ))
+            await message.reply(f'Saved to agent workspace: {safe_name}')
+        except SandboxError as e:
+            logger.error(f'Failed to save document to sandbox: {e}')
+            await message.reply(f'Failed to save document to agent workspace: {e}')
+
+    @staticmethod
+    def _sanitize_workspace_filename(filename: str) -> str:
+        safe_name = os.path.basename(filename or '')
+        # \w is unicode-aware: keeps letters in any alphabet (incl. cyrillic) and digits
+        safe_name = re.sub(r'[^\w.-]', '_', safe_name)
+        if not safe_name.strip('._'):
+            safe_name = 'file'
+        return safe_name
+
+    @staticmethod
+    async def _unique_workspace_name(sandbox_client: SandboxClient, telegram_user_id: int, filename: str) -> str:
+        base, ext = os.path.splitext(filename)
+        candidate = filename
+        counter = 1
+        while (await sandbox_client.stat(telegram_user_id, candidate)).get('type') != 'missing':
+            candidate = f'{base}_{counter}{ext}'
+            counter += 1
+        return candidate
 
     async def handle_voice(self, message: types.Message, user: User, user_input: UserInput):
         """

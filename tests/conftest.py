@@ -55,11 +55,11 @@ _bot_message_id = 5000
 
 def _make_bot_request_handler():
     """Create an async handler for Bot.request that returns valid Telegram response dicts."""
-    async def mock_request(method, data=None, **kwargs):
+    async def mock_request(method, data=None, *args, **kwargs):
         global _bot_message_id
         _bot_message_id += 1
 
-        if method in ('sendMessage', 'editMessageText', 'sendPhoto', 'editMessageReplyMarkup'):
+        if method in ('sendMessage', 'editMessageText', 'sendPhoto', 'sendDocument', 'editMessageReplyMarkup'):
             chat_id = 12345
             if data:
                 chat_id = data.get('chat_id', 12345)

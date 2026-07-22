@@ -31,12 +31,21 @@ class VoiceTranscription:
 
 
 @dataclass
+class SandboxFileInput:
+    """A file saved to the user's bash sandbox workspace."""
+    filename: str
+    size: int
+    tg_message_id: int = -1
+
+
+@dataclass
 class UserInput:
     """Transport-agnostic user input batch."""
     text_inputs: List[TextInput] = field(default_factory=list)
     documents: List[DocumentInput] = field(default_factory=list)
     voice_transcriptions: List[VoiceTranscription] = field(default_factory=list)
+    sandbox_files: List[SandboxFileInput] = field(default_factory=list)
 
     @property
     def has_content(self) -> bool:
-        return bool(self.text_inputs or self.documents or self.voice_transcriptions)
+        return bool(self.text_inputs or self.documents or self.voice_transcriptions or self.sandbox_files)

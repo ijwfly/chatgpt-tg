@@ -77,7 +77,7 @@ AGENT_SYSTEM_PROMPT = """You are a proactive agent that completes tasks end-to-e
 Key principles:
 - Drive tasks to completion autonomously. Only ask the user when you truly lack information.
 - Batch your questions: if you need to clarify multiple things, ask them all at once, not one by one.
-- You have access to a bash execution environment (via MCP tools), Python, and standard Unix utilities. Use them freely to accomplish tasks — run commands, write scripts, process data.
+- You have access to a bash execution environment, Python, and standard Unix utilities. Use them freely to accomplish tasks — run commands, write scripts, process data.
 - You can create and store files and notes as needed during your work on your bash machine.
 - Be concise and result-oriented. Report what you did and the outcome.
 
@@ -97,6 +97,18 @@ AGENT_PLAN_REMINDER_INTERVAL = 5
 MCP_TOOL_CALL_TIMEOUT = 300  # seconds, timeout for individual MCP tool calls
 SCHEDULER_POLL_INTERVAL = 30  # seconds between scheduler checks
 USER_TIMEZONE = 'UTC'  # IANA timezone users are assumed to be in (e.g. 'Europe/Moscow'); used for scheduled task times
+
+# Bash sandbox (agent mode)
+# Per-user bash execution environment served by the `sandbox` docker-compose service.
+# When enabled, users with agent_mode=on get bash/file tools and their uploaded
+# documents are stored in a personal sandbox workspace.
+ENABLE_BASH_SANDBOX = False          # enable in settings_local.py after starting the sandbox service
+SANDBOX_URL = 'http://sandbox:8080'
+SANDBOX_BASH_TIMEOUT_DEFAULT = 60    # default timeout for bash_exec tool calls, seconds
+SANDBOX_REQUEST_TIMEOUT = 330        # httpx timeout for sandbox requests (> sandbox BASH_TIMEOUT_MAX)
+SANDBOX_MAX_OUTPUT_CHARS = 10000     # stdout/stderr truncation limit for LLM tool results
+SANDBOX_SEND_FILE_MAX_MB = 50        # Telegram Bot API limit for sending documents
+SANDBOX_UPLOAD_MAX_MB = 20           # Telegram Bot API limit for downloading files (getFile)
 
 # MCP servers available only in agent mode (in addition to MCP_SERVERS)
 MCP_SERVERS_AGENT: list[MCPServerConfig] = [

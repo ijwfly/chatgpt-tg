@@ -64,6 +64,34 @@ def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=Non
     return types.Update(**update_dict)
 
 
+def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
+                          user_id=12345, chat_id=None, caption=None):
+    if chat_id is None:
+        chat_id = user_id
+
+    message_id = _next_message_id()
+    message_dict = {
+        'message_id': message_id,
+        'from': _make_user_dict(user_id),
+        'chat': _make_chat_dict(chat_id),
+        'date': int(time.time()),
+        'document': {
+            'file_id': file_id,
+            'file_unique_id': f'unique-{file_id}',
+            'file_name': file_name,
+            'file_size': file_size,
+        },
+    }
+    if caption is not None:
+        message_dict['caption'] = caption
+
+    update_dict = {
+        'update_id': _next_update_id(),
+        'message': message_dict,
+    }
+    return types.Update(**update_dict)
+
+
 def make_command_message(command, user_id=12345, chat_id=None, **kwargs):
     return make_text_message(f'/{command}', user_id=user_id, chat_id=chat_id, **kwargs)
 
