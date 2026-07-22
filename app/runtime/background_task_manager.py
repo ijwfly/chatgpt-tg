@@ -1,7 +1,16 @@
 import asyncio
+import logging
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Coroutine, Dict, List
+
+logger = logging.getLogger(__name__)
+
+# Extra slack on top of the configured timeout: the sub-agent is expected to stop
+# itself at its own deadline and return a partial result; the wait_for here is only
+# a backstop against hangs outside the sub-agent's control.
+BACKSTOP_GRACE_SECONDS = 60
 
 
 @dataclass
@@ -32,10 +41,12 @@ class BackgroundTaskManager:
         task_id = str(uuid.uuid4())[:8]
         info = TaskInfo(task_id=task_id, description=description, status="running")
         self.tasks[task_id] = info
+        logger.info(f"[bg:{task_id}] spawned: {description[:120]}")
+        started_at = time.monotonic()
 
         async def _wrapper():
             try:
-                result = await asyncio.wait_for(coro, timeout=self._timeout)
+                result = await asyncio.wait_for(coro, timeout=self._timeout + BACKSTOP_GRACE_SECONDS)
                 output = str(result)[:50000] if result else "(no output)"
                 info.status = "completed"
                 info.result = output
@@ -46,11 +57,16 @@ class BackgroundTaskManager:
             except asyncio.CancelledError:
                 info.status = "cancelled"
                 info.result = "Task cancelled"
+                logger.info(f"[bg:{task_id}] cancelled after {time.monotonic() - started_at:.1f}s")
                 return  # Don't notify on cancellation
             except Exception as e:
                 info.status = "error"
                 info.result = f"Error: {e}"
                 output = info.result
+
+            elapsed = time.monotonic() - started_at
+            log = logger.info if info.status == "completed" else logger.warning
+            log(f"[bg:{task_id}] {info.status} after {elapsed:.1f}s, result {len(output or '')} chars")
 
             await self._notification_queue.put(TaskNotification(
                 task_id=task_id,
@@ -89,6 +105,11 @@ class BackgroundTaskManager:
             except asyncio.QueueEmpty:
                 break
         return notifications
+
+    def requeue(self, notifications: List[TaskNotification]) -> None:
+        """Put notifications back on the queue (e.g. to deliver them next iteration)."""
+        for notif in notifications:
+            self._notification_queue.put_nowait(notif)
 
     def has_pending(self) -> bool:
         """Check if any tasks are still running."""

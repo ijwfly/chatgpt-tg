@@ -1,13 +1,15 @@
 from typing import Callable, AsyncGenerator, Optional, List
 
+import asyncio
 import logging
+import time
 
 import settings
 from app.bot.chatgpt_manager import ChatGptManager
 from app.context.context_manager import ContextManager, build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.functions.agent_tools import (
-    AgentFunction, AgentToolContext,
+    AgentToolContext, agent_context_var,
     AGENT_TOOLS_CORE, PLAN_TOOLS_NO_PLAN, PLAN_TOOLS_WITH_PLAN,
     SUB_AGENT_EXCLUDED_TOOLS,
 )
@@ -125,17 +127,18 @@ class AgentRuntime:
 
         # Build sub-agent runner
         async def sub_agent_runner(prompt: str) -> str:
+            deadline = time.monotonic() + settings.AGENT_BG_TASK_TIMEOUT
             return await self._run_sub_agent(
-                prompt, llm_model, function_storage, context_manager,
+                prompt, llm_model, function_storage, context_manager, deadline,
             )
 
-        # Set agent context on tool classes
+        # Set agent context for tools (ContextVar: isolated per turn, inherited by spawned tasks)
         agent_ctx = AgentToolContext(
             bg_manager=bg_manager,
             plan_manager=plan_manager,
             sub_agent_runner=sub_agent_runner,
         )
-        AgentFunction._agent_context = agent_ctx
+        ctx_token = agent_context_var.set(agent_ctx)
 
         try:
             async for event in self._agent_loop(
@@ -145,7 +148,7 @@ class AgentRuntime:
                 yield event
         finally:
             await bg_manager.cancel_all()
-            AgentFunction._agent_context = None
+            agent_context_var.reset(ctx_token)
 
     async def _agent_loop(
         self, chat_gpt, chat_gpt_manager: ChatGptManager, context_manager: ContextManager,
@@ -239,8 +242,7 @@ class AgentRuntime:
                 new_notifs = bg_manager.drain_notifications()
                 if new_notifs:
                     # Put them back for the next iteration to inject
-                    for n in new_notifs:
-                        await bg_manager._notification_queue.put(n)
+                    bg_manager.requeue(new_notifs)
                     iteration += 1
                     continue
                 break
@@ -337,13 +339,19 @@ class AgentRuntime:
 
     async def _run_sub_agent(
         self, prompt: str, llm_model, parent_function_storage: FunctionStorage,
-        parent_context_manager: ContextManager,
+        parent_context_manager: ContextManager, deadline: float,
     ) -> str:
-        """Run a sub-agent loop with limited tools and plan context.
+        """Run a sub-agent loop with limited tools, plan context and parent conversation context.
 
-        Uses the same _agent_context as the parent. Excluded tools prevent
+        Uses the same agent context (ContextVar) as the parent. Excluded tools prevent
         recursive spawning and plan creation/deletion by sub-agents.
+
+        `deadline` is a time.monotonic() timestamp. The sub-agent stops itself when the
+        deadline approaches and returns whatever progress it has made, instead of being
+        cancelled from outside and losing everything.
         """
+        started_at = time.monotonic()
+
         # Build a function_storage for the sub-agent: exclude management tools
         sub_function_storage = FunctionStorage()
         for func_name, func_data in parent_function_storage.functions.items():
@@ -351,11 +359,12 @@ class AgentRuntime:
                 sub_function_storage.functions[func_name] = func_data
 
         # Build system prompt with optional plan context
-        sub_system_prompt = "You are a sub-agent working on a specific task. Complete it and return your result.\n\n"
-        plan_text = await AgentFunction._agent_context.plan_manager.get_plan()
-        if plan_text and plan_text != "No active plan.":
-            sub_system_prompt += f"Current plan:\n{plan_text}\n\n"
-        sub_system_prompt += f"Task: {prompt}"
+        sub_system_prompt = "You are a sub-agent working on a specific task. Complete it and return your result."
+        agent_ctx = agent_context_var.get()
+        if agent_ctx is not None:
+            plan_text = await agent_ctx.plan_manager.get_plan()
+            if plan_text and plan_text != "No active plan.":
+                sub_system_prompt += f"\n\nCurrent plan:\n{plan_text}"
 
         langfuse_metadata = build_langfuse_metadata(self.user)
         if llm_model.ANTHROPIC_CLAUDE_35_SONNET == self.user.current_model:
@@ -363,16 +372,74 @@ class AgentRuntime:
         else:
             sub_chatgpt = ChatGPT(llm_model, sub_system_prompt, sub_function_storage, langfuse_metadata=langfuse_metadata)
 
-        # No context swapping — sub-agent shares parent's _agent_context.
-        # SpawnTask is not in sub_function_storage, so nesting is impossible.
-        messages = [DialogUtils.prepare_user_message(prompt)]
-        for _ in range(settings.AGENT_SUB_AGENT_MAX_ITERATIONS):
-            dialog_message, _ = await sub_chatgpt.send_messages(messages)
+        # Snapshot the parent conversation so the sub-agent starts with full context
+        # instead of cold. Trailing messages of an unfinished tool exchange (including
+        # the SpawnTask call itself) are trimmed to keep the context valid.
+        context_messages = list(await parent_context_manager.get_context_messages())
+        while context_messages and (
+            context_messages[-1].role in ('tool', 'function')
+            or context_messages[-1].tool_calls
+            or context_messages[-1].function_call
+        ):
+            context_messages.pop()
+        messages = context_messages + [DialogUtils.prepare_user_message(prompt)]
+
+        executed_tools: List[str] = []
+        last_assistant_text = ''
+
+        def partial_result(reason: str) -> str:
+            lines = [f"Sub-agent stopped early: {reason}. Progress so far:"]
+            if executed_tools:
+                lines.append("Tool calls executed:")
+                lines.extend(f"- {entry}" for entry in executed_tools)
+            if last_assistant_text:
+                lines.append(f"Last assistant output:\n{last_assistant_text}")
+            if not executed_tools and not last_assistant_text:
+                lines.append("(no progress)")
+            return "\n".join(lines)
+
+        async def run_tool(function_name: str, arguments: str, tool_call_id) -> str:
+            tool_started = time.monotonic()
+            try:
+                function_class = sub_function_storage.get_function_class(function_name)
+                function = function_class(
+                    self.user, self.db, parent_context_manager,
+                    self.side_effects, tool_call_id
+                )
+                result = await function.run_str_args(arguments)
+            except Exception as e:
+                result = f"Error: {e}"
+            result = result if result is not None else "(no output)"
+            logger.debug(f"[sub-agent] tool {function_name} finished in {time.monotonic() - tool_started:.1f}s")
+            executed_tools.append(f"{function_name}: {result[:200]}")
+            return result
+
+        for iteration in range(settings.AGENT_SUB_AGENT_MAX_ITERATIONS):
+            remaining = deadline - time.monotonic()
+            if remaining < 30:
+                logger.warning(f"[sub-agent] deadline reached at iteration {iteration}, returning partial result")
+                return partial_result(f"deadline reached after {time.monotonic() - started_at:.0f}s")
+
+            llm_timeout = min(settings.AGENT_SUB_AGENT_LLM_TIMEOUT, remaining)
+            llm_started = time.monotonic()
+            try:
+                dialog_message, _ = await asyncio.wait_for(
+                    sub_chatgpt.send_messages(messages), timeout=llm_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"[sub-agent] LLM call timed out after {llm_timeout:.0f}s at iteration {iteration}")
+                return partial_result(f"LLM call timed out after {llm_timeout:.0f}s")
+            logger.debug(f"[sub-agent] iteration {iteration}: LLM call took {time.monotonic() - llm_started:.1f}s")
             dialog_message = dialog_message.strip_thinking()
+
+            text_content = dialog_message.get_text_content()
+            if text_content:
+                last_assistant_text = text_content
 
             # If no tool calls, we're done
             if not dialog_message.tool_calls and not dialog_message.function_call:
-                return dialog_message.get_text_content() or "(empty response)"
+                logger.info(f"[sub-agent] completed in {time.monotonic() - started_at:.1f}s, {iteration + 1} iteration(s)")
+                return text_content or "(empty response)"
 
             # Handle tool calls
             messages.append(dialog_message)
@@ -381,30 +448,13 @@ class AgentRuntime:
                 for tool_call in dialog_message.tool_calls:
                     if tool_call.type != 'function':
                         continue
-                    try:
-                        function_class = sub_function_storage.get_function_class(tool_call.function.name)
-                        function = function_class(
-                            self.user, self.db, parent_context_manager,
-                            self.side_effects, tool_call.id
-                        )
-                        result = await function.run_str_args(tool_call.function.arguments)
-                    except Exception as e:
-                        result = f"Error: {e}"
-                    result = result if result is not None else "(no output)"
+                    result = await run_tool(tool_call.function.name, tool_call.function.arguments, tool_call.id)
                     messages.append(DialogUtils.prepare_tool_call_response(tool_call.id, result))
 
             elif dialog_message.function_call:
                 fc = dialog_message.function_call
-                try:
-                    function_class = sub_function_storage.get_function_class(fc.name)
-                    function = function_class(
-                        self.user, self.db, parent_context_manager,
-                        self.side_effects, None
-                    )
-                    result = await function.run_str_args(fc.arguments)
-                except Exception as e:
-                    result = f"Error: {e}"
-                result = result if result is not None else "(no output)"
+                result = await run_tool(fc.name, fc.arguments, None)
                 messages.append(DialogUtils.prepare_function_response(fc.name, result))
 
-        return "Sub-agent reached iteration limit without completing"
+        logger.warning(f"[sub-agent] iteration limit reached after {time.monotonic() - started_at:.1f}s")
+        return partial_result("iteration limit reached")

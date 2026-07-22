@@ -1,6 +1,7 @@
+import contextvars
 import logging
 from dataclasses import dataclass
-from typing import Optional, List, ClassVar
+from typing import Optional, List
 
 import pydantic
 import pytz
@@ -31,13 +32,20 @@ class AgentToolContext:
     sub_agent_runner: object  # callable: async def(prompt) -> str
 
 
+# Per-turn agent context. A ContextVar (not a class attribute) so that concurrent
+# turns (e.g. a scheduled task firing while a user turn runs) don't clobber each
+# other: tasks spawned within a turn inherit a copy of the turn's context.
+agent_context_var: contextvars.ContextVar[Optional[AgentToolContext]] = contextvars.ContextVar(
+    'agent_context', default=None,
+)
+
+
 class AgentFunction(OpenAIFunction):
-    """Base class for agent tools. Accesses per-turn context via _agent_context class var."""
-    _agent_context: ClassVar[Optional[AgentToolContext]] = None
+    """Base class for agent tools. Accesses per-turn context via agent_context_var."""
 
     @property
     def agent_ctx(self) -> AgentToolContext:
-        ctx = self.__class__._agent_context
+        ctx = agent_context_var.get()
         if ctx is None:
             raise RuntimeError("AgentToolContext not set")
         return ctx
