@@ -14,6 +14,7 @@ from app.functions.agent_tools import (
     SUB_AGENT_EXCLUDED_TOOLS,
 )
 from app.functions.bash_sandbox import SANDBOX_TOOLS
+from app.functions.web_agents import WEB_AGENT_TOOLS
 from app.functions.mcp.mcp_function_storage import MCPFunctionManager
 from app.llm_models import get_model_by_name
 from app.openai_helpers.anthropic_chatgpt import AnthropicChatGPT
@@ -103,6 +104,11 @@ class AgentRuntime:
         # Register bash sandbox tools
         if settings.ENABLE_BASH_SANDBOX:
             for tool_cls in SANDBOX_TOOLS:
+                function_storage.register(tool_cls)
+
+        # Register web agent tools
+        if settings.ENABLE_WEB_AGENTS:
+            for tool_cls in WEB_AGENT_TOOLS:
                 function_storage.register(tool_cls)
 
         # Create per-turn managers and load plan state

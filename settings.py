@@ -65,6 +65,15 @@ USER_ROLE_RAG = UserRole.BASIC  # minimum role needed to use RAG
 ENABLE_WOLFRAMALPHA = False
 WOLFRAMALPHA_APPID = 'YOUR_TOKEN'
 
+# Web agents (Tavily-backed web search / scraping sub-agents)
+ENABLE_WEB_AGENTS = False
+TAVILY_API_KEY = ''
+WEB_AGENT_MODEL = ''                 # model for web sub-agents; empty = user's current model
+WEB_AGENT_MAX_ITERATIONS = 8
+WEB_AGENT_LLM_TIMEOUT = 120          # seconds per web sub-agent LLM call
+WEB_AGENT_HTTP_TIMEOUT = 60          # httpx timeout for Tavily requests
+WEB_AGENT_EXTRACT_MAX_CHARS = 8000   # per-URL truncation of extracted content
+
 # Utility settings
 OPENAI_BASE_URL = 'https://api.openai.com/v1'
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour

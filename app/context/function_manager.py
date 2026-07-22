@@ -9,6 +9,7 @@ from app.functions.obsidian_echo import CreateObsidianNote
 from app.functions.save_user_settings import SaveUserSettings
 from app.functions.todoist import TodoistAddTask
 from app.functions.vectara_search import VectorSearch
+from app.functions.web_agents import WEB_AGENT_TOOLS
 from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User, MessageType
@@ -32,6 +33,9 @@ class FunctionManager:
 
         if settings.ENABLE_WOLFRAMALPHA:
             functions.append(QueryWolframAlpha)
+
+        if settings.ENABLE_WEB_AGENTS:
+            functions += WEB_AGENT_TOOLS
 
         return functions
 
