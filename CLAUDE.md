@@ -55,6 +55,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - `app/openai_helpers/function_storage.py` — `FunctionStorage` registry, converts functions to OpenAI function/tool format
 - `app/context/function_manager.py` — decides which functions to register based on settings, user role, and context (e.g., VectorSearch only when documents are in context)
 - Built-in functions: `wolframalpha`, `dalle_3`, `todoist`, `obsidian_echo`, `save_user_settings`, `vectara_search`
+- Web agents (`app/functions/web_agents.py`, enabled via `ENABLE_WEB_AGENTS` + `TAVILY_API_KEY`): `web_search_agent` and `web_scraper_agent` — each runs an isolated LLM sub-agent (`app/runtime/web_agent_runner.py`, clean context, billed usage) equipped with internal Tavily tools (`tavily_search`/`tavily_extract`, client in `app/web/tavily_client.py`); registered in both `FunctionManager` and `AgentRuntime`
 - MCP integration: `app/functions/mcp/` — dynamically loads tools from configured MCP servers
 
 ### Bash Sandbox (agent mode)
