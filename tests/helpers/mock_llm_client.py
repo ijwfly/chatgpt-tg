@@ -1,3 +1,5 @@
+import asyncio
+
 from unittest.mock import MagicMock
 from app.openai_helpers.llm_client import BaseLLMClient
 
@@ -26,7 +28,7 @@ class MockLLMClient(BaseLLMClient):
         self.calls = []
 
     def add_response(self, content, tool_calls=None, function_call=None,
-                     prompt_tokens=10, completion_tokens=20):
+                     prompt_tokens=10, completion_tokens=20, delay=None):
         self.responses.append({
             'content': content,
             'tool_calls': tool_calls,
@@ -34,6 +36,7 @@ class MockLLMClient(BaseLLMClient):
             'prompt_tokens': prompt_tokens,
             'completion_tokens': completion_tokens,
             'streaming': False,
+            'delay': delay,
         })
 
     def add_streaming_response(self, content_chunks, tool_calls=None,
@@ -57,6 +60,9 @@ class MockLLMClient(BaseLLMClient):
             raise ValueError("MockLLMClient: no more responses in queue")
 
         resp_data = self.responses.pop(0)
+
+        if resp_data.get('delay'):
+            await asyncio.sleep(resp_data['delay'])
 
         if additional_fields.get('stream') and resp_data.get('streaming'):
             return _build_streaming_response(resp_data, model)

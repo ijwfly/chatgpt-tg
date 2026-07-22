@@ -449,6 +449,152 @@ class TestAgentRuntime:
         for tr in tool_results:
             assert 'started' in tr.get('content', ''), f"Expected 'started' but got: {tr.get('content')}"
 
+    async def test_agent_mode_sub_agent_receives_conversation_context(self, bot_app):
+        """Sub-agent starts with the parent conversation context, not cold."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 70012
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_ctx_spawn',
+                'function': {
+                    'name': 'SpawnTask',
+                    'arguments': json.dumps({
+                        'description': 'Subtask',
+                        'prompt': 'Do subtask X',
+                    }),
+                },
+            }],
+        )
+        mock_llm.add_response(content="Sub result")
+        # Sub-agent completes before the next main iteration, so its result is
+        # injected right away and the main agent finishes in one more call.
+        mock_llm.add_response(content="Task finished.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Analyze the quarterly numbers', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(1.0)
+
+        spy.assert_sent_text_contains("Task finished.")
+
+        # Find the sub-agent's LLM call: its last user message is the spawn prompt
+        sub_agent_calls = [
+            c for c in mock_llm.calls
+            if any(m.get('role') == 'user' and m.get('content') == 'Do subtask X' for m in c['messages'])
+        ]
+        assert len(sub_agent_calls) >= 1, "Sub-agent LLM call not found"
+        sub_call = sub_agent_calls[0]
+        assert sub_call['messages'][0]['role'] == 'system'
+        assert 'You are a sub-agent' in sub_call['messages'][0]['content']
+        # Parent conversation must be present before the task prompt
+        assert any(
+            m.get('role') == 'user' and 'Analyze the quarterly numbers' in str(m.get('content', ''))
+            for m in sub_call['messages']
+        ), f"Parent context missing from sub-agent messages: {sub_call['messages']}"
+        # Task prompt is the last message
+        assert sub_call['messages'][-1]['content'] == 'Do subtask X'
+
+    async def test_agent_mode_sub_agent_llm_timeout_returns_partial(self, bot_app, monkeypatch):
+        """A stalled sub-agent LLM call yields a partial result, not a lost task."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 70013
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+
+        monkeypatch.setattr(settings, 'AGENT_SUB_AGENT_LLM_TIMEOUT', 0.3)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_stall_spawn',
+                'function': {
+                    'name': 'SpawnTask',
+                    'arguments': json.dumps({
+                        'description': 'Stalled task',
+                        'prompt': 'Do the stalled thing',
+                    }),
+                },
+            }],
+        )
+        # Sub-agent's LLM call stalls beyond AGENT_SUB_AGENT_LLM_TIMEOUT
+        mock_llm.add_response(content="Too late", delay=2.0)
+        mock_llm.add_response(content="Waiting for the task.")
+        mock_llm.add_response(content="Handled the timeout.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Run a stalled task', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(2.0)
+
+        spy.assert_sent_text_contains("Handled the timeout.")
+
+        # The main agent must have received a background result describing the partial state
+        bg_result_calls = [
+            c for c in mock_llm.calls
+            if any('<background-results>' in str(m.get('content', '')) for m in c['messages'])
+        ]
+        assert len(bg_result_calls) >= 1, "No <background-results> delivered to the main agent"
+        bg_content = "\n".join(
+            str(m.get('content', ''))
+            for c in bg_result_calls for m in c['messages']
+            if '<background-results>' in str(m.get('content', ''))
+        )
+        assert 'completed' in bg_content
+        assert 'Sub-agent stopped early' in bg_content
+        assert 'timed out' in bg_content
+
+    async def test_agent_mode_sub_agent_deadline_returns_partial(self, bot_app, monkeypatch):
+        """When the deadline is already tight, the sub-agent returns progress instead of timing out."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 70014
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+
+        # Deadline budget below the 30s per-iteration reserve → immediate partial result
+        monkeypatch.setattr(settings, 'AGENT_BG_TASK_TIMEOUT', 5)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(
+            content=None,
+            tool_calls=[{
+                'id': 'call_dl_spawn',
+                'function': {
+                    'name': 'SpawnTask',
+                    'arguments': json.dumps({
+                        'description': 'Deadline task',
+                        'prompt': 'Do the deadline thing',
+                    }),
+                },
+            }],
+        )
+        # Sub-agent hits the deadline immediately (no LLM call), so its partial
+        # result is injected before the next main iteration.
+        mock_llm.add_response(content="Deadline handled.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Run a deadline task', user_id=user_id)
+        await dp.process_update(update)
+        await asyncio.sleep(1.0)
+
+        spy.assert_sent_text_contains("Deadline handled.")
+
+        bg_content = "\n".join(
+            str(m.get('content', ''))
+            for c in mock_llm.calls for m in c['messages']
+            if '<background-results>' in str(m.get('content', ''))
+        )
+        assert 'deadline reached' in bg_content
+        assert 'completed' in bg_content  # delivered as a result, not killed as a timeout
+
     async def test_agent_mode_plan_sends_and_edits_message(self, bot_app):
         """Plan creation sends a message, step update edits it."""
         telegram_bot, dp, mock_bot = bot_app
@@ -634,6 +780,35 @@ class TestBackgroundTaskManager:
         results = {n.result for n in notifications}
         assert "result_a" in results
         assert "result_b" in results
+
+
+class TestAgentContextIsolation:
+
+    async def test_agent_context_isolated_between_concurrent_turns(self):
+        """Concurrent turns don't clobber each other's agent context; spawned tasks inherit their turn's context."""
+        from app.functions.agent_tools import agent_context_var
+
+        seen_by_child = {}
+
+        async def turn(name, hold):
+            token = agent_context_var.set(name)
+            try:
+                async def child():
+                    await asyncio.sleep(hold)
+                    seen_by_child[name] = agent_context_var.get()
+
+                child_task = asyncio.create_task(child())
+                await asyncio.sleep(hold / 2)
+                return child_task
+            finally:
+                agent_context_var.reset(token)
+
+        # Two overlapping "turns"; each child outlives its turn's reset
+        task_a, task_b = await asyncio.gather(turn('turn_a', 0.05), turn('turn_b', 0.02))
+        await asyncio.gather(task_a, task_b)
+
+        assert seen_by_child == {'turn_a': 'turn_a', 'turn_b': 'turn_b'}
+        assert agent_context_var.get() is None
 
 
 class TestPlanManager:
