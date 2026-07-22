@@ -20,7 +20,7 @@ can act as an autonomous agent that plans and completes multi-step tasks.
 3. **MCP tools** — dynamically load tools from configured MCP servers, with per-server
    access control (minimum role) and custom headers.
 4. **Function / tool calling** — the model can call built-in tools when useful: image
-   generation (DALL-E 3), WolframAlpha, Todoist, Obsidian Echo, RAG search, and more.
+   generation (DALL-E 3), WolframAlpha, and more.
 5. **Scheduled tasks** — ask the bot to do something later using natural language
    ("remind me tomorrow at 9"); a scheduler fires it at the right time.
 6. **Streaming responses** — answers stream into Telegram in real time, with a cancel

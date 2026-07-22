@@ -289,7 +289,7 @@ class TestSandboxDocumentUpload:
         spy.assert_sent_text_contains('Saved to agent workspace: data_1.txt')
 
     async def test_document_without_agent_mode_keeps_old_behavior(self, bot_app):
-        """With agent_mode off documents follow the old (Vectara) path."""
+        """With agent_mode off documents are not accepted."""
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
         user_id = 80006
@@ -307,7 +307,6 @@ class TestSandboxDocumentUpload:
         await dp.process_update(update2)
         await asyncio.sleep(0.3)
 
-        # VECTARA_RAG_ENABLED is False in tests -> old path replies this
         spy.assert_sent_text_contains('Documents are not supported')
         assert FakeSandboxClient.uploads == {}
 

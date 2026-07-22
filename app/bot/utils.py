@@ -232,10 +232,6 @@ async def get_usage_response_all_users(db, month_date: date = None) -> str:
     return result
 
 
-def generate_document_id(chat_id, message_id):
-    return f'{chat_id}_{message_id}'
-
-
 @lru_cache
 def get_image_proxy_url():
     public_url = f'{settings.IMAGE_PROXY_URL}:{settings.IMAGE_PROXY_PORT}'

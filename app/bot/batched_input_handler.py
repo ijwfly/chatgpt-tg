@@ -11,16 +11,14 @@ from pydub import AudioSegment
 
 import settings
 from app.bot.message_processor import MessageProcessor
-from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer, generate_document_id
+from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer
 from app.llm_models import get_model_by_name
 from app.openai_helpers.utils import calculate_whisper_usage_price
 from app.openai_helpers.whisper import get_audio_speech_to_text
-from app.runtime.user_input import UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription, \
+from app.runtime.user_input import UserInput, TextInput, ImageInput, VoiceTranscription, \
     SandboxFileInput
 from app.sandbox.client import SandboxClient, SandboxError
-from app.storage.db import User, MessageType
-from app.storage.user_role import check_access_conditions
-from app.storage.vectara import VectaraCorpusClient, VECTARA_SUPPORTED_EXTENSIONS
+from app.storage.db import User
 
 logger = logging.getLogger(__name__)
 
@@ -154,40 +152,7 @@ class BatchedInputHandler:
             await self.handle_document_sandbox(message, user, user_input)
             return
 
-        if not settings.VECTARA_RAG_ENABLED:
-            await message.reply('Documents are not supported')
-            return
-        if not check_access_conditions(settings.USER_ROLE_RAG, user.role):
-            await message.reply('You do not have access to this feature')
-            return
-
-        _, file_extension = os.path.splitext(message.document.file_name)
-        if file_extension[1:] not in VECTARA_SUPPORTED_EXTENSIONS:
-            await message.reply(f'Skipping unsupported document format: {file_extension}\n'
-                                f'Supported formats: {", ".join(VECTARA_SUPPORTED_EXTENSIONS)}')
-            return
-
-        file = await self.bot.get_file(message.document.file_id)
-        if file.file_size > 25 * 1024 * 1024:
-            await message.reply('Document file is too big')
-            return
-
-        async with TypingWorker(self.bot, message.chat.id, TypingWorker.ACTION_UPLOAD_DOCUMENT).typing_context():
-            with tempfile.TemporaryDirectory() as temp_dir:
-                document_id = generate_document_id(message.chat.id, message.message_id)
-
-                temp_filepath = os.path.join(temp_dir, f'doc_{document_id}_{message.document.file_name}')
-                await self.bot.download_file(file.file_path, destination=temp_filepath)
-                vectara_client = VectaraCorpusClient(settings.VECTARA_API_KEY, settings.VECTARA_CUSTOMER_ID,
-                                                     settings.VECTARA_CORPUS_ID)
-
-                with open(temp_filepath, 'rb') as f:
-                    await vectara_client.upload_document(f, doc_metadata={'document_id': document_id})
-                    user_input.documents.append(DocumentInput(
-                        document_id=document_id,
-                        document_name=message.document.file_name,
-                        tg_message_id=message.message_id,
-                    ))
+        await message.reply('Documents are not supported')
 
     async def handle_document_sandbox(self, message: types.Message, user: User, user_input: UserInput):
         """Saves an incoming document to the user's bash sandbox workspace (agent mode)."""

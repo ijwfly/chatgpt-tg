@@ -27,7 +27,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 ### Request Flow
 1. `main.py` → creates aiogram `Bot`/`Dispatcher`, initializes `TelegramBot`
 2. `TelegramBot` (`app/bot/telegram_bot.py`) — registers handlers, sets up middleware, manages lifecycle
-3. `BatchedInputHandler` (`app/bot/batched_input_handler.py`) — collects user messages into batches, does transport preprocessing (Whisper, Vectara upload), builds transport-agnostic `UserInput`
+3. `BatchedInputHandler` (`app/bot/batched_input_handler.py`) — collects user messages into batches, does transport preprocessing (Whisper), builds transport-agnostic `UserInput`
 4. `MessageProcessor` (`app/bot/message_processor.py`) — thin adapter: builds `ConversationSession`, creates `DefaultLLMRuntime` + `TelegramRuntimeAdapter`, delegates execution
 5. `DefaultLLMRuntime` (`app/runtime/default_runtime.py`) — adds user input to context, calls LLM, handles tool call loop, yields `RuntimeEvent`s
 6. `TelegramRuntimeAdapter` (`app/bot/telegram_runtime_adapter.py`) — consumes RuntimeEvents: streaming message editing, thinking emoji, cancel button, verbose function output, saves assistant responses to context
@@ -39,7 +39,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - `app/runtime/runtime.py` — `LLMRuntime` protocol: `process_turn(user_input, session, is_cancelled) -> AsyncGenerator[RuntimeEvent]`
 - `app/runtime/default_runtime.py` — `DefaultLLMRuntime`: current implementation using ChatGPT/Anthropic clients
 - `app/runtime/events.py` — event hierarchy: `StreamingContentDelta`, `FinalResponse`, `FunctionCallStarted`, `FunctionCallCompleted`, `ErrorEvent`
-- `app/runtime/user_input.py` — `UserInput` with `TextInput`, `ImageInput`, `DocumentInput`, `VoiceTranscription`
+- `app/runtime/user_input.py` — `UserInput` with `TextInput`, `ImageInput`, `VoiceTranscription`
 - `app/runtime/side_effects.py` — `SideEffectHandler` protocol for transport-agnostic function side effects
 - `app/runtime/context_utils.py` — shared `add_user_input_to_context()` used by runtime and context-only path
 - See `specs/RUNTIME_ARCHITECTURE.md` for full details on how to add new runtimes and transports
@@ -53,8 +53,8 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 ### Function/Tool Calling
 - `app/functions/base.py` — `OpenAIFunction` base class. Accepts `SideEffectHandler` (not aiogram Message) for transport interactions. Subclasses define params via Pydantic `PARAMS_SCHEMA`, implement `run()`, provide `get_description()` and optional `get_system_prompt_addition()`
 - `app/openai_helpers/function_storage.py` — `FunctionStorage` registry, converts functions to OpenAI function/tool format
-- `app/context/function_manager.py` — decides which functions to register based on settings, user role, and context (e.g., VectorSearch only when documents are in context)
-- Built-in functions: `wolframalpha`, `dalle_3`, `todoist`, `obsidian_echo`, `save_user_settings`, `vectara_search`
+- `app/context/function_manager.py` — decides which functions to register based on settings and user role
+- Built-in functions: `wolframalpha`, `dalle_3`, `save_user_settings`
 - Web agents (`app/functions/web_agents.py`, enabled via `ENABLE_WEB_AGENTS` + `TAVILY_API_KEY`): `web_search_agent` and `web_scraper_agent` — each runs an isolated LLM sub-agent (`app/runtime/web_agent_runner.py`, clean context, billed usage) equipped with internal Tavily tools (`tavily_search`/`tavily_extract`, client in `app/web/tavily_client.py`); registered in both `FunctionManager` and `AgentRuntime`
 - MCP integration: `app/functions/mcp/` — dynamically loads tools from configured MCP servers
 
@@ -62,7 +62,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - `sandbox/` — separate docker-compose service (ubuntu-based, internal network only, no published ports). Per-user isolation via Linux users + `sudo -u`, personal workspace `/workspace/user_<telegram_id>` (chmod 700), lazy provisioning on every request (`ensure_user`). HTTP API: `POST /exec` (bash with process-group-kill timeout), `POST /fileop` (read/write/edit/stat/list/delete via `file_helper.py` under sudo), `GET/PUT /files/{path}` (streaming). Caller identified by `X-User-Id` header — trusted internal network, no auth
 - `app/sandbox/client.py` — `SandboxClient` (httpx), raises `SandboxError`
 - `app/functions/bash_sandbox.py` — agent tools: `bash_exec`, `read_file`, `write_file`, `edit_file`, `send_file_to_chat`. Registered in `AgentRuntime` when `settings.ENABLE_BASH_SANDBOX` (off by default) — so available only with `agent_mode=on`
-- Incoming Telegram documents: when user has `agent_mode=on` and sandbox is enabled, `BatchedInputHandler.handle_document_sandbox` saves them into the user's workspace (Vectara path applies only with agent_mode off); the agent is notified via a `[file uploaded to agent workspace]` context message (plain MESSAGE type — DOCUMENT type would trigger VectorSearch registration)
+- Incoming Telegram documents: when user has `agent_mode=on` and sandbox is enabled, `BatchedInputHandler.handle_document_sandbox` saves them into the user's workspace (with agent_mode off documents are not accepted); the agent is notified via a `[file uploaded to agent workspace]` context message
 - Outgoing files: `send_file_to_chat` downloads from the sandbox and sends via the `send_document` side effect (`SideEffectHandler` protocol + `TelegramSideEffectHandler`)
 
 ### Database

@@ -42,7 +42,7 @@ app/runtime/
 ├── plan_manager.py             # PlanManager — plan state machine and DB persistence
 ├── background_task_manager.py  # BackgroundTaskManager — sub-agent lifecycle
 ├── conversation_session.py     # ConversationSession dataclass
-├── user_input.py               # UserInput, TextInput, ImageInput, DocumentInput, VoiceTranscription
+├── user_input.py               # UserInput, TextInput, ImageInput, VoiceTranscription
 ├── events.py                   # RuntimeEvent hierarchy
 ├── side_effects.py             # SideEffectHandler protocol
 └── context_utils.py            # add_user_input_to_context() — shared utility
@@ -74,18 +74,15 @@ Note: `context_manager` is NOT in the protocol. `DefaultLLMRuntime` accepts it i
 @dataclass
 class UserInput:
     text_inputs: List[TextInput]              # text and/or image messages
-    documents: List[DocumentInput]            # uploaded documents (metadata only)
     voice_transcriptions: List[VoiceTranscription]  # transcribed voice messages
 ```
 
-A `UserInput` represents a preprocessed batch of user messages. The transport layer handles I/O-heavy preprocessing (file downloads, Whisper transcription, Vectara upload) and packs the results into `UserInput`. The runtime adds these items to context and calls the LLM.
+A `UserInput` represents a preprocessed batch of user messages. The transport layer handles I/O-heavy preprocessing (file downloads, Whisper transcription) and packs the results into `UserInput`. The runtime adds these items to context and calls the LLM.
 
 Each item carries a `tg_message_id` for sub-dialogue chain tracking. This is a transport-layer identifier used by the database for message threading — it's not Telegram-specific in concept, but the value comes from Telegram.
 
 **TextInput**: a single text message, optionally with images.
 - `images: List[ImageInput]` stores `file_id` + dimensions. The proxy URL is constructed by the runtime (in `context_utils.py`), not by the transport.
-
-**DocumentInput**: metadata only (`document_id`, `document_name`). The actual file upload to Vectara happens in the transport layer.
 
 **VoiceTranscription**: transcribed text. The `tg_message_id` is the ID of the bot's reply containing the transcription text (so that context chains include the transcription message).
 
@@ -141,7 +138,6 @@ User sends messages to Telegram
 │  • Collects messages into batch (300ms)         │
 │  • Transport preprocessing:                     │
 │    voice → Whisper → VoiceTranscription          │
-│    document → Vectara upload → DocumentInput     │
 │    photo → ImageInput (file_id + dimensions)     │
 │    text → TextInput                              │
 │  • Builds UserInput from preprocessed data      │
@@ -241,7 +237,6 @@ This split exists because the runtime is transport-agnostic and cannot know the 
 | `base.py` | Accepts `SideEffectHandler` instead of `aiogram.types.Message` |
 | `dalle_3.py` | Uses `self.side_effects.send_photo()` |
 | `save_user_settings.py` | Uses `self.side_effects.send_message()` |
-| `vectara_search.py` | Uses `self.side_effects.send_message()` |
 | `mcp/mcp_function_storage.py` | `__call__` accepts `side_effects` instead of `message` |
 
 ---
