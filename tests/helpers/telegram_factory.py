@@ -92,6 +92,33 @@ def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
     return types.Update(**update_dict)
 
 
+def make_video_note_message(file_id='test-video-note-id', file_size=2048, duration=5,
+                            length=240, user_id=12345, chat_id=None):
+    if chat_id is None:
+        chat_id = user_id
+
+    message_id = _next_message_id()
+    message_dict = {
+        'message_id': message_id,
+        'from': _make_user_dict(user_id),
+        'chat': _make_chat_dict(chat_id),
+        'date': int(time.time()),
+        'video_note': {
+            'file_id': file_id,
+            'file_unique_id': f'unique-{file_id}',
+            'length': length,
+            'duration': duration,
+            'file_size': file_size,
+        },
+    }
+
+    update_dict = {
+        'update_id': _next_update_id(),
+        'message': message_dict,
+    }
+    return types.Update(**update_dict)
+
+
 def make_command_message(command, user_id=12345, chat_id=None, **kwargs):
     return make_text_message(f'/{command}', user_id=user_id, chat_id=chat_id, **kwargs)
 

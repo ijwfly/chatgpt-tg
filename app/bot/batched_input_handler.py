@@ -90,8 +90,8 @@ class BatchedInputHandler:
         Batch is prompt if one message in batch is prompt
         """
         for message in messages_batch:
-            if not message_is_forward(message) and not message.voice and not message.document:
-                # not voice and not forward and not document - it's a prompt no matter what settings
+            if not message_is_forward(message) and not message.voice and not message.video_note and not message.document:
+                # not voice and not video_note and not forward and not document - it's a prompt no matter what settings
                 return True
             elif message_is_forward(message):
                 # if it's a forward, we need to check forward_as_prompt setting
@@ -101,8 +101,8 @@ class BatchedInputHandler:
                 else:
                     # forward and not forward_as_prompt - it's a context, no matter what content it has
                     continue
-            elif message.voice and user.voice_as_prompt:
-                # voice and voice_as_prompt - it's a prompt
+            elif (message.voice or message.video_note) and user.voice_as_prompt:
+                # voice or video note (round video) and voice_as_prompt - it's a prompt
                 return True
         # no prompt messages in batch
         return False
@@ -120,6 +120,8 @@ class BatchedInputHandler:
                 if message.audio:
                     await self.handle_voice(message, user, user_input)
                 elif message.voice:
+                    await self.handle_voice(message, user, user_input)
+                elif message.video_note:
                     await self.handle_voice(message, user, user_input)
                 elif message.document:
                     await self.handle_document(message, user, user_input)
@@ -240,15 +242,18 @@ class BatchedInputHandler:
 
     async def handle_voice(self, message: types.Message, user: User, user_input: UserInput):
         """
-        Handles voice message or audio file with voice. Downloads voice file, converts it to mp3, sends it to whisper,
-        sends response to user, adds response to context.
+        Handles voice message, audio file, or video note (round video). Downloads the file, extracts audio and
+        converts it to mp3 (ffmpeg handles video notes too), sends it to whisper, sends response to user,
+        adds response to context.
         """
         if message.voice:
             audio_file = message.voice
         elif message.audio:
             audio_file = message.audio
+        elif message.video_note:
+            audio_file = message.video_note
         else:
-            raise ValueError('Message has no voice or audio')
+            raise ValueError('Message has no voice, audio or video note')
 
         file_id = audio_file.file_id
         file = await self.bot.get_file(file_id)
