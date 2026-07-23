@@ -40,6 +40,18 @@ TELEGRAM_BOT_TOKEN = ''
 # ENABLE_WOLFRAMALPHA = False
 # WOLFRAMALPHA_APPID = ''
 
+# === Web agents (Tavily web search / scraping) ===
+# Adds web_search_agent and web_scraper_agent tools (normal and agent mode).
+# ENABLE_WEB_AGENTS = False
+# TAVILY_API_KEY = ''  # get a key at https://tavily.com
+# WEB_AGENT_MODEL = ''  # model for the sub-agents; empty = user's current model
+
+# === Bash sandbox (agent mode) ===
+# The sandbox service starts with docker-compose; this flag gives the agent
+# bash_exec / read_file / write_file / edit_file / send_file_to_chat tools
+# and routes uploaded documents into the agent's workspace.
+# ENABLE_BASH_SANDBOX = False
+
 # === Image proxy ===
 # IMAGE_PROXY_URL = 'http://your-server-ip'
 

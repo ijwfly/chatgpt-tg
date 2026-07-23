@@ -17,52 +17,162 @@ can act as an autonomous agent that plans and completes multi-step tasks.
    your own via `EXTRA_MODELS` without touching the source.
 2. **Agent mode** — a proactive agent that completes tasks end-to-end: it plans the work,
    spawns background sub-agents, keeps a live plan updated in the chat, and reports results.
-3. **MCP tools** — dynamically load tools from configured MCP servers, with per-server
+   With the bash sandbox enabled it can also run shell commands, work with files, and
+   exchange documents with the chat.
+3. **Web search & scraping** — `web_search_agent` and `web_scraper_agent` tools, each running
+   an isolated LLM sub-agent powered by [Tavily](https://tavily.com). Available in both
+   normal and agent mode.
+4. **Bash sandbox** — an isolated per-user execution environment (separate Docker service,
+   internal network only) where the agent runs bash, edits files, and receives documents you
+   upload to the chat.
+5. **MCP tools** — dynamically load tools from configured MCP servers, with per-server
    access control (minimum role) and custom headers.
-4. **Function / tool calling** — the model can call built-in tools when useful: image
+6. **Function / tool calling** — the model can call built-in tools when useful: image
    generation (DALL-E 3), WolframAlpha, and more.
-5. **Scheduled tasks** — ask the bot to do something later using natural language
+7. **Scheduled tasks** — ask the bot to do something later using natural language
    ("remind me tomorrow at 9"); a scheduler fires it at the right time.
-6. **Streaming responses** — answers stream into Telegram in real time, with a cancel
+8. **Streaming responses** — answers stream into Telegram in real time, with a cancel
    button, and `<think>` reasoning blocks shown as a live status while the model thinks.
-7. **Vision & image generation** — send images for the model to analyze, or ask it to
+9. **Vision & image generation** — send images for the model to analyze, or ask it to
    generate images with DALL-E 3.
-8. **Voice & speech** — voice messages are transcribed (via `gpt-4o-transcribe`) and used as
-   input; `/text2speech` turns any message into a voice reply (TTS).
-9. **Dynamic dialog management** — the bot manages conversation context automatically; older
-   context is summarized when it exceeds the model's limit. You can still `/reset` manually.
-10. **Sub-dialogues** — reply to a message to branch off into that thread only, so you can
+10. **Voice & speech** — voice messages and video notes are transcribed (via
+    `gpt-4o-transcribe`) and used as input; `/text2speech` turns any message into a voice
+    reply (TTS).
+11. **Dynamic dialog management** — the bot manages conversation context automatically; older
+    context is summarized when it exceeds the model's limit. You can still `/reset` manually.
+12. **Sub-dialogues** — reply to a message to branch off into that thread only, so you can
     juggle multiple conversations in one chat.
-11. **Access control** — each user has a role (stranger, basic, advanced, admin) that gates
+13. **Access control** — each user has a role (stranger, basic, advanced, admin) that gates
     access to the bot, model choice, and features. Roles are managed through inline buttons
     sent to an admin chat.
-12. **Usage tracking** — per-user API cost tracking (`/usage`, `/usage_all`).
+14. **Usage tracking** — per-user API cost tracking (`/usage`, `/usage_all`).
 
 For a deep dive into how everything fits together, see
 [`specs/PROJECT_SPEC.md`](specs/PROJECT_SPEC.md) and
 [`specs/RUNTIME_ARCHITECTURE.md`](specs/RUNTIME_ARCHITECTURE.md).
 
-## 🔧 Installation
+## 🚀 Quick start (minimal setup)
 
-To get the bot up and running:
+The shortest path to a working bot — three steps:
 
-1. Copy `settings_local.py.example` to `settings_local.py` and fill in your values:
+1. Copy the local settings template (it is gitignored, so your secrets are never committed):
    ```bash
    cp settings_local.py.example settings_local.py
    ```
-2. Set `TELEGRAM_BOT_TOKEN` and `OPENAI_TOKEN` in `settings_local.py`.
-   (Optional: `ANTHROPIC_TOKEN` for Claude, `OPENROUTER_TOKEN` for OpenRouter.)
-3. Set `IMAGE_PROXY_URL` to your server IP / hostname in `settings_local.py`.
-4. (optional) Set `USER_ROLE_MANAGER_CHAT_ID` and `ENABLE_USER_ROLE_MANAGER_CHAT = True`
-   for access control.
-5. (optional) Set the `USER_ROLE_*` variables to your desired defaults.
-6. Run `docker-compose up -d` in the root directory of the project.
+2. Fill in three values in `settings_local.py`:
+   - `TELEGRAM_BOT_TOKEN` — get one from [@BotFather](https://t.me/BotFather)
+   - `OPENAI_TOKEN` — your OpenAI API key
+     (optional: `ANTHROPIC_TOKEN` for Claude, `OPENROUTER_TOKEN` for OpenRouter)
+   - `IMAGE_PROXY_URL` — your server's IP / hostname. Needed for vision: OpenAI fetches
+     the images you send through this proxy.
+3. Start everything:
+   ```bash
+   docker-compose up -d
+   ```
 
-All settings from `settings.py` can be overridden in `settings_local.py`. This file is
-gitignored, so your secrets and environment-specific values are never committed. See
-`settings_local.py.example` for the full list of available options.
+That's it. Database migrations run automatically on Postgres startup — no manual DB setup.
+Out of the box you get streaming responses, vision, DALL-E 3 image generation, voice / video
+note transcription, TTS, automatic context summarization, and scheduled tasks.
 
-Database migrations run automatically on Postgres startup, so no manual DB setup is needed.
+**Recommended: set up access control.** With the defaults, anyone who finds your bot can use
+it (and spend your API credits). Add to `settings_local.py`:
+
+```python
+ENABLE_USER_ROLE_MANAGER_CHAT = True
+USER_ROLE_MANAGER_CHAT_ID = -100123456789   # chat where role-management messages go
+USER_ROLE_DEFAULT = UserRole.STRANGER       # new users get no access until approved
+```
+
+When a new user messages the bot, the manager chat receives a message with their Telegram id
+and inline buttons to assign a role (stranger / basic / advanced / admin). Send your bot a
+first message and use it to make yourself admin.
+
+Any setting from `settings.py` can be overridden in `settings_local.py` — see
+`settings_local.py.example` for the most common options.
+
+## 🤖 Full agent setup
+
+Agent mode is enabled by default (`ENABLE_AGENT_RUNTIME = True`); each user switches it on in
+the `/settings` menu. On its own it gives the model planning tools and background
+sub-agents. The options below — all in `settings_local.py` — turn it into a fully functional
+agent with web access and an execution environment.
+
+**1. Web search & scraping (Tavily)**
+
+```python
+ENABLE_WEB_AGENTS = True
+TAVILY_API_KEY = 'tvly-...'   # get a key at https://tavily.com
+```
+
+Adds two tools: `web_search_agent` (searches the web and returns a digest with sources) and
+`web_scraper_agent` (reads a specific page and extracts what you asked for). Each runs as an
+isolated LLM sub-agent with its own clean context. Works in normal mode too, not just agent
+mode. Optionally set `WEB_AGENT_MODEL` to run these sub-agents on a specific model (empty =
+the user's current model).
+
+**2. Bash sandbox**
+
+```python
+ENABLE_BASH_SANDBOX = True
+```
+
+The `sandbox` service is already part of `docker-compose.yml`, so it starts together with
+everything else — you only need the flag. It is an isolated Ubuntu container on the internal
+Docker network (no published ports) with per-user Linux accounts and private workspaces.
+
+With the sandbox enabled, the agent gets `bash_exec`, `read_file` / `write_file` /
+`edit_file`, and `send_file_to_chat` tools, and documents you upload to the chat are saved
+into the agent's workspace (agent mode must be on for document uploads).
+
+**3. MCP servers**
+
+Register MCP servers to expose their tools to the model. Each server has its own
+minimum-role requirement and optional headers:
+```python
+from settings import MCPServerConfig
+from app.storage.user_role import UserRole
+
+MCP_SERVERS = [
+    MCPServerConfig(
+        url='https://mcp-server.example.com/mcp',
+        min_role=UserRole.ADMIN,
+        headers={'Authorization': 'Bearer token123'},
+    ),
+]
+```
+Use `MCP_SERVERS_AGENT` for servers that should only be available in agent mode.
+
+**4. Scheduled tasks timezone**
+
+Scheduled tasks work out of the box, but set your users' IANA timezone so "tomorrow at 10am"
+resolves in the right zone (default is UTC):
+```python
+USER_TIMEZONE = 'Europe/Moscow'
+```
+
+**Putting it together** — a complete `settings_local.py` for a full-featured agent:
+
+```python
+from app.storage.user_role import UserRole
+
+TELEGRAM_BOT_TOKEN = '...'
+OPENAI_TOKEN = 'sk-...'
+ANTHROPIC_TOKEN = 'sk-ant-...'          # optional
+IMAGE_PROXY_URL = 'http://1.2.3.4'
+
+ENABLE_USER_ROLE_MANAGER_CHAT = True
+USER_ROLE_MANAGER_CHAT_ID = -100123456789
+USER_ROLE_DEFAULT = UserRole.STRANGER
+
+ENABLE_WEB_AGENTS = True
+TAVILY_API_KEY = 'tvly-...'
+
+ENABLE_BASH_SANDBOX = True
+
+USER_TIMEZONE = 'Europe/Moscow'
+```
+
+## ⚙️ Advanced configuration
 
 **Docker Compose overrides**
 
@@ -104,24 +214,6 @@ EXTRA_MODELS = [
 This gives you full access to all model parameters: `model_price` (with `LLMPrice`),
 `capabilities` (with `LLMCapabilities`), `api_client` (e.g. `OpenAISpecificAsyncOpenAIClient`,
 `AnthropicAsyncClient`), `minimum_user_role`, etc.
-
-**Configuring MCP servers**
-
-Register MCP servers in `settings_local.py` to expose their tools to the model. Each server
-has its own minimum-role requirement and optional headers:
-```python
-from settings import MCPServerConfig
-from app.storage.user_role import UserRole
-
-MCP_SERVERS = [
-    MCPServerConfig(
-        url='https://mcp-server.example.com/mcp',
-        min_role=UserRole.ADMIN,
-        headers={'Authorization': 'Bearer token123'},
-    ),
-]
-```
-Use `MCP_SERVERS_AGENT` for servers that should only be available in agent mode.
 
 **Observability (optional)**
 
@@ -165,9 +257,6 @@ EXTRA_MODELS = [
 ]
 ```
 </details>
-
-If you've done the optional steps, when you send your first message to the bot you'll get a
-management message with your Telegram id and info. Use it to set up your role as admin.
 
 ## 🤖 Commands
 ```
