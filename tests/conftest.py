@@ -26,6 +26,7 @@ settings.ENABLE_WOLFRAMALPHA = False
 settings.ENABLE_USER_ROLE_MANAGER_CHAT = False
 settings.MCP_SERVERS = []
 settings.EXTRA_MODELS = []
+settings.WEB_AGENT_MODEL = ''  # web sub-agents use the user's model, which tests mock
 settings.IMAGE_PROXY_URL = 'http://localhost'
 settings.IMAGE_PROXY_PORT = 18321
 

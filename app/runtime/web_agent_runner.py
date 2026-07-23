@@ -14,9 +14,10 @@ import time
 
 import settings
 from app.context.dialog_manager import DialogUtils
-from app.llm_models import LLModel, get_model_by_name
+from app.llm_models import get_model_by_name
 from app.openai_helpers.anthropic_chatgpt import AnthropicChatGPT
 from app.openai_helpers.chatgpt import ChatGPT
+from app.openai_helpers.llm_client import AnthropicAsyncClient
 from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.utils import calculate_completion_usage_price
 from app.runtime.langfuse_utils import build_langfuse_metadata
@@ -31,14 +32,19 @@ async def run_web_agent(
     tool_classes: List[type],
 ) -> str:
     model_name = settings.WEB_AGENT_MODEL or user.current_model
-    llm_model = get_model_by_name(model_name)
+    try:
+        llm_model = get_model_by_name(model_name)
+    except ValueError:
+        logger.warning(f"[web-agent] model {model_name!r} not available, falling back to user model")
+        model_name = user.current_model
+        llm_model = get_model_by_name(model_name)
 
     function_storage = FunctionStorage()
     for tool_cls in tool_classes:
         function_storage.register(tool_cls)
 
     langfuse_metadata = build_langfuse_metadata(user)
-    if model_name == LLModel.ANTHROPIC_CLAUDE_35_SONNET:
+    if issubclass(llm_model.api_client, AnthropicAsyncClient):
         chatgpt = AnthropicChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata)
     else:
         chatgpt = ChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata)
@@ -62,7 +68,16 @@ async def run_web_agent(
             result = f"Error: {e}"
         return result if result is not None else "(no output)"
 
-    for iteration in range(settings.WEB_AGENT_MAX_ITERATIONS):
+    # one extra iteration for finalization: when the tool call budget is exhausted,
+    # the model gets a last chance to answer from what it has instead of returning a partial result
+    max_iterations = settings.WEB_AGENT_MAX_ITERATIONS
+    for iteration in range(max_iterations + 1):
+        is_finalization = iteration == max_iterations
+        if is_finalization:
+            messages.append(DialogUtils.prepare_user_message(
+                "You have reached the tool call limit. Provide your final answer now "
+                "based on what you already have. Do not call any more tools."
+            ))
         try:
             dialog_message, usage = await asyncio.wait_for(
                 chatgpt.send_messages(messages), timeout=settings.WEB_AGENT_LLM_TIMEOUT,
@@ -88,13 +103,17 @@ async def run_web_agent(
             logger.info(f"[web-agent] completed in {time.monotonic() - started_at:.1f}s, {iteration + 1} iteration(s)")
             return text_content or "(empty response)"
 
+        if is_finalization:
+            break
+
         messages.append(dialog_message)
 
         if dialog_message.tool_calls:
-            for tool_call in dialog_message.tool_calls:
-                if tool_call.type != 'function':
-                    continue
-                result = await run_tool(tool_call.function.name, tool_call.function.arguments, tool_call.id)
+            function_calls = [tc for tc in dialog_message.tool_calls if tc.type == 'function']
+            results = await asyncio.gather(*[
+                run_tool(tc.function.name, tc.function.arguments, tc.id) for tc in function_calls
+            ])
+            for tool_call, result in zip(function_calls, results):
                 messages.append(DialogUtils.prepare_tool_call_response(tool_call.id, result))
         elif dialog_message.function_call:
             fc = dialog_message.function_call

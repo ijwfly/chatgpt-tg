@@ -67,7 +67,7 @@ WOLFRAMALPHA_APPID = 'YOUR_TOKEN'
 # Web agents (Tavily-backed web search / scraping sub-agents)
 ENABLE_WEB_AGENTS = False
 TAVILY_API_KEY = ''
-WEB_AGENT_MODEL = ''                 # model for web sub-agents; empty = user's current model
+WEB_AGENT_MODEL = 'gpt-4.1-mini'     # model for web sub-agents; empty = user's current model
 WEB_AGENT_MAX_ITERATIONS = 8
 WEB_AGENT_LLM_TIMEOUT = 120          # seconds per web sub-agent LLM call
 WEB_AGENT_HTTP_TIMEOUT = 60          # httpx timeout for Tavily requests
