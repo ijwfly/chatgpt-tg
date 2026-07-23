@@ -297,11 +297,25 @@ class BatchedInputHandler:
             username = f'Chat name "{username}"'
         else:
             username = None
-        forwarded_text = f'{username}:\n{message.text}' if username else message.text
+        if message.text:
+            forwarded_text = f'{username}:\n{message.text}' if username else message.text
+        else:
+            forwarded_text = f'{username}:' if username else None
+
+        images = None
+        if message.photo:
+            # largest photo
+            photo = message.photo[-1]
+            images = [ImageInput(
+                file_id=photo.file_id,
+                width=photo.width,
+                height=photo.height,
+            )]
 
         user_input.text_inputs.append(TextInput(
             text=forwarded_text,
             tg_message_id=message.message_id,
+            images=images,
         ))
 
     async def answer_message(self, first_message: types.Message, user: User, user_input: UserInput):
