@@ -124,7 +124,8 @@ def make_command_message(command, user_id=12345, chat_id=None, **kwargs):
 
 
 def make_forward_message(text, forward_sender_name=None, forward_from=None,
-                         user_id=12345, chat_id=None, **kwargs):
+                         user_id=12345, chat_id=None, photo_file_id=None, caption=None,
+                         **kwargs):
     if chat_id is None:
         chat_id = user_id
 
@@ -135,9 +136,21 @@ def make_forward_message(text, forward_sender_name=None, forward_from=None,
                                             if k in ('first_name', 'last_name', 'username')}),
         'chat': _make_chat_dict(chat_id),
         'date': int(time.time()),
-        'text': text,
         'forward_date': int(time.time()),
     }
+
+    if text is not None:
+        message_dict['text'] = text
+    if caption is not None:
+        message_dict['caption'] = caption
+    if photo_file_id is not None:
+        message_dict['photo'] = [{
+            'file_id': photo_file_id,
+            'file_unique_id': f'unique-{photo_file_id}',
+            'width': 800,
+            'height': 600,
+            'file_size': 1024,
+        }]
 
     if forward_from:
         message_dict['forward_from'] = {
