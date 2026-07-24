@@ -38,6 +38,7 @@ class LLMCapabilities:
 class LLModel:
     GPT_35_TURBO = 'gpt-3.5-turbo'
     GPT_41 = 'gpt-4.1'
+    GPT_41_MINI = 'gpt-4.1-mini'
     ANTHROPIC_CLAUDE_35_SONNET = 'claude-3-5-sonnet-20240620'
     OPENROUTER_WIZARDLM2 = 'microsoft/wizardlm-2-8x22b'
 
@@ -109,6 +110,30 @@ def get_models():
                 model_price=LLMPrice(
                     input_tokens_price=Decimal('0.002'),
                     output_tokens_price=Decimal('0.008'),
+                ),
+                capabilities=LLMCapabilities(
+                    function_calling=True,
+                    image_processing=True,
+                    streaming_responses=True,
+                    tool_calling=True,
+                ),
+                base_url=settings.OPENAI_BASE_URL,
+                api_client=OpenAISpecificAsyncOpenAIClient,
+            ),
+            # hidden from the user-facing model picker (NOONE), used as the default web sub-agent model
+            LLModel.GPT_41_MINI: LLModel(
+                model_name=LLModel.GPT_41_MINI,
+                model_readable_name='GPT-4.1 mini',
+                api_key=settings.OPENAI_TOKEN,
+                minimum_user_role=UserRole.NOONE,
+                context_configuration=LLMContextConfiguration(
+                    short_term_memory_tokens=32 * 1024,
+                    summary_length=8 * 1024,
+                    hard_max_context_size=64 * 1024,
+                ),
+                model_price=LLMPrice(
+                    input_tokens_price=Decimal('0.0004'),
+                    output_tokens_price=Decimal('0.0016'),
                 ),
                 capabilities=LLMCapabilities(
                     function_calling=True,

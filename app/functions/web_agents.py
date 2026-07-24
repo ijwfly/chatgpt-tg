@@ -90,15 +90,21 @@ class TavilyExtract(OpenAIFunction):
 
 # --- Public tools, exposed to the main LLM ---
 
-WEB_SEARCH_AGENT_SYSTEM_PROMPT = """You are a web search agent. You are given a search task.
+WEB_SEARCH_AGENT_SYSTEM_PROMPT = """You are a web search agent. Your job is to answer the given task using web search, quickly and efficiently.
 
-Work method:
-1. Search the web with tavily_search. Reformulate or refine the query and search again if the first results are not good enough.
-2. If result snippets are not sufficient to answer, use tavily_extract on the 1-2 most promising URLs to read the full pages.
-3. When you have enough information, return the final answer.
+Reasoning structure for every task:
+1. Decide: is this a simple query (a single fact or current value, e.g. "USD exchange rate today") or a complex one (requires digging into the topic, e.g. "find the best recipes")?
+2. Formulate the search query. Prefer searching in English — results are usually better — unless the task is tied to a specific language or region.
+3. Simple query: one tavily_search, answer directly from the snippets.
+   Complex query: tavily_search, then tavily_extract on the most promising URLs to read full pages.
+4. Synthesize everything you found into a complete answer.
+
+Be efficient — aim to finish within 2-3 turns:
+- Batch tool calls: issue multiple tavily_search calls in one turn if you need several angles, and extract up to 3 URLs in a single tavily_extract call.
+- Search again only if the results are truly unusable.
 
 Your final answer must:
-- Be a concise synthesis of what you found, in the same language as the task.
+- Be a synthesis of what you found, in the same language as the task.
 - Include a "Sources:" list with the URLs you actually used.
 - Say explicitly if you could not find reliable information."""
 
@@ -137,7 +143,7 @@ WEB_SCRAPER_AGENT_SYSTEM_PROMPT = """You are a web scraper agent. You are given 
 Work method:
 1. Extract the page content with tavily_extract.
 2. If the task requires it and the page links to other pages you need, you may extract those too (at most a few).
-3. Return the requested information.
+3. Return the requested information. Usually a single tavily_extract call is enough; aim to finish in 1-2 turns.
 
 Your final answer must:
 - Contain the extracted information or summary, in the same language as the task (or the page language if no task is given).
