@@ -101,6 +101,12 @@ class DB:
         sql = 'SELECT * FROM chatgpttg.message WHERE tg_chat_id = $1 AND tg_message_id = $2'
         tg_message_record = await self.connection_pool.fetchrow(sql, tg_chat_id, tg_message_id)
         if tg_message_record is None:
+            # fallback: telegram message may be an alias of a dialog message (e.g. bot's upload confirmation)
+            sql = ('SELECT m.* FROM chatgpttg.message m '
+                   'JOIN chatgpttg.message_tg_alias a ON a.message_id = m.id '
+                   'WHERE a.tg_chat_id = $1 AND a.tg_message_id = $2 LIMIT 1')
+            tg_message_record = await self.connection_pool.fetchrow(sql, tg_chat_id, tg_message_id)
+        if tg_message_record is None:
             return None
         tg_message_record = dict(tg_message_record)
         tg_message_record['message'] = json.loads(tg_message_record['message'])
@@ -148,6 +154,11 @@ class DB:
         record = dict(record)
         record['message'] = json.loads(record['message'])
         return Message(**record)
+
+    async def create_message_tg_alias(self, message_id: int, tg_chat_id: int, tg_message_id: int) -> None:
+        """Registers an additional telegram message id that resolves to an existing dialog message."""
+        sql = 'INSERT INTO chatgpttg.message_tg_alias (message_id, tg_chat_id, tg_message_id) VALUES ($1, $2, $3)'
+        await self.connection_pool.execute(sql, message_id, tg_chat_id, tg_message_id)
 
     async def create_reset_message(self, user_id, tg_chat_id):
         tg_message_id = -1

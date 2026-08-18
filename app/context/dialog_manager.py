@@ -93,10 +93,16 @@ class DialogManager:
         return message
 
     async def add_message_to_dialog(self, message: DialogMessage, tg_message_id: id,
-                                    message_type: MessageType = MessageType.MESSAGE) -> List[DialogMessage]:
+                                    message_type: MessageType = MessageType.MESSAGE,
+                                    alias_tg_message_ids: Optional[List[int]] = None) -> List[DialogMessage]:
         message = await self.db.create_message(
             self.user.id, self.chat_id, tg_message_id, message, self.messages, message_type
         )
+        # extra telegram message ids (e.g. bot's confirmation reply) that should resolve to this dialog message
+        for alias_id in alias_tg_message_ids or []:
+            if alias_id is None or alias_id < 0 or alias_id == tg_message_id:
+                continue
+            await self.db.create_message_tg_alias(message.id, self.chat_id, alias_id)
         self.messages.append(message)
         self.messages = await self.summarize_messages_if_needed(self.messages)
         return self.get_dialog_messages()

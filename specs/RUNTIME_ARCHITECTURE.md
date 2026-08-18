@@ -192,7 +192,9 @@ This is the most important architectural subtlety to understand.
 
 **Function-call-only assistant messages** (no visible content) → saved by the runtime with `tg_message_id=-1`.
 
-**Function/tool responses** → saved by the runtime with `tg_message_id=-1`.
+**Function/tool responses** → saved by the runtime with `tg_message_id=-1`, unless the function set `self.result_tg_message_id` (e.g. `send_file_to_chat` sets it to the id of the document it sent). That id travels to the runtime in `FunctionCallCompleted.tg_message_id`, so replying to the sent file continues that dialog branch.
+
+**Extra transport ids for one context message**: `ContextManager.add_message(..., alias_tg_message_ids=[...])` registers additional Telegram message ids that resolve to the same dialog message (`chatgpttg.message_tg_alias`). Used when the bot answers with its own message about a user's message — e.g. the `Saved to agent workspace: X` confirmation points at the same context row as the uploaded document.
 
 The `FinalResponse.needs_context_save` flag coordinates this: when True, the adapter saves the content messages; when False (function-call-only response), the runtime has already saved it.
 

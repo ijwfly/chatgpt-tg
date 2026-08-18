@@ -33,8 +33,16 @@ class ContextManager:
         await self.process_dialog()
         await self.process_functions()
 
-    async def add_message(self, dialog_message: DialogMessage, tg_message_id: id, message_type: MessageType = MessageType.MESSAGE) -> List[DialogMessage]:
-        dialog_messages = await self.dialog_manager.add_message_to_dialog(dialog_message, tg_message_id, message_type)
+    async def add_message(self, dialog_message: DialogMessage, tg_message_id: id,
+                          message_type: MessageType = MessageType.MESSAGE,
+                          alias_tg_message_ids: Optional[List[int]] = None) -> List[DialogMessage]:
+        """
+        Saves a message to the dialog. `alias_tg_message_ids` — additional transport message ids that should
+        resolve to this dialog message when the user replies to them (e.g. bot's confirmation of a file upload).
+        """
+        dialog_messages = await self.dialog_manager.add_message_to_dialog(
+            dialog_message, tg_message_id, message_type, alias_tg_message_ids=alias_tg_message_ids,
+        )
         return dialog_messages
 
     async def get_system_prompt(self):

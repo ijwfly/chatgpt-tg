@@ -173,7 +173,8 @@ class SendFileToChat(OpenAIFunction):
             return f"Error: {e}"
         # telegram caption limit
         caption = params.caption[:1024] if params.caption else None
-        await self.side_effects.send_document(data, filename, caption)
+        # bind the tool response to the sent document so a reply to it continues this dialog branch
+        self.result_tg_message_id = await self.side_effects.send_document(data, filename, caption)
         return f"File {filename} ({len(data)} bytes) sent to chat."
 
     @classmethod
