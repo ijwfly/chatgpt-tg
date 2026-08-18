@@ -75,6 +75,8 @@ Note: `context_manager` is NOT in the protocol. `DefaultLLMRuntime` accepts it i
 class UserInput:
     text_inputs: List[TextInput]              # text and/or image messages
     voice_transcriptions: List[VoiceTranscription]  # transcribed voice messages
+    sandbox_files: List[SandboxFileInput]     # files saved to the bash sandbox workspace
+    force_prompt: bool                        # transport captured content that needs an answer
 ```
 
 A `UserInput` represents a preprocessed batch of user messages. The transport layer handles I/O-heavy preprocessing (file downloads, Whisper transcription) and packs the results into `UserInput`. The runtime adds these items to context and calls the LLM.
@@ -84,7 +86,11 @@ Each item carries a `tg_message_id` for sub-dialogue chain tracking. This is a t
 **TextInput**: a single text message, optionally with images.
 - `images: List[ImageInput]` stores `file_id` + dimensions. The proxy URL is constructed by the runtime (in `context_utils.py`), not by the transport.
 
-**VoiceTranscription**: transcribed text. The `tg_message_id` is the ID of the bot's reply containing the transcription text (so that context chains include the transcription message).
+**VoiceTranscription**: transcribed text. The `tg_message_id` is the ID of the bot's reply containing the transcription text (so that context chains include the transcription message), or `-1` if that reply could not be sent. `alias_tg_message_ids` additionally carries the user's own voice message id (registered on the last chunk), so replying to the voice message resolves to the full transcription.
+
+**SandboxFileInput**: a file saved to the user's sandbox workspace. `caption` (the user's text on the document message) is rendered into the same context message, keeping the invariant of one telegram message → one context row. `alias_tg_message_ids` carries the bot's upload confirmation.
+
+**force_prompt**: set by the transport when it captured user-authored content that must be answered even though the batch does not look like a prompt (a captioned document). Runtimes ignore it; `BatchedInputHandler.process_batch` uses it to decide between the prompt and context-only paths.
 
 ### 3.3 ConversationSession
 

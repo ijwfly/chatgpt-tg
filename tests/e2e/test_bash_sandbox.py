@@ -498,3 +498,184 @@ class TestFileMessageBranching:
         contents = [str(m.get('content', '')) for m in mock_llm2.calls[0]['messages']]
         assert any('Send me the report please' in c for c in contents)
         assert any('report.csv' in c for c in contents)
+
+
+class TestDocumentCaption:
+    """A document sent with a caption must reach the context with that caption and be answered."""
+
+    async def test_captioned_document_triggers_llm(self, bot_app, db_pool):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 80020
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+        _mock_document_download(mock_bot)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("The file has two columns.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_document_message('data.csv', user_id=user_id, caption='вот файл, разбери его')
+        await dp.process_update(update)
+        await asyncio.sleep(0.4)
+
+        assert len(mock_llm.calls) == 1, 'a captioned document must be answered'
+        contents = [str(m.get('content', '')) for m in mock_llm.calls[0]['messages']]
+        assert any(
+            '[file uploaded to agent workspace] data.csv' in c and 'вот файл, разбери его' in c
+            for c in contents
+        ), f'file notice and caption must share one context message, got: {contents}'
+        spy.assert_sent_text_contains('The file has two columns.')
+
+        rows = await db_pool.fetchval(
+            'SELECT count(*) FROM chatgpttg.message WHERE tg_chat_id = $1 AND tg_message_id = $2',
+            user_id, update.message.message_id,
+        )
+        assert rows == 1, 'one telegram message must produce exactly one context row'
+
+    async def test_document_without_caption_is_context_only(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 80021
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+        _mock_document_download(mock_bot)
+
+        mock_llm = MockLLMClient()
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        await dp.process_update(make_document_message('data.csv', user_id=user_id))
+        await asyncio.sleep(0.3)
+
+        assert mock_llm.calls == [], 'a bare document must stay context-only'
+        spy.assert_sent_text_contains('Saved to agent workspace: data.csv')
+
+    async def test_captioned_document_without_agent_mode(self, bot_app, db_pool):
+        """Without agent mode a captioned document is still rejected and answers nothing."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 80022
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("Hi")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        await dp.process_update(make_text_message('Hi', user_id=user_id))
+        await asyncio.sleep(0.2)
+
+        _mock_document_download(mock_bot)
+        mock_llm2 = MockLLMClient()
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
+
+        update = make_document_message('doc.pdf', user_id=user_id, caption='analyze this')
+        await dp.process_update(update)
+        await asyncio.sleep(0.3)
+
+        spy.assert_sent_text_contains('Documents are not supported')
+        assert mock_llm2.calls == []
+        assert FakeSandboxClient.uploads == {}
+        rows = await db_pool.fetchval(
+            'SELECT count(*) FROM chatgpttg.message WHERE tg_chat_id = $1 AND tg_message_id = $2',
+            user_id, update.message.message_id,
+        )
+        assert rows == 0
+
+    async def test_captioned_document_sandbox_error_answers_user(self, bot_app):
+        """If the upload fails, the caption still reaches the context and gets an answer."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 80023
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+        _mock_document_download(mock_bot)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("I could not read the file, please resend it.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        async def failing_upload(self, telegram_user_id, rel_path, data):
+            raise SandboxError('Sandbox unavailable: connection refused')
+
+        with patch.object(FakeSandboxClient, 'upload_file', failing_upload):
+            await dp.process_update(make_document_message(
+                'doc.txt', user_id=user_id, caption='what is in this file?',
+            ))
+            await asyncio.sleep(0.4)
+
+        spy.assert_sent_text_contains('Failed to save document to agent workspace')
+        assert len(mock_llm.calls) == 1
+        contents = [str(m.get('content', '')) for m in mock_llm.calls[0]['messages']]
+        assert any(
+            '[failed to upload file to agent workspace] doc.txt' in c and 'what is in this file?' in c
+            for c in contents
+        ), f'failed upload notice and caption must reach context, got: {contents}'
+
+    async def test_reply_to_captioned_document_keeps_branch(self, bot_app):
+        """Document and confirmation both resolve to the row carrying the caption."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 80024
+
+        await _create_agent_user(telegram_bot, dp, user_id)
+        _mock_document_download(mock_bot)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("Looking at it.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_document_message('data.csv', user_id=user_id, caption='check this file')
+        await dp.process_update(update)
+        await asyncio.sleep(0.4)
+
+        confirmation_id = spy.get_message_id_of_sent_text('Saved to agent workspace')
+        by_document = await telegram_bot.db.get_telegram_message(user_id, update.message.message_id)
+        by_alias = await telegram_bot.db.get_telegram_message(user_id, confirmation_id)
+
+        assert by_document is not None and by_alias is not None
+        assert by_document.id == by_alias.id
+        assert 'check this file' in str(by_document.message.content)
+
+    async def test_forwarded_captioned_document_stays_context_only(self, bot_app):
+        """A caption on a forwarded document is source text, not a question (forward_as_prompt=false)."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80025
+
+        user = await _create_agent_user(telegram_bot, dp, user_id)
+        assert user.forward_as_prompt is False
+        _mock_document_download(mock_bot)
+
+        mock_llm = MockLLMClient()
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_document_message(
+            'shared.csv', user_id=user_id, caption='forwarded caption text',
+            forward_sender_name='Someone',
+        )
+        await dp.process_update(update)
+        await asyncio.sleep(0.3)
+
+        assert mock_llm.calls == [], 'forwarded document must not trigger an answer'
+        row = await telegram_bot.db.get_telegram_message(user_id, update.message.message_id)
+        assert row is not None
+        assert 'forwarded caption text' in str(row.message.content)
+
+    async def test_media_group_caption_makes_batch_a_prompt(self, bot_app):
+        """Two documents in one batch, caption on the first one — the batch is answered once."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80026
+
+        user = await _create_agent_user(telegram_bot, dp, user_id)
+        _mock_document_download(mock_bot)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("Got both files.")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        first = make_document_message('first.csv', user_id=user_id, caption='compare these two')
+        second = make_document_message('second.csv', user_id=user_id)
+        await telegram_bot.batched_handler.process_batch([first.message, second.message], user)
+        await asyncio.sleep(0.3)
+
+        assert len(mock_llm.calls) == 1
+        contents = [str(m.get('content', '')) for m in mock_llm.calls[0]['messages']]
+        assert any('first.csv' in c and 'compare these two' in c for c in contents)
+        assert any('second.csv' in c for c in contents)

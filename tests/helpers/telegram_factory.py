@@ -34,6 +34,17 @@ def _make_chat_dict(chat_id=12345):
     }
 
 
+def _make_reply_to_dict(chat_id, message_id):
+    """Minimal stub of the message being replied to (only its id matters for branch resolution)."""
+    return {
+        'message_id': message_id,
+        'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
+        'chat': _make_chat_dict(chat_id),
+        'date': int(time.time()),
+        'text': '...',
+    }
+
+
 def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=None,
                       first_name='Test', last_name='User', username='testuser'):
     if chat_id is None:
@@ -49,13 +60,7 @@ def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=Non
     }
 
     if reply_to_message_id is not None:
-        message_dict['reply_to_message'] = {
-            'message_id': reply_to_message_id,
-            'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
-            'chat': _make_chat_dict(chat_id),
-            'date': int(time.time()),
-            'text': '...',
-        }
+        message_dict['reply_to_message'] = _make_reply_to_dict(chat_id, reply_to_message_id)
 
     update_dict = {
         'update_id': _next_update_id(),
@@ -65,7 +70,8 @@ def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=Non
 
 
 def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
-                          user_id=12345, chat_id=None, caption=None, reply_to_message_id=None):
+                          user_id=12345, chat_id=None, caption=None, reply_to_message_id=None,
+                          forward_sender_name=None):
     if chat_id is None:
         chat_id = user_id
 
@@ -85,14 +91,42 @@ def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
     if caption is not None:
         message_dict['caption'] = caption
 
+    if forward_sender_name is not None:
+        message_dict['forward_date'] = int(time.time())
+        message_dict['forward_sender_name'] = forward_sender_name
+
     if reply_to_message_id is not None:
-        message_dict['reply_to_message'] = {
-            'message_id': reply_to_message_id,
-            'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
-            'chat': _make_chat_dict(chat_id),
-            'date': int(time.time()),
-            'text': '...',
-        }
+        message_dict['reply_to_message'] = _make_reply_to_dict(chat_id, reply_to_message_id)
+
+    update_dict = {
+        'update_id': _next_update_id(),
+        'message': message_dict,
+    }
+    return types.Update(**update_dict)
+
+
+def make_voice_message(file_id='test-voice-id', file_size=2048, duration=3,
+                       user_id=12345, chat_id=None, reply_to_message_id=None):
+    if chat_id is None:
+        chat_id = user_id
+
+    message_id = _next_message_id()
+    message_dict = {
+        'message_id': message_id,
+        'from': _make_user_dict(user_id),
+        'chat': _make_chat_dict(chat_id),
+        'date': int(time.time()),
+        'voice': {
+            'file_id': file_id,
+            'file_unique_id': f'unique-{file_id}',
+            'duration': duration,
+            'file_size': file_size,
+            'mime_type': 'audio/ogg',
+        },
+    }
+
+    if reply_to_message_id is not None:
+        message_dict['reply_to_message'] = _make_reply_to_dict(chat_id, reply_to_message_id)
 
     update_dict = {
         'update_id': _next_update_id(),
@@ -102,7 +136,7 @@ def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
 
 
 def make_video_note_message(file_id='test-video-note-id', file_size=2048, duration=5,
-                            length=240, user_id=12345, chat_id=None):
+                            length=240, user_id=12345, chat_id=None, reply_to_message_id=None):
     if chat_id is None:
         chat_id = user_id
 
@@ -120,6 +154,9 @@ def make_video_note_message(file_id='test-video-note-id', file_size=2048, durati
             'file_size': file_size,
         },
     }
+
+    if reply_to_message_id is not None:
+        message_dict['reply_to_message'] = _make_reply_to_dict(chat_id, reply_to_message_id)
 
     update_dict = {
         'update_id': _next_update_id(),

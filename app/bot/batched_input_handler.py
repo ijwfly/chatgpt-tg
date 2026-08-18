@@ -5,7 +5,7 @@ import asyncio
 import re
 import tempfile
 from contextlib import suppress
-from typing import List
+from typing import List, Optional
 
 from aiogram import types
 from aiogram.utils.exceptions import BadRequest
@@ -136,7 +136,11 @@ class BatchedInputHandler:
                 else:
                     self.handle_message(message, user, user_input)
 
-            if not self.batch_is_prompt(messages_batch, user):
+            # force_prompt: transport captured user-authored content (e.g. a document caption) that
+            # needs an answer even though batch_is_prompt() does not consider the batch a prompt
+            is_prompt = self.batch_is_prompt(messages_batch, user) \
+                or (user_input.force_prompt and user_input.has_content)
+            if not is_prompt:
                 # Context-only batch: add to context without calling LLM
                 message_processor = MessageProcessor(self.db, user, first_message)
                 await message_processor.add_context_only(user_input)
@@ -158,10 +162,19 @@ class BatchedInputHandler:
 
     async def handle_document_sandbox(self, message: types.Message, user: User, user_input: UserInput):
         """Saves an incoming document to the user's bash sandbox workspace (agent mode)."""
+        caption = (message.caption or '').strip() or None
+        # a caption on a forwarded document is the source text, not a question to the bot
+        caption_is_prompt = caption is not None \
+            and not (message_is_forward(message) and not user.forward_as_prompt)
+
         file = await self.bot.get_file(message.document.file_id)
         max_size = settings.SANDBOX_UPLOAD_MAX_MB * 1024 * 1024
         if file.file_size > max_size:
             await message.reply(f'Document file is too big (max {settings.SANDBOX_UPLOAD_MAX_MB} MB)')
+            self._add_failed_upload_to_context(
+                message, user_input, caption, caption_is_prompt,
+                f'file is too big, max {settings.SANDBOX_UPLOAD_MAX_MB} MB',
+            )
             return
 
         sandbox_client = SandboxClient()
@@ -182,15 +195,37 @@ class BatchedInputHandler:
                 filename=safe_name,
                 size=result.get('size', len(data)),
                 tg_message_id=message.message_id,
+                caption=caption,
             )
             # a reply to the confirmation must lead to the same dialog branch as the document itself
             with suppress(BadRequest):
                 response = await message.reply(f'Saved to agent workspace: {safe_name}')
                 sandbox_file.alias_tg_message_ids.append(response.message_id)
             user_input.sandbox_files.append(sandbox_file)
+            if caption_is_prompt:
+                user_input.force_prompt = True
         except SandboxError as e:
             logger.error(f'Failed to save document to sandbox: {e}')
             await message.reply(f'Failed to save document to agent workspace: {e}')
+            self._add_failed_upload_to_context(message, user_input, caption, caption_is_prompt, str(e))
+
+    @staticmethod
+    def _add_failed_upload_to_context(message: types.Message, user_input: UserInput, caption: Optional[str],
+                                      caption_is_prompt: bool, reason: str):
+        """
+        The file did not make it to the workspace. If the user wrote something along with it, their text
+        still has to reach the context (and get an answer) — otherwise the question is silently dropped.
+        """
+        if not caption:
+            return
+
+        file_name = message.document.file_name if message.document else 'file'
+        user_input.text_inputs.append(TextInput(
+            text=f'[failed to upload file to agent workspace] {file_name} ({reason})\n{caption}',
+            tg_message_id=message.message_id,
+        ))
+        if caption_is_prompt:
+            user_input.force_prompt = True
 
     @staticmethod
     def _sanitize_workspace_filename(filename: str) -> str:
@@ -248,12 +283,22 @@ class BatchedInputHandler:
         # split speech_text to chunks of 4080 symbols
         chunk_size = 4080
         speech_text_chunks = [speech_text[i:i + chunk_size] for i in range(0, len(speech_text), chunk_size)]
+        transcriptions = []
         for chunk in speech_text_chunks:
-            response = await message.reply(chunk)
-            user_input.voice_transcriptions.append(VoiceTranscription(
+            tg_message_id = -1
+            with suppress(BadRequest):
+                response = await message.reply(chunk)
+                tg_message_id = response.message_id
+            transcriptions.append(VoiceTranscription(
                 text=chunk,
-                tg_message_id=response.message_id,
+                tg_message_id=tg_message_id,
             ))
+
+        if transcriptions:
+            # a reply to the user's own voice message must lead to the whole transcription: the last chunk
+            # is the only message whose branch (previous_message_ids + itself) contains all the chunks
+            transcriptions[-1].alias_tg_message_ids.append(message.message_id)
+            user_input.voice_transcriptions.extend(transcriptions)
 
     @staticmethod
     def handle_message(message: types.Message, user: User, user_input: UserInput):
