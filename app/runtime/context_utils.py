@@ -12,13 +12,17 @@ async def add_user_input_to_context(user_input: UserInput, context_manager: Cont
     # Add voice transcriptions
     for vt in user_input.voice_transcriptions:
         dialog_message = DialogUtils.prepare_user_message(vt.text)
-        await context_manager.add_message(dialog_message, vt.tg_message_id)
+        await context_manager.add_message(
+            dialog_message, vt.tg_message_id, alias_tg_message_ids=vt.alias_tg_message_ids,
+        )
 
     # Add sandbox workspace files
     for sf in user_input.sandbox_files:
-        dialog_message = DialogUtils.prepare_user_message(
-            f'[file uploaded to agent workspace] {sf.filename} ({sf.size} bytes)'
-        )
+        text = f'[file uploaded to agent workspace] {sf.filename} ({sf.size} bytes)'
+        if sf.caption:
+            # the caption belongs to the same telegram message, so it goes into the same context message
+            text = f'{text}\n{sf.caption}'
+        dialog_message = DialogUtils.prepare_user_message(text)
         await context_manager.add_message(
             dialog_message, sf.tg_message_id, alias_tg_message_ids=sf.alias_tg_message_ids,
         )

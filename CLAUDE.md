@@ -62,7 +62,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - `sandbox/` — separate docker-compose service (ubuntu-based, internal network only, no published ports). Per-user isolation via Linux users + `sudo -u`, personal workspace `/workspace/user_<telegram_id>` (chmod 700), lazy provisioning on every request (`ensure_user`). HTTP API: `POST /exec` (bash with process-group-kill timeout), `POST /fileop` (read/write/edit/stat/list/delete via `file_helper.py` under sudo), `GET/PUT /files/{path}` (streaming). Caller identified by `X-User-Id` header — trusted internal network, no auth
 - `app/sandbox/client.py` — `SandboxClient` (httpx), raises `SandboxError`
 - `app/functions/bash_sandbox.py` — agent tools: `bash_exec`, `read_file`, `write_file`, `edit_file`, `send_file_to_chat`. Registered in `AgentRuntime` when `settings.ENABLE_BASH_SANDBOX` (off by default) — so available only with `agent_mode=on`
-- Incoming Telegram documents: when user has `agent_mode=on` and sandbox is enabled, `BatchedInputHandler.handle_document_sandbox` saves them into the user's workspace (with agent_mode off documents are not accepted); the agent is notified via a `[file uploaded to agent workspace]` context message. Both the user's document message and the bot's `Saved to agent workspace` confirmation resolve to that context message on reply (via `message_tg_alias`)
+- Incoming Telegram documents: when user has `agent_mode=on` and sandbox is enabled, `BatchedInputHandler.handle_document_sandbox` saves them into the user's workspace (with agent_mode off documents are not accepted); the agent is notified via a `[file uploaded to agent workspace]` context message. Both the user's document message and the bot's `Saved to agent workspace` confirmation resolve to that context message on reply (via `message_tg_alias`). A document sent with a caption is answered by the agent (`UserInput.force_prompt`) — the caption goes into the same context message; a caption on a forwarded document follows `forward_as_prompt`
 - Outgoing files: `send_file_to_chat` downloads from the sandbox and sends via the `send_document` side effect (`SideEffectHandler` protocol + `TelegramSideEffectHandler`); it sets `result_tg_message_id`, so the tool response row carries the document's tg id and a reply to the file continues the dialog branch
 
 ### Database
@@ -72,7 +72,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - Messages store full dialog history as JSON with `previous_message_ids` for branching sub-dialogues
 
 ### Key Patterns
-- **Sub-dialogues**: replying to a message creates a branch — `DialogManager` loads only that branch's history
+- **Sub-dialogues**: replying to a message creates a branch — `DialogManager` loads only that branch's history. Chat messages without a context row of their own (upload confirmations, the user's voice message behind a transcription) are registered as aliases in `message_tg_alias`, so replying to them resolves to the right row
 - **Context expiration**: messages older than `MESSAGE_EXPIRATION_WINDOW` (default 1h) start fresh context
 - **Auto-summarization**: when context exceeds `short_term_memory_tokens`, older messages get summarized via LLM
 - **Streaming**: responses are streamed to Telegram, editing the message every 2 seconds with cancel button
