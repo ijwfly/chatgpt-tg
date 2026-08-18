@@ -19,6 +19,10 @@ class OpenAIFunction(ABC):
         self.context_manager = context_manager
         self.side_effects = side_effects
         self.tool_call_id = tool_call_id
+        # A function may set this in run() to the transport message id that represents its result
+        # (e.g. a document sent to chat). The runtime saves the function/tool response with this id
+        # instead of -1, so the user can reply to that message and continue the dialog branch.
+        self.result_tg_message_id: Optional[int] = None
 
     @abstractmethod
     async def run(self, params: OpenAIFunctionParams) -> Optional[str]:

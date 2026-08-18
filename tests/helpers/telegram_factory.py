@@ -65,7 +65,7 @@ def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=Non
 
 
 def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
-                          user_id=12345, chat_id=None, caption=None):
+                          user_id=12345, chat_id=None, caption=None, reply_to_message_id=None):
     if chat_id is None:
         chat_id = user_id
 
@@ -84,6 +84,15 @@ def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
     }
     if caption is not None:
         message_dict['caption'] = caption
+
+    if reply_to_message_id is not None:
+        message_dict['reply_to_message'] = {
+            'message_id': reply_to_message_id,
+            'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
+            'chat': _make_chat_dict(chat_id),
+            'date': int(time.time()),
+            'text': '...',
+        }
 
     update_dict = {
         'update_id': _next_update_id(),

@@ -51,8 +51,12 @@ _test_bot_ref = None
 _bot_message_id = 5000
 
 
-def _make_bot_request_handler():
-    """Create an async handler for Bot.request that returns valid Telegram response dicts."""
+def _make_bot_request_handler(responses=None):
+    """Create an async handler for Bot.request that returns valid Telegram response dicts.
+
+    If `responses` list is passed, every (method, data, result) triple is appended to it, so tests
+    can find out which telegram message id the bot got back for a sent message.
+    """
     async def mock_request(method, data=None, *args, **kwargs):
         global _bot_message_id
         _bot_message_id += 1
@@ -61,13 +65,16 @@ def _make_bot_request_handler():
             chat_id = 12345
             if data:
                 chat_id = data.get('chat_id', 12345)
-            return {
+            result = {
                 'message_id': _bot_message_id,
                 'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
                 'chat': {'id': chat_id, 'type': 'private'},
                 'date': int(time.time()),
                 'text': data.get('text', '') if data else '',
             }
+            if responses is not None:
+                responses.append((method, data or {}, result))
+            return result
         elif method in ('sendChatAction', 'deleteMessage', 'answerCallbackQuery'):
             return True
         elif method == 'setMyCommands':
@@ -134,7 +141,8 @@ async def clean_db(db_pool):
 def mock_bot():
     """Bot with mocked request method."""
     bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
-    bot.request = AsyncMock(side_effect=_make_bot_request_handler())
+    bot.sent_responses = []
+    bot.request = AsyncMock(side_effect=_make_bot_request_handler(bot.sent_responses))
     return bot
 
 

@@ -4,9 +4,11 @@ import os
 import asyncio
 import re
 import tempfile
+from contextlib import suppress
 from typing import List
 
 from aiogram import types
+from aiogram.utils.exceptions import BadRequest
 from pydub import AudioSegment
 
 import settings
@@ -176,12 +178,16 @@ class BatchedInputHandler:
                         data = f.read()
                     result = await sandbox_client.upload_file(user.telegram_id, safe_name, data)
 
-            user_input.sandbox_files.append(SandboxFileInput(
+            sandbox_file = SandboxFileInput(
                 filename=safe_name,
                 size=result.get('size', len(data)),
                 tg_message_id=message.message_id,
-            ))
-            await message.reply(f'Saved to agent workspace: {safe_name}')
+            )
+            # a reply to the confirmation must lead to the same dialog branch as the document itself
+            with suppress(BadRequest):
+                response = await message.reply(f'Saved to agent workspace: {safe_name}')
+                sandbox_file.alias_tg_message_ids.append(response.message_id)
+            user_input.sandbox_files.append(sandbox_file)
         except SandboxError as e:
             logger.error(f'Failed to save document to sandbox: {e}')
             await message.reply(f'Failed to save document to agent workspace: {e}')

@@ -266,7 +266,7 @@ class AgentRuntime:
                         function_response = DialogUtils.prepare_function_response(
                             function_call.name, event.result
                         )
-                        await context_manager.add_message(function_response, -1)
+                        await context_manager.add_message(function_response, event.tg_message_id)
                     else:
                         yield event
 
@@ -290,7 +290,7 @@ class AgentRuntime:
                                 tool_response = DialogUtils.prepare_tool_call_response(
                                     tool_call_id, event.result
                                 )
-                                await context_manager.add_message(tool_response, -1)
+                                await context_manager.add_message(tool_response, event.tg_message_id)
                         else:
                             yield event
 
@@ -328,6 +328,7 @@ class AgentRuntime:
             status_message=status_message,
         )
 
+        function = None
         try:
             if function_class is None:
                 function_class = function_storage.get_function_class(function_name)
@@ -336,11 +337,16 @@ class AgentRuntime:
         except Exception as e:
             function_response_raw = f"Error: {e}"
 
+        result_tg_message_id = -1
+        if function is not None and function.result_tg_message_id is not None:
+            result_tg_message_id = function.result_tg_message_id
+
         yield FunctionCallCompleted(
             function_name=function_name,
             function_args=function_args,
             result=function_response_raw,
             tool_call_id=tool_call_id,
+            tg_message_id=result_tg_message_id,
         )
 
     async def _run_sub_agent(

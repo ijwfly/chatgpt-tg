@@ -36,6 +36,8 @@ class FunctionCallCompleted(RuntimeEvent):
     function_args: str
     result: Optional[str] = None
     tool_call_id: Optional[str] = None
+    # transport message id representing the function result (-1 if none), used when saving the response to context
+    tg_message_id: int = -1
 
 
 @dataclass

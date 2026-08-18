@@ -19,7 +19,9 @@ async def add_user_input_to_context(user_input: UserInput, context_manager: Cont
         dialog_message = DialogUtils.prepare_user_message(
             f'[file uploaded to agent workspace] {sf.filename} ({sf.size} bytes)'
         )
-        await context_manager.add_message(dialog_message, sf.tg_message_id)
+        await context_manager.add_message(
+            dialog_message, sf.tg_message_id, alias_tg_message_ids=sf.alias_tg_message_ids,
+        )
 
     # Add text/image messages
     for text_input in user_input.text_inputs:

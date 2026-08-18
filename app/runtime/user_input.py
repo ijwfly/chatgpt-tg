@@ -29,6 +29,9 @@ class SandboxFileInput:
     filename: str
     size: int
     tg_message_id: int = -1
+    # other transport message ids that should lead to this context message on reply
+    # (e.g. bot's "Saved to agent workspace" confirmation)
+    alias_tg_message_ids: List[int] = field(default_factory=list)
 
 
 @dataclass
