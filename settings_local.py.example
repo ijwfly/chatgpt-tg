@@ -52,6 +52,13 @@ TELEGRAM_BOT_TOKEN = ''
 # and routes uploaded documents into the agent's workspace.
 # ENABLE_BASH_SANDBOX = False
 
+# === Skills (agent mode, needs ENABLE_BASH_SANDBOX) ===
+# Folders of instructions the agent loads on demand. Personal skills live in
+# `skills/` in the user's workspace, shared read-only ones in
+# /workspace/public_skills (synced from sandbox/skills/ when the image is built).
+# ENABLE_SKILLS = True
+# SKILLS_MAX_COUNT = 50
+
 # === Image proxy ===
 # IMAGE_PROXY_URL = 'http://your-server-ip'
 

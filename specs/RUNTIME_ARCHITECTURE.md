@@ -48,6 +48,12 @@ app/runtime/
 └── context_utils.py            # add_user_input_to_context() — shared utility
 ```
 
+Related, outside `app/runtime/`:
+
+```
+app/skills/catalog.py           # skills catalog block for the agent system prompt
+```
+
 ---
 
 ## 3. Core Types
@@ -261,13 +267,13 @@ This split exists because the runtime is transport-agnostic and cannot know the 
 | Plan management | No | `PlanManager` with DB persistence, periodic reminders |
 | Background tasks | No | `SpawnTask` creates sub-agents with own tool access |
 | MCP servers | `MCP_SERVERS` | `MCP_SERVERS` + `MCP_SERVERS_AGENT` |
-| System prompt | gpt_mode + tool additions | `AGENT_SYSTEM_PROMPT` + gpt_mode + tool additions |
+| System prompt | gpt_mode + tool additions | `AGENT_SYSTEM_PROMPT` + gpt_mode + tool additions + skills catalog |
 | Context saving | Split between runtime and adapter | Same split pattern |
 
 ### Agent Loop
 
-1. Load tools: MCP tools + agent tools (plan, task, schedule)
-2. Build system prompt with `AGENT_SYSTEM_PROMPT` prefix
+1. Load tools: MCP tools + agent tools (plan, task, schedule) + bash sandbox tools (`ENABLE_BASH_SANDBOX`) + web agent tools (`ENABLE_WEB_AGENTS`)
+2. Build system prompt with `AGENT_SYSTEM_PROMPT` prefix, then append the skills catalog
 3. Loop (up to `AGENT_MAX_ITERATIONS`):
    - Inject plan reminder if due (every `AGENT_PLAN_REMINDER_INTERVAL` iterations)
    - Inject completed background task results
@@ -284,7 +290,15 @@ Plan state is injected as context messages (not system prompt) to preserve promp
 
 ### Background Sub-Agents
 
-`SpawnTask` creates a sub-agent that runs in a separate coroutine with its own LLM call loop (up to `AGENT_SUB_AGENT_MAX_ITERATIONS`). Results are delivered via `<background-results>` messages when the main agent's next iteration begins.
+`SpawnTask` creates a sub-agent that runs in a separate coroutine with its own LLM call loop (up to `AGENT_SUB_AGENT_MAX_ITERATIONS`). Results are delivered via `<background-results>` messages when the main agent's next iteration begins. The sub-agent's system prompt is built separately (it does not include `AGENT_SYSTEM_PROMPT` or gpt_mode) but does carry the plan text and the skills catalog.
+
+### Skills Catalog
+
+`get_skills_prompt_addition(user)` (`app/skills/catalog.py`) is called once per turn, right after the system prompt is assembled. It asks the sandbox (`GET /skills`) for the frontmatter of every skill folder visible to the user — personal `skills/` in their workspace plus shared read-only `/workspace/public_skills` — and renders a `## Skills` block listing `name`, `description` and the path of each `SKILL.md`.
+
+- Skill bodies never enter the prompt: the model opens the ones it needs with `read_file`, and `reference/`/`scripts/` inside a skill are reached only when its `SKILL.md` says so.
+- A personal skill shadows a shared one with the same name; the list is capped by `SKILLS_MAX_COUNT` and each description by `SKILLS_MAX_DESCRIPTION_CHARS` (descriptions are user-authored text).
+- Requires `ENABLE_SKILLS` and `ENABLE_BASH_SANDBOX`; any sandbox failure logs a warning and drops the block, never fails the turn.
 
 ---
 

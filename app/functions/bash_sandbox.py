@@ -50,7 +50,9 @@ class BashExec(OpenAIFunction):
         return (
             "You have a personal bash workspace (the cwd of every bash_exec call). "
             "Files the user sends via Telegram are saved to the workspace root. "
-            "Work only inside the workspace; use send_file_to_chat to deliver files to the user."
+            "Write only inside the workspace; /workspace/public_skills is shared and "
+            "read-only, but you can read and run anything in it. "
+            "Use send_file_to_chat to deliver files to the user."
         )
 
     @classmethod
@@ -81,7 +83,8 @@ class ReadFile(OpenAIFunction):
 
     @classmethod
     def get_description(cls) -> str:
-        return ("Read the contents of a text file in your workspace. "
+        return ("Read the contents of a text file in your workspace, or a shared file under "
+                "/workspace/public_skills given by absolute path. "
                 "Use `limit` to return only the first N lines.")
 
     @classmethod

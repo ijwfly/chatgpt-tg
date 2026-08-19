@@ -24,6 +24,8 @@ RUN pip3 install --no-cache-dir --break-system-packages -r /opt/server/requireme
 
 # Layer 4: app code
 COPY server/ /opt/server/
+# Built-in skills: synced into /workspace/public_skills by entrypoint.sh on every start
+COPY skills/ /opt/skills/
 COPY entrypoint.sh /opt/entrypoint.sh
 RUN chmod +x /opt/entrypoint.sh
 

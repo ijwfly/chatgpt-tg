@@ -7,6 +7,7 @@ can act as an autonomous agent that plans and completes multi-step tasks.
 
 🔥 **Multi-provider** — OpenAI, Anthropic/Claude, OpenRouter, and any OpenAI-compatible API
 🔥 **Agent mode** — autonomous multi-step tasks with background sub-agents and live plans
+🔥 **Skills** — teach the agent a workflow once; it stores it and loads it when it fits
 🔥 **MCP integration** — plug in external tools via Model Context Protocol servers
 🔥 **Vision + DALL-E 3** — image understanding and image generation out of the box
 
@@ -25,27 +26,30 @@ can act as an autonomous agent that plans and completes multi-step tasks.
 4. **Bash sandbox** — an isolated per-user execution environment (separate Docker service,
    internal network only) where the agent runs bash, edits files, and receives documents you
    upload to the chat.
-5. **MCP tools** — dynamically load tools from configured MCP servers, with per-server
+5. **Skills** — folders of instructions the agent loads only when they fit the task. Ask it
+   to "make a skill" for something you do regularly and it writes one into its sandbox; from
+   the next message the skill is in its catalog and it follows your process by itself.
+6. **MCP tools** — dynamically load tools from configured MCP servers, with per-server
    access control (minimum role) and custom headers.
-6. **Function / tool calling** — the model can call built-in tools when useful: image
+7. **Function / tool calling** — the model can call built-in tools when useful: image
    generation (DALL-E 3), WolframAlpha, and more.
-7. **Scheduled tasks** — ask the bot to do something later using natural language
+8. **Scheduled tasks** — ask the bot to do something later using natural language
    ("remind me tomorrow at 9"); a scheduler fires it at the right time.
-8. **Streaming responses** — answers stream into Telegram in real time, with a cancel
+9. **Streaming responses** — answers stream into Telegram in real time, with a cancel
    button, and `<think>` reasoning blocks shown as a live status while the model thinks.
-9. **Vision & image generation** — send images for the model to analyze, or ask it to
+10. **Vision & image generation** — send images for the model to analyze, or ask it to
    generate images with DALL-E 3.
-10. **Voice & speech** — voice messages and video notes are transcribed (via
+11. **Voice & speech** — voice messages and video notes are transcribed (via
     `gpt-4o-transcribe`) and used as input; `/text2speech` turns any message into a voice
     reply (TTS).
-11. **Dynamic dialog management** — the bot manages conversation context automatically; older
+12. **Dynamic dialog management** — the bot manages conversation context automatically; older
     context is summarized when it exceeds the model's limit. You can still `/reset` manually.
-12. **Sub-dialogues** — reply to a message to branch off into that thread only, so you can
+13. **Sub-dialogues** — reply to a message to branch off into that thread only, so you can
     juggle multiple conversations in one chat.
-13. **Access control** — each user has a role (stranger, basic, advanced, admin) that gates
+14. **Access control** — each user has a role (stranger, basic, advanced, admin) that gates
     access to the bot, model choice, and features. Roles are managed through inline buttons
     sent to an admin chat.
-14. **Usage tracking** — per-user API cost tracking (`/usage`, `/usage_all`).
+15. **Usage tracking** — per-user API cost tracking (`/usage`, `/usage_all`).
 
 For a deep dive into how everything fits together, see
 [`specs/PROJECT_SPEC.md`](specs/PROJECT_SPEC.md) and
@@ -124,7 +128,25 @@ With the sandbox enabled, the agent gets `bash_exec`, `read_file` / `write_file`
 `edit_file`, and `send_file_to_chat` tools, and documents you upload to the chat are saved
 into the agent's workspace (agent mode must be on for document uploads).
 
-**3. MCP servers**
+**3. Skills**
+
+```python
+ENABLE_SKILLS = True  # default; needs ENABLE_BASH_SANDBOX
+```
+
+A skill is a folder with a `SKILL.md` (frontmatter `name` + `description`, then instructions)
+and optional `reference/`, `scripts/`, `templates/`. Only the catalog — name, description and
+path — goes into the agent's system prompt; the agent opens a skill's body itself when the
+description matches the task, so you can have many skills without bloating the prompt. The
+format matches Claude Code Agent Skills, so skills are portable.
+
+Personal skills live in `skills/` in the user's sandbox workspace and are created by the agent
+itself — the bundled `skill-creator` skill walks it through writing one and validating it with
+`scripts/validate_skill.py`. Shared read-only skills live in `/workspace/public_skills`: put a
+folder in `sandbox/skills/` and rebuild the sandbox image (`docker-compose up -d --build
+sandbox`), or drop one straight into the `sandbox_workspace` volume under `public_skills/`.
+
+**4. MCP servers**
 
 Register MCP servers to expose their tools to the model. Each server has its own
 minimum-role requirement and optional headers:
@@ -142,7 +164,7 @@ MCP_SERVERS = [
 ```
 Use `MCP_SERVERS_AGENT` for servers that should only be available in agent mode.
 
-**4. Scheduled tasks timezone**
+**5. Scheduled tasks timezone**
 
 Scheduled tasks work out of the box, but set your users' IANA timezone so "tomorrow at 10am"
 resolves in the right zone (default is UTC):

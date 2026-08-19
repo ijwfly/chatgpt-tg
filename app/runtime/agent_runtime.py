@@ -31,6 +31,7 @@ from app.runtime.langfuse_utils import build_langfuse_metadata
 from app.runtime.plan_manager import PlanManager
 from app.runtime.side_effects import SideEffectHandler
 from app.runtime.user_input import UserInput
+from app.skills.catalog import get_skills_prompt_addition
 from app.storage.db import DB, User
 from app.storage.user_role import check_access_conditions
 
@@ -123,6 +124,11 @@ class AgentRuntime:
         if settings.AGENT_SYSTEM_PROMPT:
             system_prompt = settings.AGENT_SYSTEM_PROMPT + '\n\n' + system_prompt
 
+        # Skills catalog: names and descriptions only, the agent reads the bodies on demand
+        skills_prompt = await get_skills_prompt_addition(self.user)
+        if skills_prompt:
+            system_prompt += '\n\n' + skills_prompt
+
         # Create LLM client (same pattern as DefaultLLMRuntime)
         langfuse_metadata = build_langfuse_metadata(self.user)
         if self.user.current_model == llm_model.ANTHROPIC_CLAUDE_35_SONNET:
@@ -136,6 +142,7 @@ class AgentRuntime:
             deadline = time.monotonic() + settings.AGENT_BG_TASK_TIMEOUT
             return await self._run_sub_agent(
                 prompt, llm_model, function_storage, context_manager, deadline,
+                skills_prompt=skills_prompt,
             )
 
         # Set agent context for tools (ContextVar: isolated per turn, inherited by spawned tasks)
@@ -351,7 +358,7 @@ class AgentRuntime:
 
     async def _run_sub_agent(
         self, prompt: str, llm_model, parent_function_storage: FunctionStorage,
-        parent_context_manager: ContextManager, deadline: float,
+        parent_context_manager: ContextManager, deadline: float, skills_prompt: str = '',
     ) -> str:
         """Run a sub-agent loop with limited tools, plan context and parent conversation context.
 
@@ -372,6 +379,9 @@ class AgentRuntime:
 
         # Build system prompt with optional plan context
         sub_system_prompt = "You are a sub-agent working on a specific task. Complete it and return your result."
+        if skills_prompt:
+            # sub-agents have the same file tools, so they get the same skills catalog
+            sub_system_prompt += '\n\n' + skills_prompt
         agent_ctx = agent_context_var.get()
         if agent_ctx is not None:
             plan_text = await agent_ctx.plan_manager.get_plan()

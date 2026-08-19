@@ -47,6 +47,20 @@ class SandboxClient:
             raise SandboxError(_extract_error(response))
         return response.json()
 
+    async def list_skills(self, telegram_user_id) -> dict:
+        """Catalog of skills visible to the user: frontmatter only, no skill bodies."""
+        try:
+            async with httpx.AsyncClient(timeout=settings.SKILLS_SCAN_TIMEOUT) as client:
+                response = await client.get(
+                    f'{self.base_url}/skills',
+                    headers=self._headers(telegram_user_id),
+                )
+        except httpx.HTTPError as e:
+            raise SandboxError(f'Sandbox unavailable: {e}')
+        if response.status_code != 200:
+            raise SandboxError(_extract_error(response))
+        return response.json()
+
     async def _fileop(self, telegram_user_id, payload: dict) -> dict:
         try:
             async with httpx.AsyncClient(timeout=settings.SANDBOX_REQUEST_TIMEOUT) as client:
