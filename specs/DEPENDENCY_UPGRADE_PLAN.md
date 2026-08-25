@@ -1,6 +1,6 @@
 # Dependency Upgrade Plan: aiogram 3 + current LLM SDKs
 
-Status: **in progress** — Phases 0–5 done (requirements restructured, aiogram 3.30, pydantic v2 API, openai 3.3.1, anthropic 1.0.0, mcp 2.1.0; 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
+Status: **all phases done** — aiogram 3.30, pydantic v2 API, openai 3.3.1, anthropic 1.0.0, mcp 2.1.0, pytest 9 / pytest-asyncio 1.4 and refreshed utility deps; 136 tests green. Remaining: the manual Telegram smoke (§11). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
 
 ## 1. Why this document exists
 
@@ -237,13 +237,15 @@ Commit: `Upgrade mcp SDK to 2.x`.
 
 Result: `mcp==2.1.0`, `httpx2==2.12.0` declared (imported directly). Wiring that was verified against the installed source: `Client(transport, read_timeout_seconds=...)` where the transport is `streamable_http_client(url, http_client=httpx2.AsyncClient(headers=...))` wrapped in our own context manager (the SDK does **not** close a user-supplied `http_client`). `Client` also accepts an in-process `MCPServer`, which is how the module was smoke-tested (`list_tools`, `call_tool`, tool error → `is_error` result, `input_schema` snake_case). `MCPFunction._client()` / `MCPFunctionManager._client()` are the seams for such tests.
 
-## 10. Phase 6 — remaining dependencies
+## 10. Phase 6 — remaining dependencies — ✅ done
 
 - `pytest==9.x`, `pytest-asyncio==1.4.x`: pytest-asyncio 1.0 removed support for a user-defined `event_loop` fixture. Delete the `event_loop` fixture in `tests/conftest.py:97`; rely on `asyncio_default_fixture_loop_scope = session` in `pytest.ini` (already set) and add `asyncio_default_test_loop_scope = session` so session-scoped async fixtures (`db_pool`) share the loop with tests.
 - `numpy` 2.x (`embeddings.py` only), `asyncpg` 0.31, `tiktoken` 0.14, `fastapi`/`uvicorn`/`starlette` latest (`main_image_proxy.py` only), `croniter`, `dateparser`, `requests`, `pytz`, `python-dateutil` latest.
 - After this phase run `pip check` and keep the freeze output in the PR description for reference.
 
 Commit: `Upgrade test and utility dependencies`.
+
+Result: `pytest==9.1.1`, `pytest-asyncio==1.4.0` (custom `event_loop` fixture removed, `asyncio_default_test_loop_scope = session` added), `numpy==2.4.6` (2.5 requires Python ≥3.12), `asyncpg==0.31.0`, `tiktoken==0.14.0`, `fastapi==0.141.1`, `uvicorn==0.52.4`, `python-multipart==0.0.32`, `httpx==0.28.1`, `langfuse==4.14.5`, `croniter==6.2.4`, `dateparser==1.4.2`, `requests==2.34.2`, `pytz==2026.3.post1`, `python-dateutil==2.9.0.post0`. `pip check` clean.
 
 ## 11. Verification checklist (every phase)
 

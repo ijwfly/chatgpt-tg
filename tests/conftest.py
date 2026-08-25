@@ -117,16 +117,8 @@ class MockedSession(BaseSession):
 
 # ---- Fixtures ----
 
-@pytest.fixture(scope='session')
-def event_loop():
-    """Single event loop for the entire test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
 @pytest_asyncio.fixture(scope='session')
-async def db_pool(event_loop):
+async def db_pool():
     """Session-scoped connection pool."""
     dsn = f'postgres://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DATABASE}'
     pool = await asyncpg.create_pool(dsn)
