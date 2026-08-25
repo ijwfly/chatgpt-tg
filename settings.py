@@ -107,6 +107,13 @@ MCP_TOOL_CALL_TIMEOUT = 300  # seconds, timeout for individual MCP tool calls
 SCHEDULER_POLL_INTERVAL = 30  # seconds between scheduler checks
 USER_TIMEZONE = 'UTC'  # IANA timezone users are assumed to be in (e.g. 'Europe/Moscow'); used for scheduled task times
 
+# Rich message streaming (see specs/RICH_MESSAGES.md)
+# Answers are always sent as rich messages. While streaming, private chats can use ephemeral rich drafts
+# (sendRichMessageDraft: client-side animation, <tg-thinking>, native Stop button); off by default because
+# current Telegram clients render draft streaming poorly. When off (or in groups) a real message is
+# created and edited in place with an inline Stop button.
+RICH_DRAFT_STREAMING = False
+
 # Bash sandbox (agent mode)
 # Per-user bash execution environment served by the `sandbox` docker-compose service.
 # When enabled, users with agent_mode=on get bash/file tools and their uploaded

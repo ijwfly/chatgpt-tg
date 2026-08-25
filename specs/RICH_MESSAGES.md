@@ -1,6 +1,6 @@
 # Rich Messages Migration (Telegram Bot API 10.1–10.3)
 
-Status: **all phases done** — rich answers, draft streaming with the native Stop button, rich menus, docs. Manual smoke (§7) pending on the user's side; 161 tests green. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
+Status: **all phases done** — rich answers, rich edit-streaming by default, draft streaming with the native Stop button behind `RICH_DRAFT_STREAMING`, rich menus, docs. Manual smoke (§7) pending on the user's side; 161 tests green. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
 
 ## 1. Why
 
@@ -28,9 +28,9 @@ Today the bot passes LLM output verbatim with legacy `parse_mode=Markdown` and r
 
 | Question | Decision |
 |---|---|
-| Streaming | Drafts (`sendRichMessageDraft`) in private chats; real message + `editMessageText(rich_message=)` in groups or when a draft call fails mid-turn. |
+| Streaming | **Default: real message + `editMessageText(rich_message=)`** everywhere (`settings.RICH_DRAFT_STREAMING = False` — current clients render draft streaming poorly). With the flag on, private chats use drafts (`sendRichMessageDraft`); groups and a draft call failing mid-turn still use the edit path. |
 | Stop button while drafting | Native `can_stop=True` + a middleware shim for the `stopped_message_generation` update until aiogram ships 10.3. The inline Stop button stays on the edit path. |
-| Rollout | No feature flags. The legacy `parse_mode=Markdown` path is removed; rollback is `git revert`. |
+| Rollout | Rich *messages* have no flag (legacy `parse_mode=Markdown` path removed; rollback is `git revert`). Draft *streaming* is behind `settings.RICH_DRAFT_STREAMING`, off by default. |
 | Scope | LLM answers (streamed and final, scheduled-task results) + `/usage`, `/models`, admin user cards. Plain service texts (errors, upload confirmations, transcriptions, verbose tool output, plan messages, captions) stay plain. |
 | Storage | Unchanged: the assistant message is stored as its markdown source, as before. No migrations. |
 
@@ -54,7 +54,7 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 1. **`DraftStream`** — private chats. `draft_id = user_message_id * 100 + phase` (non-zero, unique per agent phase). Dedup + 1 s throttle as today. `set_thinking` → `<tg-thinking>🧠 last line</tg-thinking>` (same `_format_thinking_display` rules), `set_hint` → `<tg-thinking>Running X...</tg-thinking>`, `set_content` → accumulated markdown minus the trailing (partial) word, shown once ≥ `MIN_STREAMING_CONTENT_LEN`. A keepalive task re-sends the last draft every 20 s while the turn is running (drafts expire after 30 s, tool calls can take longer). Any `TelegramBadRequest` from a draft call logs and switches the turn to `ChatServiceMessage`.
 2. **`ChatServiceMessage`** — groups and fallback: the existing class, sending/editing via `send_rich_message` / `edit_rich_message` with the inline Stop button. `parse_mode` parameter removed.
 
-`handle_turn`: `DraftStream` when `message.chat.type == 'private'`, otherwise `ChatServiceMessage`. `FinalResponse`: `split_markdown(content, RICH_MESSAGE_LENGTH_CUTOFF)`; on the draft path every chunk is a fresh `send_rich_message` (the draft disappears by itself); on the edit path the first chunk is edited into the service message (no delete/create flicker), the rest are sent. `context_manager.add_message(dm, message_id)` unchanged. Overflow during streaming (> cutoff) keeps the `⏳...` + freeze behaviour. Verbose tool output stays plain.
+`handle_turn`: `DraftStream` when `settings.RICH_DRAFT_STREAMING` is on and `message.chat.type == 'private'`, otherwise `ChatServiceMessage`. `FinalResponse`: `split_markdown(content, RICH_MESSAGE_LENGTH_CUTOFF)`; on the draft path every chunk is a fresh `send_rich_message` (the draft disappears by itself); on the edit path the first chunk is edited into the service message (no delete/create flicker), the rest are sent. `context_manager.add_message(dm, message_id)` unchanged. Overflow during streaming (> cutoff) keeps the `⏳...` + freeze behaviour. Verbose tool output stays plain.
 
 ### 4.3 Native stop — `app/bot/cancellation_manager.py`, `app/bot/telegram_bot.py`
 

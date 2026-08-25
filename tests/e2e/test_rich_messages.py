@@ -2,8 +2,11 @@
 import asyncio
 import json
 
+import pytest
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import SendRichMessage
+
+import settings
 
 from app.openai_helpers.llm_client_factory import LLMClientFactory
 from tests.helpers.bot_spy import BotSpy
@@ -22,6 +25,15 @@ async def _create_user(telegram_bot, dp, user_id, **fields):
         setattr(user, key, value)
     await telegram_bot.db.update_user(user)
     return user
+
+
+@pytest.fixture
+def draft_streaming():
+    """Draft streaming is off by default (settings.RICH_DRAFT_STREAMING); these tests turn it on."""
+    old = settings.RICH_DRAFT_STREAMING
+    settings.RICH_DRAFT_STREAMING = True
+    yield
+    settings.RICH_DRAFT_STREAMING = old
 
 
 def _parse_error():
@@ -102,7 +114,7 @@ def _draft_error():
 
 class TestDraftStreaming:
 
-    async def test_private_chat_streams_drafts_then_sends_one_rich_message(self, bot_app):
+    async def test_private_chat_streams_drafts_then_sends_one_rich_message(self, bot_app, draft_streaming):
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
         user_id = 71010
@@ -133,7 +145,7 @@ class TestDraftStreaming:
             'Streamed answer that is long enough to be drafted, finally done.'
         assert 'reply_markup' not in spy.get_rich_messages()[-1]
 
-    async def test_thinking_and_tool_hint_are_rendered_as_tg_thinking(self, bot_app):
+    async def test_thinking_and_tool_hint_are_rendered_as_tg_thinking(self, bot_app, draft_streaming):
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
         user_id = 71011
@@ -162,7 +174,34 @@ class TestDraftStreaming:
         spy.assert_sent_text_contains('Saved, this answer')
         assert (await telegram_bot.db.get_user(user_id)).system_prompt_settings == 'Name: Draft'
 
-    async def test_group_chat_edits_a_service_message_with_stop_button(self, bot_app):
+    async def test_private_chat_edits_a_service_message_by_default(self, bot_app):
+        """With RICH_DRAFT_STREAMING off (the default) private chats stream by editing a rich message."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71015
+        await _create_user(telegram_bot, dp, user_id, streaming_answers=True)
+        calls_before = len(spy.get_all_calls())
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(
+            content_chunks=['Default answer that ', 'is long enough to ', 'trigger streaming ', 'edits, done.'],
+        )
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_text_message('Stream', user_id=user_id))
+        await asyncio.sleep(0.3)
+
+        turn = spy.get_all_calls()[calls_before:]
+        methods = [m for m, _ in turn]
+        assert 'sendRichMessageDraft' not in methods
+        first = next(d for m, d in turn if m == 'sendRichMessage')
+        assert first['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'cancel.cancel'
+        edits = [d for m, d in turn if m == 'editMessageText']
+        assert edits and edits[-1]['rich_message']['markdown'].endswith('edits, done.')
+        assert 'reply_markup' not in edits[-1]
+        assert 'deleteMessage' not in methods
+
+    async def test_group_chat_edits_a_service_message_with_stop_button(self, bot_app, draft_streaming):
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
         user_id = 71012
@@ -197,7 +236,7 @@ class TestDraftStreaming:
         assert 'reply_markup' not in edits[-1]  # the finished answer has no Stop button
         assert not any(m == 'deleteMessage' for m, _ in turn)
 
-    async def test_draft_failure_falls_back_to_service_message(self, bot_app):
+    async def test_draft_failure_falls_back_to_service_message(self, bot_app, draft_streaming):
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
         user_id = 71013
@@ -221,7 +260,7 @@ class TestDraftStreaming:
         assert 'deleteMessage' not in methods
         spy.assert_sent_text_contains('updates, done.')
 
-    async def test_agent_phases_use_distinct_draft_ids(self, bot_app):
+    async def test_agent_phases_use_distinct_draft_ids(self, bot_app, draft_streaming):
         """A tool round-trip that produces text twice (agent phases) streams each phase under its own draft id."""
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
@@ -252,7 +291,7 @@ class TestDraftStreaming:
 
 class TestNativeStop:
 
-    async def test_stopped_generation_update_cancels_the_streaming_turn(self, bot_app):
+    async def test_stopped_generation_update_cancels_the_streaming_turn(self, bot_app, draft_streaming):
         """The native Stop button (Bot API 10.3 `stopped_message_generation`) cancels the user's turn."""
         import warnings
         from tests.helpers.telegram_factory import make_stopped_generation_update

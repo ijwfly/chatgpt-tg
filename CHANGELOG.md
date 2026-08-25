@@ -11,10 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Telegram Rich Messages** (Bot API 10.1–10.3) — LLM answers, `/usage`, `/models` and admin user cards
   are sent with `sendRichMessage` as GitHub-flavoured markdown rendered by Telegram (headings, tables,
-  code fences, LaTeX, `<details>`; 32768-character limit, code-fence-aware splitting). In private chats
-  answers are streamed as ephemeral rich drafts (`sendRichMessageDraft`) with `<tg-thinking>` thinking/tool
+  code fences, LaTeX, `<details>`; 32768-character limit, code-fence-aware splitting). Streaming edits a rich message in place by default; with
+  `RICH_DRAFT_STREAMING = True` private chats stream ephemeral rich drafts (`sendRichMessageDraft`) with `<tg-thinking>` thinking/tool
   hints and the native Stop button (`can_stop` + `stopped_message_generation` handled by a middleware shim
-  until aiogram ships Bot API 10.3); groups keep an edited message with an inline Stop button. A rejected
+  until aiogram ships Bot API 10.3); groups always use the edited message with an inline Stop button. A rejected
   markup falls back to plain text. Design and phase notes: `specs/RICH_MESSAGES.md`.
 
 ### Changed

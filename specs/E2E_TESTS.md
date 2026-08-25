@@ -39,7 +39,7 @@ All outgoing Telegram calls funnel through the bot session's `make_request(bot, 
 
 Note: aiogram 3 sends replies as `reply_parameters: {message_id}` (not `reply_to_message_id`) — assert on that key when checking which message a reply targets.
 
-LLM answers are rich messages: the payload is `data['rich_message']['markdown']` of a `sendRichMessage` request (no `text`), streaming in private chats produces `sendRichMessageDraft` requests. `BotSpy` normalises both (`get_sent_messages()` = plain + rich, `get_drafts()`, `get_all_shown_texts()`). `MockedSession.fail_next(api_method, exc)` makes the next call of that method raise, e.g. to test the plain-text fallback.
+LLM answers are rich messages: the payload is `data['rich_message']['markdown']` of a `sendRichMessage` request (no `text`), streaming with `settings.RICH_DRAFT_STREAMING = True` (the `draft_streaming` fixture) produces `sendRichMessageDraft` requests in private chats. `BotSpy` normalises both (`get_sent_messages()` = plain + rich, `get_drafts()`, `get_all_shown_texts()`). `MockedSession.fail_next(api_method, exc)` makes the next call of that method raise, e.g. to test the plain-text fallback.
 
 ---
 
@@ -61,7 +61,7 @@ tests/
 │   ├── test_sub_dialogue.py        # Multi-message dialogue context (1 test)
 │   ├── test_function_calling.py    # Tool calling via SaveUserSettings (3 tests)
 │   ├── test_streaming.py           # Streaming responses and thinking blocks (3 tests)
-│   ├── test_rich_messages.py       # Rich answers, draft streaming, native Stop, fallbacks (12 tests)
+│   ├── test_rich_messages.py       # Rich answers, draft streaming, native Stop, fallbacks (13 tests)
 │   ├── test_context_management.py  # Reset, expiration, reply branching (3 tests)
 │   ├── test_settings.py            # Settings menu and toggles (3 tests)
 │   ├── test_forwarded_messages.py  # Forwarded message context (1 test)
@@ -193,7 +193,7 @@ Auto-incrementing counters for `update_id` and `message_id`.
 
 | Test | Scenario | Verifies |
 |------|----------|----------|
-| `test_streaming_sends_and_edits_message` | Streaming response with multiple chunks | sendRichMessageDraft previews + final sendRichMessage, no editMessageText in a private chat |
+| `test_streaming_sends_and_edits_message` | Streaming response with multiple chunks | sendRichMessage + editMessageText(rich_message) edits, no drafts by default |
 | `test_streaming_with_thinking_blocks` | Streaming with `<think>` tags | Thinking emoji shown during thinking, final content visible |
 
 **Pipeline covered:** `ChatGptManager.send_user_message_streaming -> ChatGPT.send_messages_streaming -> handle_response_generator (streaming edits, thinking parsing)`

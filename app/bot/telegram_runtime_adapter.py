@@ -6,6 +6,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+import settings
 from app.bot.cancellation_manager import get_cancel_button
 from app.bot.rich_messages import RICH_MESSAGE_LENGTH_CUTOFF, send_rich_message, split_markdown
 from app.bot.service_message import ChatServiceMessage, DraftStream, ServiceState
@@ -61,12 +62,13 @@ class TelegramRuntimeAdapter:
         return InlineKeyboardBuilder().add(get_cancel_button()).as_markup()
 
     def _new_live_output(self):
-        """Draft stream in private chats (native Stop button); a real service message elsewhere.
+        """Draft stream in private chats when settings.RICH_DRAFT_STREAMING is on (native Stop button);
+        otherwise a real service message edited in place.
 
         Each agent phase gets its own draft id so consecutive answers animate independently.
         """
         self._phase += 1
-        if self.message.chat.type == ChatType.PRIVATE:
+        if settings.RICH_DRAFT_STREAMING and self.message.chat.type == ChatType.PRIVATE:
             return DraftStream(self.message, draft_id=self.message.message_id * 100 + self._phase)
         return ChatServiceMessage(self.message, stream_markup=self._stream_markup())
 

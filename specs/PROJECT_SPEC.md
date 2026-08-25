@@ -209,12 +209,13 @@ Implemented in `TelegramRuntimeAdapter.handle_turn()` (consumes `StreamingConten
 
 Answers are Telegram **Rich Messages** (`app/bot/rich_messages.py`, see `RICH_MESSAGES.md`): `sendRichMessage` with `InputRichMessage(markdown=...)`, GFM markdown rendered by Telegram, plain-text fallback if the markup is rejected.
 
-1. **Private chats** — partial content is streamed as an ephemeral rich draft (`sendRichMessageDraft`, `DraftStream`): the client animates it, thinking and tool hints are `<tg-thinking>` blocks, the native Stop button (`can_stop`) is shown; the finished answer is sent as a fresh `sendRichMessage`. A keepalive re-sends the draft every 20 s during long tool calls. If a draft call fails the turn continues as in groups
-2. **Groups** — a real message is created with an inline Stop button and edited in place (`editMessageText(rich_message=...)`, `ChatServiceMessage`); the finished answer is edited into it
-3. **Throttling** — updates no more often than once every **1 second** (`WAIT_BETWEEN_MESSAGE_UPDATES`)
-4. **Length limit** — when exceeding **30000 characters** (`RICH_MESSAGE_LENGTH_CUTOFF`), updates stop and "⏳..." is appended; the final answer is split code-fence-aware (`split_markdown`)
-5. **Cancellation** — inline Stop callback or the Bot API 10.3 `stopped_message_generation` update (`StoppedGenerationMiddleware`): stream is closed, 20 tokens added to usage
-6. **Skip small updates** — content under 50 characters is not displayed
+1. **Default (`RICH_DRAFT_STREAMING = False`)** — a real message is created with an inline Stop button and edited in place (`editMessageText(rich_message=...)`, `ChatServiceMessage`); the finished answer is edited into it
+2. **Private chats with `RICH_DRAFT_STREAMING = True`** — partial content is streamed as an ephemeral rich draft (`sendRichMessageDraft`, `DraftStream`): the client animates it, thinking and tool hints are `<tg-thinking>` blocks, the native Stop button (`can_stop`) is shown; the finished answer is sent as a fresh `sendRichMessage`. A keepalive re-sends the draft every 20 s during long tool calls. If a draft call fails the turn continues as in groups
+3. **Groups** — always the edit path
+4. **Throttling** — updates no more often than once every **1 second** (`WAIT_BETWEEN_MESSAGE_UPDATES`)
+5. **Length limit** — when exceeding **30000 characters** (`RICH_MESSAGE_LENGTH_CUTOFF`), updates stop and "⏳..." is appended; the final answer is split code-fence-aware (`split_markdown`)
+6. **Cancellation** — inline Stop callback or the Bot API 10.3 `stopped_message_generation` update (`StoppedGenerationMiddleware`): stream is closed, 20 tokens added to usage
+7. **Skip small updates** — content under 50 characters is not displayed
 
 ### 3.3 Context Window Management
 
