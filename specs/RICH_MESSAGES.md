@@ -1,6 +1,6 @@
 # Rich Messages Migration (Telegram Bot API 10.1–10.3)
 
-Status: **Phases 0–5 done** — rich answers, draft streaming with the native Stop button, rich menus. Phase 6 (docs, PR) pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
+Status: **all phases done** — rich answers, draft streaming with the native Stop button, rich menus, docs. Manual smoke (§7) pending on the user's side; 161 tests green. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
 
 ## 1. Why
 
@@ -87,7 +87,7 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 | 3 | Streaming via `DraftStream` with `ChatServiceMessage` fallback (rich edits) | ✅ |
 | 4 | Native Stop: `can_stop`, `StoppedGenerationMiddleware`, `allowed_updates` | ✅ |
 | 5 | Menus (`/usage`, `/models`, admin cards, settings), cleanup | ✅ |
-| 6 | Docs (`CLAUDE.md`, `PROJECT_SPEC.md`, `RUNTIME_ARCHITECTURE.md`, `E2E_TESTS.md`, `CHANGELOG.md`), PR | ⬜ |
+| 6 | Docs (`CLAUDE.md`, `PROJECT_SPEC.md`, `RUNTIME_ARCHITECTURE.md`, `E2E_TESTS.md`, `CHANGELOG.md`), PR | ✅ |
 
 ### Phase 1 result
 
@@ -109,7 +109,7 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 
 `/usage` and `/models` (send + callback edit) use `**bold**` rich markdown via `send_rich_message` / `edit_rich_message_in_chat`; `/models` lists are real `- ` lists. Admin user cards use `escape_rich_markdown` + `send_rich_message_to_chat` / `edit_rich_message_in_chat`. `settings_menu` no longer passes a parse mode. `app/bot/*` has no `ParseMode` left; `utils.send_telegram_message` is plain-text only (no `parse_mode` parameter), `utils.edit_telegram_message`, `escape_tg_markdown` and the dead `detect_and_extract_code`/`CodeFragment` were removed. Tests in `test_commands.py::TestRichMenus`.
 
-## 6. Tests to add (`tests/e2e/test_rich_messages.py` unless noted)
+## 6. Tests (`tests/e2e/test_rich_messages.py` unless noted)
 
 - Final answer is sent as `sendRichMessage` with `rich_message.markdown == content`; plain fallback when the mocked session raises `can't parse …`.
 - Splitter: parts ≤ cutoff, fence closed/reopened across a boundary, language preserved (unit test).

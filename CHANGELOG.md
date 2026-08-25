@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Telegram Rich Messages** (Bot API 10.1–10.3) — LLM answers, `/usage`, `/models` and admin user cards
+  are sent with `sendRichMessage` as GitHub-flavoured markdown rendered by Telegram (headings, tables,
+  code fences, LaTeX, `<details>`; 32768-character limit, code-fence-aware splitting). In private chats
+  answers are streamed as ephemeral rich drafts (`sendRichMessageDraft`) with `<tg-thinking>` thinking/tool
+  hints and the native Stop button (`can_stop` + `stopped_message_generation` handled by a middleware shim
+  until aiogram ships Bot API 10.3); groups keep an edited message with an inline Stop button. A rejected
+  markup falls back to plain text. Design and phase notes: `specs/RICH_MESSAGES.md`.
+
 ### Changed
+
+- Legacy `parse_mode=Markdown` sending (and its `can't parse entities` retry) was removed together with
+  `escape_tg_markdown`; `send_telegram_message` is plain-text only.
 
 - **Dependencies modernised** — `aiogram` 2.25 → 3.30, `openai` 1.35 → 3.3, `anthropic` 0.29 → 1.0,
   `mcp` 1.13 → 2.1 (new `Client` API, `httpx2` transport), `pytest` 9 / `pytest-asyncio` 1.4, and

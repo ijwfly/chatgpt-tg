@@ -161,10 +161,11 @@ User sends message(s) to Telegram
 ┌──────────────────────────────────────────────┐
 │  TelegramRuntimeAdapter.handle_turn()         │
 │  Consumes RuntimeEvent stream from runtime:   │
-│  • StreamingContentDelta → throttled editing, │
-│    thinking emoji, cancel button              │
-│  • FinalResponse → split by 4080 chars,      │
-│    send/edit final msg, save to context       │
+│  • StreamingContentDelta → rich drafts (DM)  │
+│    or throttled edits (groups), thinking,     │
+│    Stop button                                │
+│  • FinalResponse → split by 30000 chars,     │
+│    sendRichMessage, save to context           │
 │  • FunctionCallCompleted → verbose display    │
 └──────────────────────┬───────────────────────┘
                        ▼
@@ -206,11 +207,14 @@ AgentRuntime._agent_loop():
 
 Implemented in `TelegramRuntimeAdapter.handle_turn()` (consumes `StreamingContentDelta` events from the runtime):
 
-1. **First chunk** — a new Telegram message is created with an inline Cancel button
-2. **Subsequent chunks** — message updates no more often than once every **2 seconds** (`WAIT_BETWEEN_MESSAGE_UPDATES`)
-3. **Length limit** — when exceeding **4080 characters**, updates stop and "⏳..." is appended
-4. **Cancellation** — on Cancel press: stream is closed, 20 tokens added to usage
-5. **Skip small updates** — content under 50 characters is not displayed
+Answers are Telegram **Rich Messages** (`app/bot/rich_messages.py`, see `RICH_MESSAGES.md`): `sendRichMessage` with `InputRichMessage(markdown=...)`, GFM markdown rendered by Telegram, plain-text fallback if the markup is rejected.
+
+1. **Private chats** — partial content is streamed as an ephemeral rich draft (`sendRichMessageDraft`, `DraftStream`): the client animates it, thinking and tool hints are `<tg-thinking>` blocks, the native Stop button (`can_stop`) is shown; the finished answer is sent as a fresh `sendRichMessage`. A keepalive re-sends the draft every 20 s during long tool calls. If a draft call fails the turn continues as in groups
+2. **Groups** — a real message is created with an inline Stop button and edited in place (`editMessageText(rich_message=...)`, `ChatServiceMessage`); the finished answer is edited into it
+3. **Throttling** — updates no more often than once every **1 second** (`WAIT_BETWEEN_MESSAGE_UPDATES`)
+4. **Length limit** — when exceeding **30000 characters** (`RICH_MESSAGE_LENGTH_CUTOFF`), updates stop and "⏳..." is appended; the final answer is split code-fence-aware (`split_markdown`)
+5. **Cancellation** — inline Stop callback or the Bot API 10.3 `stopped_message_generation` update (`StoppedGenerationMiddleware`): stream is closed, 20 tokens added to usage
+6. **Skip small updates** — content under 50 characters is not displayed
 
 ### 3.3 Context Window Management
 
