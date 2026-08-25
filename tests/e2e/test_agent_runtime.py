@@ -17,7 +17,7 @@ async def _create_agent_user(telegram_bot, dp, user_id):
     LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
     update = make_text_message('Hi', user_id=user_id)
-    await dp.process_update(update)
+    await dp.feed_update(telegram_bot.bot, update)
     await asyncio.sleep(0.1)
 
     user = await telegram_bot.db.get_user(user_id)
@@ -42,7 +42,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Tell me something', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.2)
 
         spy.assert_sent_text_contains("I'm the agent runtime responding.")
@@ -75,7 +75,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Create a plan for me', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Plan created with 3 steps.")
@@ -130,7 +130,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Work on the plan', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Step 1 completed!")
@@ -168,7 +168,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Make a plan', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         # Turn 2: get plan (should load from DB)
@@ -187,7 +187,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('What is the plan?', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("The plan has 2 steps.")
@@ -238,7 +238,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Delete my plan', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Plan deleted.")
@@ -269,7 +269,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Check tasks', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("No tasks running.")
@@ -316,7 +316,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Do both things', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Plan created and tasks checked.")
@@ -367,7 +367,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Do everything', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("All done!")
@@ -432,7 +432,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Do 3 things in parallel', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(1.0)
 
         # Verify all 3 SpawnTask tool results contain "started" (not "Error")
@@ -478,7 +478,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Analyze the quarterly numbers', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(1.0)
 
         spy.assert_sent_text_contains("Task finished.")
@@ -531,7 +531,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Run a stalled task', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(2.0)
 
         spy.assert_sent_text_contains("Handled the timeout.")
@@ -582,7 +582,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Run a deadline task', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(1.0)
 
         spy.assert_sent_text_contains("Deadline handled.")
@@ -632,7 +632,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Plan and execute', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         # Plan message should have been sent (sendMessage with plan text)
@@ -658,7 +658,7 @@ class TestAgentRuntime:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Verify default is off
@@ -668,7 +668,7 @@ class TestAgentRuntime:
         # Toggle via settings
         from tests.helpers.telegram_factory import make_callback_query
         update_cb = make_callback_query('settings.agent_mode', message_id=9999, user_id=user_id)
-        await dp.process_update(update_cb)
+        await dp.feed_update(mock_bot, update_cb)
         await asyncio.sleep(0.1)
 
         user = await telegram_bot.db.get_user(user_id)

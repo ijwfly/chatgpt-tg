@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Optional
 
 from aiogram.types import Message
-from aiogram.utils.exceptions import BadRequest
+from aiogram.exceptions import TelegramBadRequest
 
 from app.bot.utils import send_telegram_message, edit_telegram_message
 
@@ -26,7 +26,7 @@ class ChatServiceMessage:
 
     Provides set_text/finalize/clear helpers that prefer in-place edits
     over send/delete cycles, with deduplication, optional throttling, and
-    BadRequest recovery.
+    TelegramBadRequest recovery.
     """
 
     def __init__(self, message: Message):
@@ -78,7 +78,7 @@ class ChatServiceMessage:
                 self.message_id = response.message_id
                 self.current_text = text
                 self.last_send_time = datetime.now()
-            except BadRequest as e:
+            except TelegramBadRequest as e:
                 logger.warning("Failed to send service message: %s", e)
         else:
             try:
@@ -88,7 +88,7 @@ class ChatServiceMessage:
                 )
                 self.current_text = text
                 self.last_send_time = datetime.now()
-            except BadRequest as e:
+            except TelegramBadRequest as e:
                 logger.warning(
                     "Failed to edit service message %s: %s; invalidating",
                     self.message_id, e,
@@ -119,7 +119,7 @@ class ChatServiceMessage:
                     self.message, text, parse_mode=parse_mode, reply_markup=reply_markup,
                 )
                 self.message_id = response.message_id
-            except BadRequest as e:
+            except TelegramBadRequest as e:
                 logger.warning("Failed to send finalized service message: %s", e)
                 return None
         else:
@@ -128,7 +128,7 @@ class ChatServiceMessage:
                     self.message, text, self.message_id,
                     parse_mode=parse_mode, reply_markup=reply_markup,
                 )
-            except BadRequest as e:
+            except TelegramBadRequest as e:
                 logger.warning(
                     "Failed to edit service message %s on finalize: %s; sending fresh",
                     self.message_id, e,
@@ -139,7 +139,7 @@ class ChatServiceMessage:
                         self.message, text, parse_mode=parse_mode, reply_markup=reply_markup,
                     )
                     self.message_id = response.message_id
-                except BadRequest as e2:
+                except TelegramBadRequest as e2:
                     logger.warning("Failed to send replacement finalized message: %s", e2)
                     return None
 
@@ -156,8 +156,8 @@ class ChatServiceMessage:
         if self.message_id is None or self.detached:
             return
         try:
-            await self.message.bot.delete_message(self.chat_id, self.message_id)
-        except BadRequest as e:
+            await self.message.bot.delete_message(chat_id=self.chat_id, message_id=self.message_id)
+        except TelegramBadRequest as e:
             logger.warning("Failed to delete service message %s: %s", self.message_id, e)
         self.message_id = None
         self.current_text = None

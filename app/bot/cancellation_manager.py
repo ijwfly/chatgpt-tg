@@ -1,4 +1,4 @@
-from aiogram import types
+from aiogram import F, types
 
 
 CANCELLATION_PREFIX = 'cancel'
@@ -24,7 +24,7 @@ class CancellationManager:
     """
     def __init__(self, bot, dispatcher):
         self._cancellation_tokens = {}
-        dispatcher.register_callback_query_handler(self.process_callback, lambda c: CANCELLATION_PREFIX in c.data)
+        dispatcher.callback_query.register(self.process_callback, F.data.contains(CANCELLATION_PREFIX))
         self.bot = bot
 
     async def process_callback(self, callback_query: types.CallbackQuery):
@@ -33,7 +33,7 @@ class CancellationManager:
         """
         chat_id = callback_query.from_user.id
         self.cancel(chat_id)
-        await self.bot.answer_callback_query(callback_query.id)
+        await callback_query.answer()
 
     def get_token(self, tg_user_id):
         """

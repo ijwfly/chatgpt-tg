@@ -16,7 +16,7 @@ async def _create_user_with_functions(telegram_bot, dp, user_id):
     LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
     update = make_text_message('Hi', user_id=user_id)
-    await dp.process_update(update)
+    await dp.feed_update(telegram_bot.bot, update)
     await asyncio.sleep(0.1)
 
     user = await telegram_bot.db.get_user(user_id)
@@ -77,7 +77,7 @@ class TestWebAgents:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('What is the latest Python version?', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.5)
 
         assert search_calls == ['latest Python version']
@@ -138,7 +138,7 @@ class TestWebAgents:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Summarize https://example.com', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.5)
 
         assert extract_calls == [['https://example.com']]
@@ -184,7 +184,7 @@ class TestWebAgents:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Search for anything', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.5)
 
         # The error reached the sub-agent LLM as a tool result string
@@ -238,7 +238,7 @@ class TestWebAgents:
         LLMClientFactory._model_clients['gpt-4.1-mini'] = sub_llm
 
         update = make_text_message('Search for anything', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.5)
 
         assert [call['model'] for call in sub_llm.calls] == ['gpt-4.1-mini', 'gpt-4.1-mini']
@@ -291,7 +291,7 @@ class TestWebAgents:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Search for anything', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.5)
 
         spy.assert_sent_text_contains("Here is your answer.")
@@ -349,7 +349,7 @@ class TestWebAgents:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Compare A and B', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.5)
 
         spy.assert_sent_text_contains("Comparison ready.")
@@ -407,7 +407,7 @@ class TestWebAgents:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Search for anything', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.5)
 
         spy.assert_sent_text_contains("Here is the answer.")

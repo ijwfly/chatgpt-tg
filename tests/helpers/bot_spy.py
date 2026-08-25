@@ -5,16 +5,11 @@ class BotSpy:
         self.mock_bot = mock_bot
 
     def get_all_calls(self):
-        return self.mock_bot.request.call_args_list
+        """All requests the bot made: list of (api_method, data) pairs recorded by the mocked session."""
+        return self.mock_bot.session.requests
 
     def get_calls_for_method(self, method_name):
-        results = []
-        for call in self.get_all_calls():
-            args, kwargs = call
-            # Bot.request(method, data) — method is first positional arg
-            if args and args[0] == method_name:
-                results.append(args[1] if len(args) > 1 else kwargs.get('data', {}))
-        return results
+        return [data for method, data in self.get_all_calls() if method == method_name]
 
     def get_sent_messages(self):
         return self.get_calls_for_method('sendMessage')

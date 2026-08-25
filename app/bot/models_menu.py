@@ -1,4 +1,6 @@
-from aiogram import Bot, types, Dispatcher
+from aiogram import Bot, types, Dispatcher, F
+from aiogram.enums import ParseMode
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.llm_models import get_models, get_model_by_name
 from app.storage.db import User, DB
@@ -14,10 +16,10 @@ class ModelsMenu:
         self.dispatcher = dispatcher
         self.db = db
         self.models = get_models()
-        self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: MODELS_PREFIX in c.data)
+        self.dispatcher.callback_query.register(self.process_callback, F.data.startswith(f'{MODELS_PREFIX}.'))
 
     async def send_menu(self, message: types.Message, user: User):
-        await message.answer(self.get_model_info(user), reply_markup=self.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN)
+        await message.answer(self.get_model_info(user), reply_markup=self.get_keyboard(user), parse_mode=ParseMode.MARKDOWN)
 
     @staticmethod
     def is_model_available_for_user(llm_model, user: User):
@@ -49,7 +51,7 @@ class ModelsMenu:
         return info
 
     def get_keyboard(self, user: User):
-        keyboard = types.InlineKeyboardMarkup()
+        keyboard = InlineKeyboardBuilder()
 
         for model_name, llm_model in self.models.items():
             if not self.is_model_available_for_user(llm_model, user):
@@ -59,8 +61,8 @@ class ModelsMenu:
                 model_readable_name = f'< {model_readable_name} >'
             keyboard.add(types.InlineKeyboardButton(text=model_readable_name, callback_data=f'{MODELS_PREFIX}.{model_name}'))
         keyboard.add(types.InlineKeyboardButton(text='Hide menu', callback_data=f'{MODELS_PREFIX}.{HIDE_COMMAND}'))
-
-        return keyboard
+        keyboard.adjust(1)
+        return keyboard.as_markup()
 
     def set_model(self, user: User, llm_model):
         if self.is_model_available_for_user(llm_model, user):
@@ -75,7 +77,7 @@ class ModelsMenu:
                 chat_id=callback_query.from_user.id,
                 message_id=callback_query.message.message_id
             )
-            await self.bot.answer_callback_query(callback_query.id)
+            await callback_query.answer()
         else:
             model_name = command
             user = await self.db.get_or_create_user(callback_query.from_user.id)
@@ -83,11 +85,11 @@ class ModelsMenu:
             user = self.set_model(user, llm_model)
             await self.db.update_user(user)
 
-            await self.bot.answer_callback_query(callback_query.id)
+            await callback_query.answer()
             await self.bot.edit_message_text(
                 text=self.get_model_info(user),
                 chat_id=callback_query.from_user.id,
                 message_id=callback_query.message.message_id,
                 reply_markup=self.get_keyboard(user),
-                parse_mode=types.ParseMode.MARKDOWN
+                parse_mode=ParseMode.MARKDOWN
             )

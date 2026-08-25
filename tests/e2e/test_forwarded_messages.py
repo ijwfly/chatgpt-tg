@@ -23,7 +23,7 @@ class TestForwardedMessages:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Send forwarded message as context, then a prompt
@@ -40,9 +40,9 @@ class TestForwardedMessages:
         # Regular prompt message
         prompt_update = make_text_message('Summarize the forwarded message', user_id=user_id)
 
-        await dp.process_update(fwd_update)
+        await dp.feed_update(mock_bot, fwd_update)
         await asyncio.sleep(0.05)
-        await dp.process_update(prompt_update)
+        await dp.feed_update(mock_bot, prompt_update)
         await asyncio.sleep(0.2)
 
         # LLM should receive context containing the forwarded content and sender
@@ -68,7 +68,7 @@ class TestForwardedMessages:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Switch to a model with image processing capability
@@ -90,9 +90,9 @@ class TestForwardedMessages:
         # Regular prompt message
         prompt_update = make_text_message('What is on the photo?', user_id=user_id)
 
-        await dp.process_update(fwd_update)
+        await dp.feed_update(mock_bot, fwd_update)
         await asyncio.sleep(0.05)
-        await dp.process_update(prompt_update)
+        await dp.feed_update(mock_bot, prompt_update)
         await asyncio.sleep(0.2)
 
         # LLM should receive context containing the forwarded photo as an image part

@@ -24,7 +24,7 @@ class TestErrorHandling:
 
         update = make_text_message('Hello', user_id=user_id)
         with pytest.raises(ValueError):
-            await dp.process_update(update)
+            await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         spy.assert_sent_text_contains("Something went wrong")

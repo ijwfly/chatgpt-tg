@@ -24,7 +24,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Enable streaming
@@ -40,7 +40,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Tell me something', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         # Streaming should produce both sendMessage and editMessageText calls
@@ -67,7 +67,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Enable streaming
@@ -89,7 +89,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Think about this', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         all_texts = spy.get_all_sent_texts() + spy.get_all_edited_texts()
@@ -113,7 +113,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Enable streaming + functions
@@ -139,7 +139,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Save my name as StreamTest', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Settings saved!")

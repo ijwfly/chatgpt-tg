@@ -1,8 +1,10 @@
 from contextlib import suppress
 from typing import Callable
 
-from aiogram.types import Message, ParseMode, InlineKeyboardMarkup
-from aiogram.utils.exceptions import BadRequest
+from aiogram.enums import ChatAction, ParseMode
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.bot.cancellation_manager import get_cancel_button
 from app.bot.service_message import ChatServiceMessage, ServiceState
@@ -62,14 +64,13 @@ class TelegramRuntimeAdapter:
         state = ServiceState.IDLE
         typing_action_sent = False
 
-        keyboard = InlineKeyboardMarkup()
-        keyboard.add(get_cancel_button())
+        keyboard = InlineKeyboardBuilder().add(get_cancel_button()).as_markup()
 
         async def ensure_typing_action():
             nonlocal typing_action_sent
             if not typing_action_sent and service.is_attached:
-                with suppress(BadRequest):
-                    await self.message.bot.send_chat_action(service.chat_id, 'typing')
+                with suppress(TelegramBadRequest):
+                    await self.message.bot.send_chat_action(chat_id=service.chat_id, action=ChatAction.TYPING)
                 typing_action_sent = True
 
         try:
@@ -155,7 +156,7 @@ class TelegramRuntimeAdapter:
 
                 elif isinstance(event, FunctionCallCompleted):
                     if self.user.function_call_verbose:
-                        with suppress(BadRequest):
+                        with suppress(TelegramBadRequest):
                             text = (
                                 f'Function call: {event.function_name}({event.function_args})'
                                 f'\n\nResponse: {event.result}'

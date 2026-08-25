@@ -22,7 +22,7 @@ class TestCommands:
         spy = BotSpy(mock_bot)
 
         update = make_command_message('reset')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         # /reset responds with emoji acknowledgment
@@ -34,7 +34,7 @@ class TestCommands:
         spy = BotSpy(mock_bot)
 
         update = make_command_message('usage')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         # /usage responds with "Total:" in the message
@@ -49,13 +49,13 @@ class TestCommands:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Now send /usage
         spy = BotSpy(mock_bot)
         update = make_command_message('usage')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         spy.assert_sent_text_contains('$')
@@ -72,7 +72,7 @@ class TestCommands:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Insert a fake completion_usage row for a removed model
@@ -89,7 +89,7 @@ class TestCommands:
         # Now send /usage — should not crash and should include the removed model's price
         spy = BotSpy(mock_bot)
         update = make_command_message('usage')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         spy.assert_sent_text_contains('gpt-removed')

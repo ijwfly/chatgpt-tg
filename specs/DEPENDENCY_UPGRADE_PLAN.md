@@ -1,6 +1,6 @@
 # Dependency Upgrade Plan: aiogram 3 + current LLM SDKs
 
-Status: **in progress** — Phase 0 done (`requirements.txt` restructured, 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
+Status: **in progress** — Phases 0–1 done (requirements restructured, aiogram 3.30 migrated, 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
 
 ## 1. Why this document exists
 
@@ -77,7 +77,7 @@ Verify: fresh venv install, `pip check`, `bash scripts/test.sh`, `docker-compose
 
 Result: fresh py3.11 venv installs cleanly, `pip check` clean, 136 tests pass. Transitive drift observed: aiohttp 3.8.4→3.8.6, pydantic 2.11.7→2.13.4, magic-filter 1.0.9→1.0.12.
 
-## 5. Phase 1 — aiogram 2.25 → 3.30
+## 5. Phase 1 — aiogram 2.25 → 3.30 — ✅ done
 
 Bump `aiogram==3.30.0`. Everything below is in `app/bot/` (14 files), two entrypoints, two scripts, and `tests/`. `app/runtime/`, `app/context/`, `app/functions/`, `app/openai_helpers/`, `app/storage/` are aiogram-free and untouched.
 
@@ -155,6 +155,14 @@ Register as `dp.message.middleware(UserMiddleware(db))` (inner middleware, messa
 Update `CLAUDE.md` (Libraries: aiogram 3.x; mocking description), `specs/PROJECT_SPEC.md:15`, `specs/E2E_TESTS.md:22,41` (mocked session + `feed_update` instead of `Bot.request` + ContextVar patch).
 
 Verify: tests; live smoke (§11). Commit: `Migrate to aiogram 3`.
+
+Result / deviations from the plan above:
+- `message.reply()` in v3 sends `reply_parameters: {message_id}` instead of `reply_to_message_id`; one spy assertion updated.
+- Tests that call `process_batch` directly must mount messages with `message.as_(mock_bot)` (no dispatcher → no bot binding).
+- Forwards: code now reads `forward_origin` (`MessageOriginUser/HiddenUser/Chat/Channel`) with legacy-field fallback; the test factory emits `forward_origin` (Bot API 7 no longer sends `forward_from*`).
+- `BotCommand` entries lost their leading `/` (v3 accepts both, the slash-less form is canonical).
+- `MockedSession.stream_content` is a stub; `bot.download_file` is mocked per test as before.
+- Live Telegram smoke (§11) still to be run by hand.
 
 ## 6. Phase 2 — pydantic v1-style cleanup
 

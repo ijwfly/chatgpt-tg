@@ -8,7 +8,8 @@ from contextlib import suppress
 from typing import List, Optional
 
 from aiogram import types
-from aiogram.utils.exceptions import BadRequest
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import MessageOriginChannel, MessageOriginChat, MessageOriginHiddenUser, MessageOriginUser
 from pydub import AudioSegment
 
 import settings
@@ -198,7 +199,7 @@ class BatchedInputHandler:
                 caption=caption,
             )
             # a reply to the confirmation must lead to the same dialog branch as the document itself
-            with suppress(BadRequest):
+            with suppress(TelegramBadRequest):
                 response = await message.reply(f'Saved to agent workspace: {safe_name}')
                 sandbox_file.alias_tg_message_ids.append(response.message_id)
             user_input.sandbox_files.append(sandbox_file)
@@ -286,7 +287,7 @@ class BatchedInputHandler:
         transcriptions = []
         for chunk in speech_text_chunks:
             tg_message_id = -1
-            with suppress(BadRequest):
+            with suppress(TelegramBadRequest):
                 response = await message.reply(chunk)
                 tg_message_id = response.message_id
             transcriptions.append(VoiceTranscription(
@@ -306,21 +307,21 @@ class BatchedInputHandler:
         Handles text message. If message is forward, adds it to context with additional info. If message is not forward,
         adds it to context.
         """
-        if message.caption and not message.text:
-            message.text = message.caption
+        # aiogram 3 models are frozen: a caption is used as the text without mutating the message
+        text = message.text if message.text else message.caption
 
-        if message.text is None and message.photo is None:
+        if text is None and message.photo is None:
             return
 
         if message_is_forward(message) and not user.forward_as_prompt:
-            BatchedInputHandler._handle_forwarded_message(message, user, user_input)
+            BatchedInputHandler._handle_forwarded_message(message, user, user_input, text)
             return
 
         if message.photo:
             # largest photo
             photo = message.photo[-1]
             user_input.text_inputs.append(TextInput(
-                text=message.text,
+                text=text,
                 tg_message_id=message.message_id,
                 images=[ImageInput(
                     file_id=photo.file_id,
@@ -328,28 +329,39 @@ class BatchedInputHandler:
                     height=photo.height,
                 )],
             ))
-        elif message.text:
+        elif text:
             user_input.text_inputs.append(TextInput(
-                text=message.text,
+                text=text,
                 tg_message_id=message.message_id,
             ))
 
     @staticmethod
-    def _handle_forwarded_message(message: types.Message, user: User, user_input: UserInput):
+    def _forward_author(message: types.Message) -> Optional[str]:
+        """Human-readable author of a forwarded message (Bot API 7 forward_origin with legacy-field fallback)."""
+        origin = message.forward_origin
+        if isinstance(origin, MessageOriginUser):
+            return get_username(origin.sender_user)
+        if isinstance(origin, MessageOriginHiddenUser):
+            return origin.sender_user_name
+        if isinstance(origin, (MessageOriginChat, MessageOriginChannel)):
+            chat = origin.sender_chat if isinstance(origin, MessageOriginChat) else origin.chat
+            return f'Chat name "{chat.full_name or chat.title}"'
+        if message.forward_from:
+            return get_username(message.forward_from)
+        if message.forward_sender_name:
+            return message.forward_sender_name
+        if message.forward_from_chat:
+            return f'Chat name "{message.forward_from_chat.full_name or message.forward_from_chat.title}"'
+        return None
+
+    @staticmethod
+    def _handle_forwarded_message(message: types.Message, user: User, user_input: UserInput, text: Optional[str]):
         """
         Handles forwarded message. Adds it to context with additional info.
         """
-        if message.forward_from:
-            username = get_username(message.forward_from)
-        elif message.forward_sender_name:
-            username = message.forward_sender_name
-        elif message.forward_from_chat:
-            username = message.forward_from_chat.full_name or message.forward_from_chat.title
-            username = f'Chat name "{username}"'
-        else:
-            username = None
-        if message.text:
-            forwarded_text = f'{username}:\n{message.text}' if username else message.text
+        username = BatchedInputHandler._forward_author(message)
+        if text:
+            forwarded_text = f'{username}:\n{text}' if username else text
         else:
             forwarded_text = f'{username}:' if username else None
 

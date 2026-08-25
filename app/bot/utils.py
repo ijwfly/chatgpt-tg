@@ -11,7 +11,9 @@ from contextlib import asynccontextmanager
 import httpx
 import requests
 from aiogram import types
-from aiogram.utils.exceptions import CantParseEntities
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import BufferedInputFile
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from async_lru import alru_cache
 
 import settings
@@ -47,7 +49,7 @@ class TypingWorker:
     async def start_typing(self):
         async def typing_worker():
             while self.typing_queries_count < TYPING_QUERIES_LIMIT:
-                await self.bot.send_chat_action(self.chat_id, self.action)
+                await self.bot.send_chat_action(chat_id=self.chat_id, action=self.action)
                 await asyncio.sleep(TYPING_DELAY)
                 self.typing_queries_count += 1
 
@@ -118,13 +120,21 @@ def get_username(user: types.User):
 
 
 def message_is_forward(message: types.Message):
-    return message.forward_from or message.forward_from_chat or message.forward_sender_name
+    # Bot API 7+ reports forwards via forward_origin; the legacy fields are kept for old updates
+    return bool(
+        message.forward_origin or message.forward_from or message.forward_from_chat or message.forward_sender_name
+    )
+
+
+def is_parse_error(error: TelegramBadRequest) -> bool:
+    """aiogram 3 has no dedicated CantParseEntities exception; it is a TelegramBadRequest with this message."""
+    return "can't parse entities" in str(error.message).lower()
 
 
 def get_hide_button():
-    keyboard = types.InlineKeyboardMarkup(1)
+    keyboard = InlineKeyboardBuilder()
     keyboard.add(types.InlineKeyboardButton(text='Hide', callback_data='hide'))
-    return keyboard
+    return keyboard.as_markup()
 
 
 def escape_tg_markdown(text):
@@ -140,18 +150,26 @@ async def send_telegram_message(message: types.Message, text: str, parse_mode=No
 
     try:
         return await send_message(text, parse_mode=parse_mode, reply_markup=reply_markup)
-    except CantParseEntities:
+    except TelegramBadRequest as e:
+        if not is_parse_error(e):
+            raise
         # try to send message without parse_mode once
-        return await send_message(text, reply_markup=reply_markup)
+        return await send_message(text, parse_mode=None, reply_markup=reply_markup)
 
 
 async def edit_telegram_message(message: types.Message, text: str, message_id, parse_mode=None, reply_markup=None):
     chat_id = message.chat.id
     try:
-        return await message.bot.edit_message_text(text, chat_id, message_id, parse_mode=parse_mode, reply_markup=reply_markup)
-    except CantParseEntities:
+        return await message.bot.edit_message_text(
+            text=text, chat_id=chat_id, message_id=message_id, parse_mode=parse_mode, reply_markup=reply_markup,
+        )
+    except TelegramBadRequest as e:
+        if not is_parse_error(e):
+            raise
         # try to edit message without parse_mode once
-        return await message.bot.edit_message_text(text, chat_id, message_id, reply_markup=reply_markup)
+        return await message.bot.edit_message_text(
+            text=text, chat_id=chat_id, message_id=message_id, parse_mode=None, reply_markup=reply_markup,
+        )
 
 
 async def send_photo(message: types.Message, photo_bytes, caption=None, reply_markup=None):
@@ -160,11 +178,12 @@ async def send_photo(message: types.Message, photo_bytes, caption=None, reply_ma
     else:
         send_message = message.reply_photo
 
-    return await send_message(photo_bytes, caption=caption, reply_markup=reply_markup)
+    photo = BufferedInputFile(photo_bytes, filename='image.png')
+    return await send_message(photo, caption=caption, reply_markup=reply_markup)
 
 
 async def send_document(message: types.Message, document_bytes, filename, caption=None):
-    document = types.InputFile(io.BytesIO(document_bytes), filename=filename)
+    document = BufferedInputFile(document_bytes, filename=filename)
     if message.reply_to_message is None:
         send_message = message.answer_document
     else:

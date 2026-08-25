@@ -18,7 +18,7 @@ class TestSettings:
         user_id = 77770
 
         update = make_command_message('settings', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         spy.assert_sent_text_contains("Settings:")
@@ -36,7 +36,7 @@ class TestSettings:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Check initial value
@@ -45,7 +45,7 @@ class TestSettings:
 
         # Send /settings to get the settings message
         update_settings = make_command_message('settings', user_id=user_id)
-        await dp.process_update(update_settings)
+        await dp.feed_update(mock_bot, update_settings)
         await asyncio.sleep(0.05)
 
         # Get the message_id from the settings sendMessage call
@@ -92,7 +92,7 @@ class TestSettings:
             message_id=callback_msg_id,
             user_id=user_id,
         )
-        await dp.process_update(update_callback)
+        await dp.feed_update(mock_bot, update_callback)
         await asyncio.sleep(0.05)
 
         # Verify streaming_answers was toggled
@@ -115,7 +115,7 @@ class TestSettings:
             message_id=callback_msg_id,
             user_id=user_id,
         )
-        await dp.process_update(update_callback)
+        await dp.feed_update(mock_bot, update_callback)
         await asyncio.sleep(0.05)
 
         # Verify deleteMessage was called

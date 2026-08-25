@@ -15,7 +15,7 @@ bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 @app.get("/{file_id}_{tokens}.jpg")
 async def get_file(file_id: str, tokens: str):
     file_info = await bot.get_file(file_id)
-    file_url = bot.get_file_url(file_info.file_path)
+    file_url = bot.session.api.file_url(bot.token, file_info.file_path)
 
     async def stream_response():
         async with httpx.AsyncClient() as client:

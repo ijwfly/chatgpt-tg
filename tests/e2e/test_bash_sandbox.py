@@ -35,7 +35,7 @@ async def _create_agent_user(telegram_bot, dp, user_id):
     LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
     update = make_text_message('Hi', user_id=user_id)
-    await dp.process_update(update)
+    await dp.feed_update(telegram_bot.bot, update)
     await asyncio.sleep(0.1)
 
     user = await telegram_bot.db.get_user(user_id)
@@ -93,7 +93,7 @@ class TestBashSandboxTools:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Run echo', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Command executed.")
@@ -132,7 +132,7 @@ class TestBashSandboxTools:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Send me the report', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("File delivered.")
@@ -169,7 +169,7 @@ class TestBashSandboxTools:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Send missing file', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("The file does not exist.")
@@ -191,7 +191,7 @@ class TestSandboxDocumentUpload:
         _mock_document_download(mock_bot, b'csv,data\n1,2\n')
 
         update = make_document_message('my report.csv', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         # filename is sanitized (space -> underscore) and uploaded
@@ -205,7 +205,7 @@ class TestSandboxDocumentUpload:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update2 = make_text_message('What did I send you?', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         all_contents = [str(m.get('content', '')) for m in mock_llm.calls[0]['messages']]
@@ -221,7 +221,7 @@ class TestSandboxDocumentUpload:
         _mock_document_download(mock_bot, b'pdf-bytes')
 
         update = make_document_message('Собеседование CTO (финал).pdf', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         assert 'Собеседование_CTO__финал_.pdf' in FakeSandboxClient.uploads
@@ -237,12 +237,12 @@ class TestSandboxDocumentUpload:
         _mock_document_download(mock_bot, b'first')
 
         update = make_document_message('data.txt', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         _mock_document_download(mock_bot, b'second')
         update2 = make_document_message('data.txt', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         assert FakeSandboxClient.uploads['data.txt'] == b'first'
@@ -260,12 +260,12 @@ class TestSandboxDocumentUpload:
         mock_llm.add_response("Hello!")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         _mock_document_download(mock_bot)
         update2 = make_document_message('doc.pdf', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains('Documents are not supported')
@@ -285,7 +285,7 @@ class TestSandboxDocumentUpload:
 
         with patch.object(FakeSandboxClient, 'upload_file', failing_upload):
             update = make_document_message('doc.txt', user_id=user_id)
-            await dp.process_update(update)
+            await dp.feed_update(mock_bot, update)
             await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains('Failed to save document to agent workspace')
@@ -304,7 +304,7 @@ class TestFileMessageBranching:
         _mock_document_download(mock_bot)
 
         update = make_document_message('data.csv', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         confirmation_id = spy.get_message_id_of_sent_text('Saved to agent workspace')
@@ -329,10 +329,10 @@ class TestFileMessageBranching:
         mock_llm = MockLLMClient()
         mock_llm.add_response("Sure.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
-        await dp.process_update(make_text_message('Remember the number 42', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('Remember the number 42', user_id=user_id))
         await asyncio.sleep(0.2)
 
-        await dp.process_update(make_document_message('report.csv', user_id=user_id))
+        await dp.feed_update(mock_bot, make_document_message('report.csv', user_id=user_id))
         await asyncio.sleep(0.3)
         confirmation_id = spy.get_message_id_of_sent_text('Saved to agent workspace')
 
@@ -340,13 +340,13 @@ class TestFileMessageBranching:
         mock_llm2 = MockLLMClient()
         mock_llm2.add_response("Ok.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
-        await dp.process_update(make_text_message('Unrelated later message', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('Unrelated later message', user_id=user_id))
         await asyncio.sleep(0.2)
 
         mock_llm3 = MockLLMClient()
         mock_llm3.add_response("It is report.csv.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm3
-        await dp.process_update(make_text_message(
+        await dp.feed_update(mock_bot, make_text_message(
             'What file did I send?', user_id=user_id, reply_to_message_id=confirmation_id,
         ))
         await asyncio.sleep(0.3)
@@ -368,17 +368,17 @@ class TestFileMessageBranching:
         mock_llm = MockLLMClient()
         mock_llm.add_response("Sure.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
-        await dp.process_update(make_text_message('Remember the number 42', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('Remember the number 42', user_id=user_id))
         await asyncio.sleep(0.2)
 
         document_update = make_document_message('report.csv', user_id=user_id)
-        await dp.process_update(document_update)
+        await dp.feed_update(mock_bot, document_update)
         await asyncio.sleep(0.3)
 
         mock_llm2 = MockLLMClient()
         mock_llm2.add_response("It is report.csv.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
-        await dp.process_update(make_text_message(
+        await dp.feed_update(mock_bot, make_text_message(
             'What file did I send?', user_id=user_id,
             reply_to_message_id=document_update.message.message_id,
         ))
@@ -400,11 +400,11 @@ class TestFileMessageBranching:
         mock_llm = MockLLMClient()
         mock_llm.add_response("Answer A")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
-        await dp.process_update(make_text_message('Branch root message', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('Branch root message', user_id=user_id))
         await asyncio.sleep(0.2)
         answer_id = spy.get_message_id_of_sent_text('Answer A')
 
-        await dp.process_update(make_document_message(
+        await dp.feed_update(mock_bot, make_document_message(
             'attached.csv', user_id=user_id, reply_to_message_id=answer_id,
         ))
         await asyncio.sleep(0.3)
@@ -439,7 +439,7 @@ class TestFileMessageBranching:
         mock_llm.add_response(content="File delivered.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
-        await dp.process_update(make_text_message('Send me the report please', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('Send me the report please', user_id=user_id))
         await asyncio.sleep(0.4)
 
         document_message_id = spy.get_last_message_id_for_method('sendDocument')
@@ -451,7 +451,7 @@ class TestFileMessageBranching:
         mock_llm2.add_response(content="It has 2 columns.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
-        await dp.process_update(make_text_message(
+        await dp.feed_update(mock_bot, make_text_message(
             'What is inside this file?', user_id=user_id, reply_to_message_id=document_message_id,
         ))
         await asyncio.sleep(0.3)
@@ -477,7 +477,7 @@ class TestDocumentCaption:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_document_message('data.csv', user_id=user_id, caption='вот файл, разбери его')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.4)
 
         assert len(mock_llm.calls) == 1, 'a captioned document must be answered'
@@ -505,7 +505,7 @@ class TestDocumentCaption:
         mock_llm = MockLLMClient()
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
-        await dp.process_update(make_document_message('data.csv', user_id=user_id))
+        await dp.feed_update(mock_bot, make_document_message('data.csv', user_id=user_id))
         await asyncio.sleep(0.3)
 
         assert mock_llm.calls == [], 'a bare document must stay context-only'
@@ -520,7 +520,7 @@ class TestDocumentCaption:
         mock_llm = MockLLMClient()
         mock_llm.add_response("Hi")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
-        await dp.process_update(make_text_message('Hi', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('Hi', user_id=user_id))
         await asyncio.sleep(0.2)
 
         _mock_document_download(mock_bot)
@@ -528,7 +528,7 @@ class TestDocumentCaption:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update = make_document_message('doc.pdf', user_id=user_id, caption='analyze this')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains('Documents are not supported')
@@ -557,7 +557,7 @@ class TestDocumentCaption:
             raise SandboxError('Sandbox unavailable: connection refused')
 
         with patch.object(FakeSandboxClient, 'upload_file', failing_upload):
-            await dp.process_update(make_document_message(
+            await dp.feed_update(mock_bot, make_document_message(
                 'doc.txt', user_id=user_id, caption='what is in this file?',
             ))
             await asyncio.sleep(0.4)
@@ -584,7 +584,7 @@ class TestDocumentCaption:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_document_message('data.csv', user_id=user_id, caption='check this file')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.4)
 
         confirmation_id = spy.get_message_id_of_sent_text('Saved to agent workspace')
@@ -611,7 +611,7 @@ class TestDocumentCaption:
             'shared.csv', user_id=user_id, caption='forwarded caption text',
             forward_sender_name='Someone',
         )
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         assert mock_llm.calls == [], 'forwarded document must not trigger an answer'
@@ -633,7 +633,10 @@ class TestDocumentCaption:
 
         first = make_document_message('first.csv', user_id=user_id, caption='compare these two')
         second = make_document_message('second.csv', user_id=user_id)
-        await telegram_bot.batched_handler.process_batch([first.message, second.message], user)
+        # messages that bypass dp.feed_update must be mounted to the bot explicitly
+        await telegram_bot.batched_handler.process_batch(
+            [first.message.as_(mock_bot), second.message.as_(mock_bot)], user,
+        )
         await asyncio.sleep(0.3)
 
         assert len(mock_llm.calls) == 1

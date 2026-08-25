@@ -1,6 +1,6 @@
 # Direct dependencies only; transitive packages are resolved by pip.
 # See specs/DEPENDENCY_UPGRADE_PLAN.md for the upgrade roadmap.
-aiogram==2.25.1
+aiogram==3.30.0
 openai==1.35.8
 anthropic==0.29.0
 mcp==1.13.0

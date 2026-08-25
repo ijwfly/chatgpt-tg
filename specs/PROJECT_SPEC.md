@@ -12,7 +12,7 @@
 
 **Technology stack:**
 - Language: Python 3.11
-- Telegram framework: aiogram 2.25.1
+- Telegram framework: aiogram 3.30
 - LLM SDK: openai 1.35.8, anthropic 0.29.0, mcp 1.13.0
 - Database: PostgreSQL 15.3 (asyncpg 0.27.0)
 - Web: FastAPI 0.116.1 + uvicorn (image proxy)
@@ -868,7 +868,7 @@ chatgpt-tg/
 │   ├── helpers/
 │   │   ├── telegram_factory.py   # Factory for fake aiogram Update objects
 │   │   ├── mock_llm_client.py    # MockLLMClient with canned responses
-│   │   └── bot_spy.py            # Assertion helpers over Bot.request calls
+│   │   └── bot_spy.py            # Assertion helpers over captured Telegram requests
 │   └── e2e/
 │       ├── test_simple_message.py  # Text message → LLM response (4 tests)
 │       ├── test_commands.py        # /reset, /usage (2 tests)

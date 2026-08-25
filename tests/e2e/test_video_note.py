@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from aiogram import types
-from aiogram.utils.exceptions import BadRequest
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import SendMessage
 
 from app.openai_helpers.llm_client_factory import LLMClientFactory
 from tests.helpers.mock_llm_client import MockLLMClient
@@ -51,7 +52,7 @@ async def _create_user(telegram_bot, dp, user_id, voice_as_prompt):
     LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
     update = make_text_message('Hi', user_id=user_id)
-    await dp.process_update(update)
+    await dp.feed_update(telegram_bot.bot, update)
     await asyncio.sleep(0.1)
 
     user = await telegram_bot.db.get_user(user_id)
@@ -80,7 +81,7 @@ class TestVideoNoteTranscription:
                       AsyncMock(return_value='transcribed circle text')):
             mock_audioseg.from_file.return_value = _FakeAudio()
             update = make_video_note_message(user_id=user_id)
-            await dp.process_update(update)
+            await dp.feed_update(mock_bot, update)
             await asyncio.sleep(0.3)
 
         # transcription echoed back to the user
@@ -115,7 +116,7 @@ class TestVideoNoteTranscription:
                       AsyncMock(return_value='context circle text')):
             mock_audioseg.from_file.return_value = _FakeAudio()
             update = make_video_note_message(user_id=user_id)
-            await dp.process_update(update)
+            await dp.feed_update(mock_bot, update)
             await asyncio.sleep(0.3)
 
         # transcription still echoed to the user
@@ -136,7 +137,7 @@ class TestVoiceReplyBranching:
 
         voice_update = make_voice_message(user_id=user_id)
         with _patched_transcription('my recorded question'):
-            await dp.process_update(voice_update)
+            await dp.feed_update(mock_bot, voice_update)
             await asyncio.sleep(0.3)
 
         row = await telegram_bot.db.get_telegram_message(user_id, voice_update.message.message_id)
@@ -153,24 +154,24 @@ class TestVoiceReplyBranching:
         mock_llm = MockLLMClient()
         mock_llm.add_response("Sure.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
-        await dp.process_update(make_text_message('Remember the number 42', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('Remember the number 42', user_id=user_id))
         await asyncio.sleep(0.2)
 
         voice_update = make_voice_message(user_id=user_id)
         with _patched_transcription('what number did I ask about'):
-            await dp.process_update(voice_update)
+            await dp.feed_update(mock_bot, voice_update)
             await asyncio.sleep(0.3)
 
         mock_llm2 = MockLLMClient()
         mock_llm2.add_response("Ok.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
-        await dp.process_update(make_text_message('Unrelated later message', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('Unrelated later message', user_id=user_id))
         await asyncio.sleep(0.2)
 
         mock_llm3 = MockLLMClient()
         mock_llm3.add_response("42.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm3
-        await dp.process_update(make_text_message(
+        await dp.feed_update(mock_bot, make_text_message(
             'Answer my voice question', user_id=user_id,
             reply_to_message_id=voice_update.message.message_id,
         ))
@@ -192,11 +193,11 @@ class TestVoiceReplyBranching:
 
         voice_update = make_voice_message(user_id=user_id)
         with _patched_transcription('A' * 4080 + 'TAIL_MARKER'):
-            await dp.process_update(voice_update)
+            await dp.feed_update(mock_bot, voice_update)
             await asyncio.sleep(0.3)
 
         echoed = [m for m in spy.get_sent_messages()
-                  if m.get('reply_to_message_id') == voice_update.message.message_id]
+                  if (m.get('reply_parameters') or {}).get('message_id') == voice_update.message.message_id]
         assert len(echoed) == 2, f'transcription must be echoed in two chunks, got {len(echoed)}'
 
         row = await telegram_bot.db.get_telegram_message(user_id, voice_update.message.message_id)
@@ -217,8 +218,8 @@ class TestVoiceReplyBranching:
         _mock_video_note_download(mock_bot)
 
         with _patched_transcription('lost echo transcription'), \
-                patch.object(types.Message, 'reply', AsyncMock(side_effect=BadRequest('blocked'))):
-            await dp.process_update(make_voice_message(user_id=user_id))
+                patch.object(types.Message, 'reply', AsyncMock(side_effect=TelegramBadRequest(method=SendMessage(chat_id=0, text=''), message='blocked'))):
+            await dp.feed_update(mock_bot, make_voice_message(user_id=user_id))
             await asyncio.sleep(0.3)
 
         last = await telegram_bot.db.get_last_message(user.id, user_id)
@@ -235,7 +236,7 @@ class TestVoiceReplyBranching:
 
         note_update = make_video_note_message(user_id=user_id)
         with _patched_transcription('round video text'):
-            await dp.process_update(note_update)
+            await dp.feed_update(mock_bot, note_update)
             await asyncio.sleep(0.3)
 
         row = await telegram_bot.db.get_telegram_message(user_id, note_update.message.message_id)

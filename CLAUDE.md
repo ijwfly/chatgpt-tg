@@ -96,10 +96,10 @@ bash scripts/test.sh
 
 The script starts a test PostgreSQL container, runs all tests, and tears down the container. All tests must pass before considering the work done. If a test fails, fix the issue before committing.
 
-Test details: `specs/E2E_TESTS.md`
+Test details: `specs/E2E_TESTS.md` (Telegram is mocked with a recording `BaseSession`; updates are fed via `dp.feed_update(mock_bot, update)`)
 
 ### Libraries
-- `aiogram` 2.x (Telegram bot framework)
+- `aiogram` 3.x (Telegram bot framework; handlers registered via `dp.message.register(...)`/`dp.callback_query.register(...)` with `Command`/`F` filters, `UserMiddleware` is a `dp.message` middleware, outgoing files are `BufferedInputFile`/`FSInputFile`)
 - `openai` (OpenAI API)
 - `anthropic` (Anthropic API)
 - `asyncpg` (PostgreSQL)
