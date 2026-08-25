@@ -16,6 +16,7 @@ E2E tests exercise the full message pipeline — from "user sends message" to "b
 | Batching Timer | **Patched** to 0.001s | Fast tests without 0.3s waits |
 | Functions (WolframAlpha, etc.) | **Disabled** via settings | Not needed for core flow tests |
 | MCP Servers | **Disabled** (`MCP_SERVERS = []`) | Not needed for core flow tests |
+| Anthropic API | **Mocked** (`MockAnthropicClient` emits real `anthropic` SDK objects) | Validates our request/response conversion against the installed SDK types |
 
 ### Key approach: `dp.feed_update(bot, update)`
 
@@ -49,6 +50,7 @@ tests/
 │   ├── __init__.py
 │   ├── telegram_factory.py         # Factory for aiogram Update/Message objects
 │   ├── mock_llm_client.py          # MockLLMClient with canned response queue
+│   ├── mock_anthropic_client.py    # Anthropic client returning real SDK Message/stream event objects
 │   └── bot_spy.py                  # Assertion helpers over captured Telegram requests
 ├── e2e/
 │   ├── __init__.py

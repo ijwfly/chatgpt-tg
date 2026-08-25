@@ -1,6 +1,6 @@
 # Dependency Upgrade Plan: aiogram 3 + current LLM SDKs
 
-Status: **all phases done** — aiogram 3.30, pydantic v2 API, openai 3.3.1, anthropic 1.0.0, mcp 2.1.0, pytest 9 / pytest-asyncio 1.4 and refreshed utility deps; 136 tests green. Remaining: the manual Telegram smoke (§11). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
+Status: **all phases done** — aiogram 3.30, pydantic v2 API, openai 3.3.1, anthropic 1.0.0, mcp 2.1.0, pytest 9 / pytest-asyncio 1.4 and refreshed utility deps. Manual Telegram smoke (§11) done except Anthropic, which is covered by e2e tests instead; 140 tests green. This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
 
 ## 1. Why this document exists
 
@@ -217,7 +217,7 @@ Fallback: `anthropic==0.125.0`.
 
 Commit: `Upgrade anthropic SDK to 1.0`.
 
-Result: `anthropic==1.0.0`; unknown stream event types are now logged at debug level and skipped instead of raising. `AsyncClient` alias and all `messages.create` kwargs we use still exist; `AnthropicInstrumentor().instrument()` runs. The `max_tokens=4096` knob was left as is. The Anthropic path has no E2E coverage — it is on the manual smoke list.
+Result: `anthropic==1.0.0`; unknown stream event types are now logged at debug level and skipped instead of raising. `AsyncClient` alias and all `messages.create` kwargs we use still exist; `AnthropicInstrumentor().instrument()` runs. The `max_tokens=4096` knob was left as is. E2E coverage added afterwards in `tests/e2e/test_anthropic.py` with `tests/helpers/mock_anthropic_client.py` (a client that emits real `anthropic` SDK objects — `Message`, `Raw*Event`, `TextBlock`, `ToolUseBlock`, `InputJSONDelta` — so SDK shape changes fail the tests). It exposed a pre-existing pydantic-2 bug: non-streaming `send_messages` passed SDK content blocks straight into `AnthropicDialogMessage` (pydantic 1 coerced them via `dict(obj)`, pydantic 2 rejects them) — fixed with `block.model_dump()`.
 
 ## 9. Phase 5 — mcp 1.13 → 2.x — ✅ done
 

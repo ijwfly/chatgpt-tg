@@ -117,7 +117,8 @@ class AnthropicChatGPT:
 
         anthropic_dialog_message = AnthropicDialogMessage(
             role='assistant',
-            content=resp.content,
+            # SDK content blocks are foreign pydantic models; pydantic 2 only accepts dicts here
+            content=[block.model_dump() for block in resp.content],
         )
 
         return anthropic_dialog_message.to_dialog_message(), completion_usage

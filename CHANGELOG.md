@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pydantic v1-style calls (`.dict()`, `.copy()`, `.parse_raw()`, `.schema()`) replaced with the v2 API.
 - Unknown Anthropic stream event types are skipped instead of aborting the response.
 
+### Fixed
+
+- Non-streaming Claude responses failed with a pydantic validation error (SDK content blocks were passed
+  into `AnthropicDialogMessage` unconverted — broken since the move to pydantic 2). Covered by the new
+  `tests/e2e/test_anthropic.py`.
+
 ## [2.0.0] - 2026-07-06 — "Agent Mode"
 
 This is a major release. The bot grew from an OpenAI-only chat proxy into a
