@@ -40,13 +40,15 @@ class MockLLMClient(BaseLLMClient):
         })
 
     def add_streaming_response(self, content_chunks, tool_calls=None,
-                               prompt_tokens=10, completion_tokens=20):
+                               prompt_tokens=10, completion_tokens=20, chunk_delay=0):
+        """`chunk_delay` (seconds) is slept before each content chunk, to leave room for a cancellation."""
         self.responses.append({
             'content_chunks': content_chunks,
             'tool_calls': tool_calls,
             'prompt_tokens': prompt_tokens,
             'completion_tokens': completion_tokens,
             'streaming': True,
+            'chunk_delay': chunk_delay,
         })
 
     async def chat_completions_create(self, model, messages, **additional_fields):
@@ -157,6 +159,8 @@ async def _build_streaming_response(resp_data, model):
     completion_tokens = resp_data.get('completion_tokens', 20)
 
     for chunk_text in content_chunks:
+        if resp_data.get('chunk_delay'):
+            await asyncio.sleep(resp_data['chunk_delay'])
         chunk = MagicMock()
         delta = MockDelta(content=chunk_text)
         choice = MagicMock()

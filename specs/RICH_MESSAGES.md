@@ -1,6 +1,6 @@
 # Rich Messages Migration (Telegram Bot API 10.1–10.3)
 
-Status: **Phases 0–3 done** — rich answers, draft streaming in private chats with a rich service-message fallback. Phases 4–6 pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
+Status: **Phases 0–4 done** — rich answers, draft streaming with the native Stop button. Phases 5–6 pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
 
 ## 1. Why
 
@@ -85,7 +85,7 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 | 1 | `rich_messages.py` helpers, fence-aware splitter, `is_parse_error`, test infrastructure, splitter unit tests | ✅ |
 | 2 | Final answers via `sendRichMessage` (adapter + scheduler), new cutoff | ✅ |
 | 3 | Streaming via `DraftStream` with `ChatServiceMessage` fallback (rich edits) | ✅ |
-| 4 | Native Stop: `can_stop`, `StoppedGenerationMiddleware`, `allowed_updates` | ⬜ |
+| 4 | Native Stop: `can_stop`, `StoppedGenerationMiddleware`, `allowed_updates` | ✅ |
 | 5 | Menus (`/usage`, `/models`, admin cards, settings), cleanup | ⬜ |
 | 6 | Docs (`CLAUDE.md`, `PROJECT_SPEC.md`, `RUNTIME_ARCHITECTURE.md`, `E2E_TESTS.md`, `CHANGELOG.md`), PR | ⬜ |
 
@@ -100,6 +100,10 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 ### Phase 3 result
 
 `DraftStream` (`service_message.py`) and `ChatServiceMessage` share one live-output interface (`set_thinking` / `set_hint` / `set_content` / `finish` / `freeze` / `clear` / `failed` / `needs_cleanup`); `TelegramRuntimeAdapter._new_live_output` picks `DraftStream` for `ChatType.PRIVATE` (`draft_id = user_message_id * 100 + phase`) and a `ChatServiceMessage` with the Stop keyboard otherwise; `show()` swaps in a service message as soon as a draft call fails. Drafts already carry `can_stop=True`. Thinking and tool hints are `<tg-thinking>` drafts, the finished answer is a fresh `sendRichMessage` without keyboard; the keepalive re-sends the last draft every 20 s. `BotSpy.get_all_shown_texts` / `assert_shown_text_contains` include drafts. Tests: private drafts (single draft id, one final rich message, no edit/delete), `<tg-thinking>` for thinking + hint, group chat edit path with Stop button, draft failure fallback, distinct draft ids per agent phase; the two legacy streaming tests now assert drafts.
+
+### Phase 4 result
+
+`StoppedGenerationMiddleware` (outer middleware on `dp.update`, registered by `CancellationManager`) reads `update.model_extra['stopped_message_generation']`, cancels the token of `chat.id` and swallows the update; `TelegramBot.run()` passes `allowed_updates = resolve_used_update_types() + ['stopped_message_generation']`. `MockLLMClient.add_streaming_response(chunk_delay=)` makes a slow stream; the test runs the turn as a task, feeds `make_stopped_generation_update` mid-stream under `warnings.simplefilter('error', RuntimeWarning)` and checks the partial answer is finalised as a rich message. Idle-user stop updates are ignored without any Telegram call.
 
 ## 6. Tests to add (`tests/e2e/test_rich_messages.py` unless noted)
 

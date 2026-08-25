@@ -248,3 +248,53 @@ class TestDraftStreaming:
         draft_ids = [d['draft_id'] for d in spy.get_drafts()]
         base = update.message.message_id * 100
         assert set(draft_ids) >= {base + 1, base + 2}, draft_ids
+
+
+class TestNativeStop:
+
+    async def test_stopped_generation_update_cancels_the_streaming_turn(self, bot_app):
+        """The native Stop button (Bot API 10.3 `stopped_message_generation`) cancels the user's turn."""
+        import warnings
+        from tests.helpers.telegram_factory import make_stopped_generation_update
+
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71020
+        await _create_user(telegram_bot, dp, user_id, streaming_answers=True)
+
+        chunks = [f'chunk {i} of a slow answer that keeps going, ' for i in range(40)]
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(content_chunks=chunks, chunk_delay=0.02)
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        # feed_update awaits the whole turn, so the turn runs as a task and the stop lands mid-stream
+        turn = asyncio.create_task(dp.feed_update(mock_bot, make_text_message('Slow stream', user_id=user_id)))
+        await asyncio.sleep(0.25)
+        drafts = spy.get_drafts()
+        assert drafts and drafts[-1]['can_stop'] is True
+
+        with warnings.catch_warnings():
+            # aiogram 3.30 warns about unknown update types; the middleware must swallow the update first
+            warnings.simplefilter('error', RuntimeWarning)
+            await dp.feed_update(mock_bot, make_stopped_generation_update(user_id, drafts[-1]['draft_id']))
+        await asyncio.wait_for(turn, timeout=2)
+
+        final = spy.get_rich_messages()[-1]['rich_message']['markdown']
+        assert 'chunk 0' in final and 'chunk 39' not in final, final
+        # the finished (partial) answer is a real message, so the user keeps what was generated
+        assert spy.get_rich_messages()[-1]['chat_id'] == user_id
+
+    async def test_stopped_generation_for_idle_user_is_ignored(self, bot_app):
+        from tests.helpers.telegram_factory import make_stopped_generation_update
+
+        telegram_bot, dp, mock_bot = bot_app
+        calls_before = len(mock_bot.session.requests)
+        await dp.feed_update(mock_bot, make_stopped_generation_update(71021, 5))
+        assert len(mock_bot.session.requests) == calls_before
+        assert '71021' not in telegram_bot.cancellation_manager._cancellation_tokens
+
+    def test_polling_requests_the_stopped_generation_update(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        from app.bot.cancellation_manager import STOPPED_GENERATION_UPDATE
+        allowed = dp.resolve_used_update_types() + [STOPPED_GENERATION_UPDATE]
+        assert 'message' in allowed and 'callback_query' in allowed and STOPPED_GENERATION_UPDATE in allowed

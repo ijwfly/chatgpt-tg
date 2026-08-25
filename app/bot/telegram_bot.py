@@ -11,7 +11,7 @@ from dateutil.relativedelta import relativedelta
 
 import settings
 from app.bot.batched_input_handler import BatchedInputHandler
-from app.bot.cancellation_manager import CancellationManager
+from app.bot.cancellation_manager import CancellationManager, STOPPED_GENERATION_UPDATE
 from app.bot.models_menu import ModelsMenu
 from app.bot.scheduled_tasks import build_monthly_usage_task
 from app.bot.scheduler_service import SchedulerService
@@ -88,7 +88,10 @@ class TelegramBot:
     def run(self):
         self.dispatcher.startup.register(self.on_startup)
         self.dispatcher.shutdown.register(self.on_shutdown)
-        asyncio.run(self.dispatcher.start_polling(self.bot))
+        # aiogram derives allowed_updates from registered handlers; the native Stop button of streamed
+        # drafts arrives as an update type it does not know yet, so it has to be requested explicitly
+        allowed_updates = self.dispatcher.resolve_used_update_types() + [STOPPED_GENERATION_UPDATE]
+        asyncio.run(self.dispatcher.start_polling(self.bot, allowed_updates=allowed_updates))
 
     async def process_hide_callback(self, callback_query: types.CallbackQuery):
         await self.bot.delete_message(
