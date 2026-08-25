@@ -1,6 +1,6 @@
 # Dependency Upgrade Plan: aiogram 3 + current LLM SDKs
 
-Status: **in progress** — Phases 0–2 done (requirements restructured, aiogram 3.30 migrated, pydantic v1-style calls removed; 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
+Status: **in progress** — Phases 0–3 done (requirements restructured, aiogram 3.30, pydantic v2 API, openai 3.3.1; 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
 
 ## 1. Why this document exists
 
@@ -186,7 +186,7 @@ Commit: `Replace pydantic v1-style calls`.
 
 Result: all sites above converted; `pydantic==2.13.4` pinned; the optional field tidy-ups were skipped (no behaviour change needed). `delta.model_dump()` excludes `function_call`/`tool_calls` because `dict(delta)` used to leave nested models as objects that `merge_dicts` skipped — those deltas are accumulated separately. Suite passes with `-W error::DeprecationWarning:pydantic`.
 
-## 7. Phase 3 — openai 1.35 → 3.x
+## 7. Phase 3 — openai 1.35 → 3.x — ✅ done
 
 Bump `openai==3.3.x`; add nothing for httpx2 (it is a transitive dep; we do not pass httpx objects to the SDK). Keep `httpx==0.28.x` as a direct dependency for our own clients.
 
@@ -202,6 +202,8 @@ Checks / changes:
 Fallback: `openai==2.54.0` (still httpx).
 
 Commit: `Upgrade openai SDK to 3.x`.
+
+Result: `openai==3.3.1` installs alongside `httpx==0.27.1` (langfuse) and `httpx2==2.12.0`; no application code changes were needed — `AsyncStream.response`/`aclose()` (already wrapped in `suppress`) and `astream_to_file` still exist, `embeddings.py` was fixed in Phase 2, `langfuse.openai.AsyncOpenAI` constructs on 3.3.1. Live check of Whisper/TTS/DALL-E and a Langfuse trace remains part of the manual smoke.
 
 ## 8. Phase 4 — anthropic 0.29 → 1.0
 
