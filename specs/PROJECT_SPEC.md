@@ -191,7 +191,7 @@ When `ENABLE_AGENT_RUNTIME` is True and user has agent mode enabled, `MessagePro
 AgentRuntime._agent_loop():
 1. Load MCP tools (MCP_SERVERS + MCP_SERVERS_AGENT)
 2. Register agent tools (plan, task, schedule management, bash sandbox, web agents)
-3. Build system prompt (AGENT_SYSTEM_PROMPT + gpt_mode + FORMATTING_SYSTEM_PROMPT + tool additions + skills catalog)
+3. Build system prompt (AGENT_SYSTEM_PROMPT + gpt_mode + tool additions + skills catalog)
 4. LLM call loop (up to AGENT_MAX_ITERATIONS):
    a. Inject plan reminder every AGENT_PLAN_REMINDER_INTERVAL iterations
    b. Check for completed background tasks → inject results
