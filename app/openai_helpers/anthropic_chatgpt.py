@@ -142,15 +142,15 @@ class AnthropicChatGPT:
                     }
 
                 message = resp_part.message
-                result_dict = merge_dicts(result_dict, message.dict())
+                result_dict = merge_dicts(result_dict, message.model_dump())
                 if result_dict.get('content') is None:
                     result_dict['content'] = []
             elif resp_part.type == 'content_block_start':
                 while resp_part.index >= len(result_dict['content']):
                     result_dict['content'].append({})
-                result_dict['content'][resp_part.index] = merge_dicts(result_dict['content'][resp_part.index], resp_part.content_block.dict())
+                result_dict['content'][resp_part.index] = merge_dicts(result_dict['content'][resp_part.index], resp_part.content_block.model_dump())
             elif resp_part.type == 'content_block_delta':
-                delta_dict = resp_part.delta.dict()
+                delta_dict = resp_part.delta.model_dump()
                 del delta_dict['type']
                 result_dict['content'][resp_part.index] = merge_dicts(result_dict['content'][resp_part.index], delta_dict)
             elif resp_part.type == 'content_block_stop':
@@ -204,5 +204,5 @@ class AnthropicChatGPT:
             else:
                 merged_messages[-1].content.extend(message.content)
 
-        result = [message.dict(exclude_none=True) for message in merged_messages]
+        result = [message.model_dump(exclude_none=True) for message in merged_messages]
         return system_prompt + result

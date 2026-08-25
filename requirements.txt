@@ -5,6 +5,7 @@ openai==1.35.8
 anthropic==0.29.0
 mcp==1.13.0
 httpx==0.27.1
+pydantic==2.13.4
 asyncpg==0.27.0
 async-lru==2.0.4
 tiktoken==0.7.0

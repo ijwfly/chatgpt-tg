@@ -103,7 +103,7 @@ Test details: `specs/E2E_TESTS.md` (Telegram is mocked with a recording `BaseSes
 - `openai` (OpenAI API)
 - `anthropic` (Anthropic API)
 - `asyncpg` (PostgreSQL)
-- `pydantic` 2.x (data models — but some code uses v1 methods like `.parse_raw()`, `.schema()`)
+- `pydantic` 2.x (data models; v2 API only — `model_dump`, `model_copy`, `model_validate_json`, `model_json_schema`)
 - `tiktoken` (token counting)
 - `pydub` + `ffmpeg` (audio processing)
 - `mcp` (MCP client)

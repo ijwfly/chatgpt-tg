@@ -60,7 +60,7 @@ class DialogMessage(pydantic.BaseModel):
             raise ValueError('Unknown type of content')
 
     def strip_thinking(self) -> 'DialogMessage':
-        new = self.copy()
+        new = self.model_copy()
         new.thinking = None
         if isinstance(new.content, str):
             # Remove complete <think>...</think> blocks
@@ -76,7 +76,7 @@ class DialogMessage(pydantic.BaseModel):
         if isinstance(self.content, str):
             content = self.content
         elif isinstance(self.content, list):
-            content = [part.dict(exclude_none=True) for part in self.content]
+            content = [part.model_dump(exclude_none=True) for part in self.content]
         elif self.content is None:
             content = None
         else:
@@ -195,7 +195,7 @@ class ChatGPT:
                         ))
                     else:
                         new_parts.append(part)
-                converted.append(msg.copy(update={'content': new_parts}))
+                converted.append(msg.model_copy(update={'content': new_parts}))
             else:
                 converted.append(msg)
         return converted
@@ -210,9 +210,9 @@ class ChatGPT:
             messages=messages,
             **additional_fields,
         )
-        completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp.usage))
+        completion_usage = CompletionUsage(model=self.llm_model.model_name, **resp.usage.model_dump())
         message = resp.choices[0].message
-        response = DialogMessage(**message.dict())
+        response = DialogMessage(**message.model_dump())
         return response, completion_usage
 
     async def send_messages_streaming(self, messages_to_send: List[DialogMessage], is_cancelled: Callable[[], bool]) -> (DialogMessage, CompletionUsage):
@@ -239,17 +239,18 @@ class ChatGPT:
             completion_tokens = None
 
             if resp_part.usage is not None:
-                completion_usage = CompletionUsage(model=self.llm_model.model_name, **dict(resp_part.usage))
+                completion_usage = CompletionUsage(model=self.llm_model.model_name, **resp_part.usage.model_dump())
 
             delta = resp_part.choices[0].delta if resp_part.choices else None
             if delta and delta.content:
-                result_dict = merge_dicts(result_dict, dict(delta))
+                # function_call / tool_calls deltas are accumulated separately below
+                result_dict = merge_dicts(result_dict, delta.model_dump(exclude={'function_call', 'tool_calls'}))
                 dialog_message = DialogMessage(**result_dict)
                 completion_tokens = count_messages_tokens([result_dict], model=self.llm_model.model_name)
             if delta and delta.function_call is not None:
                 if 'function_call' not in result_dict or result_dict['function_call'] is None:
                     result_dict['function_call'] = {}
-                function_call_dict = merge_dicts(result_dict['function_call'], dict(delta.function_call))
+                function_call_dict = merge_dicts(result_dict['function_call'], delta.function_call.model_dump())
                 result_dict['function_call'] = function_call_dict
                 dialog_message = DialogMessage(function_call=result_dict)
                 # TODO: find more accurate way to calculate completion length for function calls
@@ -389,5 +390,5 @@ async def summarize_messages(messages: List[DialogMessage], model: str, summary_
         model=model,
         messages=prompt_messages,
     )
-    completion_usage = CompletionUsage(model=model, **dict(resp.usage))
+    completion_usage = CompletionUsage(model=model, **resp.usage.model_dump())
     return resp.choices[0].message.content, completion_usage

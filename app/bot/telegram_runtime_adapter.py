@@ -187,4 +187,4 @@ class TelegramRuntimeAdapter:
                 parts.append(content[:last_space_index])
                 content = content[last_space_index + 1:]
         parts.append(content)
-        return [dialog_message.copy(update={"content": part}) for part in parts]
+        return [dialog_message.model_copy(update={"content": part}) for part in parts]

@@ -1,6 +1,6 @@
 # Dependency Upgrade Plan: aiogram 3 + current LLM SDKs
 
-Status: **in progress** — Phases 0–1 done (requirements restructured, aiogram 3.30 migrated, 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
+Status: **in progress** — Phases 0–2 done (requirements restructured, aiogram 3.30 migrated, pydantic v1-style calls removed; 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
 
 ## 1. Why this document exists
 
@@ -164,7 +164,7 @@ Result / deviations from the plan above:
 - `MockedSession.stream_content` is a stub; `bot.download_file` is mocked per test as before.
 - Live Telegram smoke (§11) still to be run by hand.
 
-## 6. Phase 2 — pydantic v1-style cleanup
+## 6. Phase 2 — pydantic v1-style cleanup — ✅ done
 
 Pin `pydantic==2.13.x` explicitly. Replace deprecated calls (all emit `PydanticDeprecatedSince20` today):
 
@@ -183,6 +183,8 @@ Pin `pydantic==2.13.x` explicitly. Replace deprecated calls (all emit `PydanticD
 Optional tidy-ups surfaced by the audit (do only if cheap): `Optional[...]` fields without defaults in `db.py:15` `User` and `chatgpt.py:16` `FunctionCall` (required-but-nullable in v2), `AnthropicContentPart.content: List[...] = None`.
 
 Commit: `Replace pydantic v1-style calls`.
+
+Result: all sites above converted; `pydantic==2.13.4` pinned; the optional field tidy-ups were skipped (no behaviour change needed). `delta.model_dump()` excludes `function_call`/`tool_calls` because `dict(delta)` used to leave nested models as objects that `merge_dicts` skipped — those deltas are accumulated separately. Suite passes with `-W error::DeprecationWarning:pydantic`.
 
 ## 7. Phase 3 — openai 1.35 → 3.x
 

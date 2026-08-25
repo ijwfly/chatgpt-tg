@@ -37,7 +37,7 @@ class OpenAIFunction(ABC):
 
     async def run_str_args(self, params: str):
         try:
-            params = self.PARAMS_SCHEMA.parse_raw(params)
+            params = self.PARAMS_SCHEMA.model_validate_json(params)
         except Exception as e:
             return f"Parsing error: {e}"
         return await self.run(params)
@@ -53,7 +53,7 @@ class OpenAIFunction(ABC):
 
     @classmethod
     def get_params_schema(cls) -> dict:
-        params_schema = cls.PARAMS_SCHEMA.schema()
+        params_schema = cls.PARAMS_SCHEMA.model_json_schema()
         return params_schema
 
     @classmethod
