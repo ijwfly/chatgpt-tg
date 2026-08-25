@@ -11,6 +11,7 @@ Operations:
   {"op": "stat",   "path": "..."}
   {"op": "list",   "path": "..."}
   {"op": "delete", "path": "..."}
+  {"op": "skills",  "paths": [{"path": "...", "scope": "..."}, ...]}
 
 Streaming modes (raw bytes, for the files HTTP API):
   file_helper.py --stream-read <path>    file contents to stdout
@@ -141,6 +142,96 @@ def do_delete(path: str) -> dict:
     return {"status": "ok", "deleted": path}
 
 
+# --- skills catalog ---------------------------------------------------------
+
+SKILL_FILE = "SKILL.md"
+FRONTMATTER_READ_BYTES = 4096  # frontmatter sits at the top; the body is never loaded here
+MAX_SKILL_DIRS = 200
+
+
+def parse_frontmatter(text: str) -> dict:
+    """Parse the leading `---` block of a SKILL.md into a dict of simple key: value pairs.
+
+    Raises ValueError when the block is missing or unterminated.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise ValueError('missing frontmatter: SKILL.md must start with "---"')
+    end = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end = i
+            break
+    if end is None:
+        raise ValueError('frontmatter is not closed with a "---" line')
+
+    fields = {}
+    for line in lines[1:end]:
+        if not line.strip() or line.lstrip().startswith("#") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
+        fields[key.strip()] = value
+    return fields
+
+
+def scan_skills_dir(path: str, scope: str) -> tuple:
+    """Returns (skills, invalid) for one skills root. A missing root is not an error."""
+    skills, invalid = [], []
+    try:
+        entries = sorted(os.scandir(path), key=lambda e: e.name)
+    except (FileNotFoundError, NotADirectoryError):
+        return skills, invalid
+    except PermissionError:
+        return skills, [{"dir": path, "scope": scope, "error": "Permission denied"}]
+
+    for entry in entries[:MAX_SKILL_DIRS]:
+        if not entry.is_dir(follow_symlinks=False) or entry.name.startswith("."):
+            continue
+        skill_md = os.path.join(entry.path, SKILL_FILE)
+        try:
+            with open(skill_md, "r", encoding="utf-8", errors="replace") as f:
+                head = f.read(FRONTMATTER_READ_BYTES)
+        except FileNotFoundError:
+            invalid.append({"dir": entry.name, "scope": scope, "error": "no SKILL.md"})
+            continue
+        except (OSError, IsADirectoryError) as e:
+            invalid.append({"dir": entry.name, "scope": scope, "error": str(e)})
+            continue
+
+        try:
+            fields = parse_frontmatter(head)
+        except ValueError as e:
+            invalid.append({"dir": entry.name, "scope": scope, "error": str(e)})
+            continue
+
+        name = fields.get("name") or entry.name
+        description = fields.get("description", "")
+        if not description:
+            invalid.append({"dir": entry.name, "scope": scope, "error": "no description"})
+            continue
+
+        skills.append({
+            "name": name,
+            "description": description,
+            "scope": scope,
+            "dir": entry.path,
+            "skill_md": skill_md,
+        })
+    return skills, invalid
+
+
+def do_skills(paths: list) -> dict:
+    skills, invalid = [], []
+    for item in paths:
+        found, bad = scan_skills_dir(item["path"], item.get("scope", "personal"))
+        skills.extend(found)
+        invalid.extend(bad)
+    return {"skills": skills, "invalid": invalid}
+
+
 def stream_read(path: str) -> int:
     try:
         with open(path, "rb") as f:
@@ -186,6 +277,8 @@ def main():
         result = do_list(req["path"])
     elif op == "delete":
         result = do_delete(req["path"])
+    elif op == "skills":
+        result = do_skills(req.get("paths", []))
     else:
         result = {"error": f"Unknown op: {op}"}
     sys.stdout.write(json.dumps(result))

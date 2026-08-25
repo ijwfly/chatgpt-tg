@@ -23,6 +23,10 @@ PORT = int(os.environ.get("SANDBOX_PORT", "8080"))
 BASH_TIMEOUT_MAX = int(os.environ.get("BASH_TIMEOUT_MAX", "300"))
 
 WORKSPACE_ROOT = "/workspace"
+# Shared read-only skills, synced from the image by entrypoint.sh. Lives next to the
+# per-user workspaces on the same volume; readable by everyone, writable by root only.
+PUBLIC_SKILLS_DIR = f"{WORKSPACE_ROOT}/public_skills"
+PERSONAL_SKILLS_DIRNAME = "skills"
 HELPER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "file_helper.py")
 
 current_user: ContextVar[str] = ContextVar("current_user")
@@ -84,11 +88,17 @@ def ensure_user(linux_user: str) -> None:
         pass
 
 
-def resolve_path(path: str) -> tuple:
+def _is_inside(resolved: str, base: str) -> bool:
+    return resolved == base or resolved.startswith(base + os.sep)
+
+
+def resolve_path(path: str, allow_public: bool = False) -> tuple:
     """Resolve an API path against the caller's workspace.
 
     Returns (absolute_path, linux_user). Raises PathOutsideWorkspace if the
-    resolved path (symlinks included) escapes the workspace.
+    resolved path (symlinks included) escapes the workspace. With allow_public
+    the shared skills directory is accepted too — read-only operations only,
+    the caller decides.
     """
     linux_user = get_current_user()
     base = workspace_for(linux_user)
@@ -97,11 +107,17 @@ def resolve_path(path: str) -> tuple:
         path = os.path.join(base, path)
     resolved = os.path.realpath(path)
 
-    if resolved != base and not resolved.startswith(base + os.sep):
-        raise PathOutsideWorkspace(
-            f"Path outside workspace: {path!r} (workspace is {base})"
-        )
-    return resolved, linux_user
+    if _is_inside(resolved, base):
+        return resolved, linux_user
+    if allow_public and _is_inside(resolved, PUBLIC_SKILLS_DIR):
+        return resolved, linux_user
+    raise PathOutsideWorkspace(
+        f"Path outside workspace: {path!r} (workspace is {base})"
+    )
+
+
+def personal_skills_dir(linux_user: str) -> str:
+    return os.path.join(workspace_for(linux_user), PERSONAL_SKILLS_DIRNAME)
 
 
 def helper_cmd(linux_user: str, *args: str) -> list:

@@ -64,8 +64,24 @@ tests/
 │   ├── test_forwarded_messages.py  # Forwarded message context (1 test)
 │   ├── test_error_handling.py      # Error conditions (1 test)
 │   ├── test_agent_runtime.py      # Agent runtime, plans, background tasks (26 tests)
-│   └── test_scheduled_tasks.py    # Scheduled task CRUD and execution (9 tests)
+│   ├── test_scheduled_tasks.py    # Scheduled task CRUD and execution (9 tests)
+│   ├── test_bash_sandbox.py       # Sandbox tools, document upload, reply branching (20 tests)
+│   ├── test_video_note.py         # Voice/video note transcription and branching (7 tests)
+│   ├── test_web_agents.py         # Tavily-backed web sub-agents
+│   └── test_skills.py             # Skills catalog in the agent system prompt (8 tests)
+└── unit/
+    ├── conftest.py                 # Overrides the autouse clean_db fixture — no DB here
+    ├── test_skills_scan.py         # Sandbox skills scan + validate_skill.py (15 tests)
+    └── test_sandbox_paths.py       # resolve_path confinement, public skills exception (7 tests)
 ```
+
+`tests/helpers/fake_sandbox.py` holds `FakeSandboxClient` and `patch_sandbox_client()` — an in-memory
+stand-in for `SandboxClient` shared by the sandbox and skills suites; `skills_result` / `files` /
+`exec_results` are class attributes reset per test.
+
+The `tests/unit/` suite needs no Postgres: it loads the sandbox-side modules (`sandbox/server/*.py`,
+`sandbox/skills/skill-creator/scripts/validate_skill.py`) by path, since they run inside the sandbox
+container and are mocked away in e2e.
 
 ---
 

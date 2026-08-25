@@ -189,8 +189,8 @@ When `ENABLE_AGENT_RUNTIME` is True and user has agent mode enabled, `MessagePro
 ```
 AgentRuntime._agent_loop():
 1. Load MCP tools (MCP_SERVERS + MCP_SERVERS_AGENT)
-2. Register agent tools (plan, task, schedule management)
-3. Build system prompt (AGENT_SYSTEM_PROMPT + gpt_mode + tool additions)
+2. Register agent tools (plan, task, schedule management, bash sandbox, web agents)
+3. Build system prompt (AGENT_SYSTEM_PROMPT + gpt_mode + tool additions + skills catalog)
 4. LLM call loop (up to AGENT_MAX_ITERATIONS):
    a. Inject plan reminder every AGENT_PLAN_REMINDER_INTERVAL iterations
    b. Check for completed background tasks → inject results
@@ -482,6 +482,12 @@ Available only in agent mode. Inherit from `AgentFunction` (base class with `Age
 | `ScheduleTask` | Schedule a one-time (natural language dates via `dateparser`) or recurring (cron) task |
 | `ListScheduledTasks` | List all active scheduled tasks for the chat |
 | `CancelScheduledTask` | Cancel a scheduled task by ID |
+
+### 6.4a Skills (agent mode)
+
+Folders of instructions the agent loads on demand, stored in the sandbox: personal ones in `skills/` inside the user's workspace, shared read-only ones in `/workspace/public_skills` (synced from `sandbox/skills/` in the repo when the image is built). Each has a `SKILL.md` with `name`/`description` frontmatter plus optional `reference/`, `scripts/`, `templates/`.
+
+Only the catalog goes into the system prompt (`app/skills/catalog.py`, sourced from `GET /skills` on the sandbox); the agent reads the bodies itself with `read_file`. No dedicated tools are involved. Gated by `ENABLE_SKILLS` + `ENABLE_BASH_SANDBOX`. The bundled `skill-creator` skill teaches the agent to write new ones and ships `scripts/validate_skill.py`.
 
 ### 6.5 Function Registration Flow
 

@@ -8,6 +8,7 @@ from aiogram import types
 import settings
 from app.openai_helpers.llm_client_factory import LLMClientFactory
 from app.sandbox.client import SandboxError
+from tests.helpers.fake_sandbox import FakeSandboxClient, patch_sandbox_client
 from tests.helpers.mock_llm_client import MockLLMClient
 from tests.helpers.telegram_factory import make_text_message, make_document_message
 from tests.helpers.bot_spy import BotSpy
@@ -21,50 +22,10 @@ def enable_sandbox():
     settings.ENABLE_BASH_SANDBOX = old
 
 
-class FakeSandboxClient:
-    """In-memory fake of app.sandbox.client.SandboxClient."""
-    uploads = {}
-    exec_results = []
-    exec_calls = []
-    download_result = None
-
-    def __init__(self, base_url=None):
-        pass
-
-    @classmethod
-    def reset(cls):
-        cls.uploads = {}
-        cls.exec_results = []
-        cls.exec_calls = []
-        cls.download_result = None
-
-    async def exec(self, telegram_user_id, command, timeout):
-        FakeSandboxClient.exec_calls.append({'user': telegram_user_id, 'command': command})
-        if FakeSandboxClient.exec_results:
-            return FakeSandboxClient.exec_results.pop(0)
-        return {'stdout': '', 'stderr': '', 'exit_code': 0, 'cwd': '/workspace/user_test'}
-
-    async def stat(self, telegram_user_id, path):
-        if path in FakeSandboxClient.uploads:
-            return {'type': 'file', 'size': len(FakeSandboxClient.uploads[path])}
-        return {'type': 'missing'}
-
-    async def upload_file(self, telegram_user_id, rel_path, data):
-        FakeSandboxClient.uploads[rel_path] = data
-        return {'status': 'ok', 'size': len(data), 'path': rel_path}
-
-    async def download_file(self, telegram_user_id, rel_path, max_bytes):
-        if FakeSandboxClient.download_result is None:
-            raise SandboxError(f'Not found: {rel_path}')
-        return FakeSandboxClient.download_result
-
-
 @pytest.fixture(autouse=True)
 def fake_sandbox_client():
-    FakeSandboxClient.reset()
-    with patch('app.functions.bash_sandbox.SandboxClient', FakeSandboxClient), \
-            patch('app.bot.batched_input_handler.SandboxClient', FakeSandboxClient):
-        yield FakeSandboxClient
+    with patch_sandbox_client() as client:
+        yield client
 
 
 async def _create_agent_user(telegram_bot, dp, user_id):

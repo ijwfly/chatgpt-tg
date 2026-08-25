@@ -119,6 +119,15 @@ SANDBOX_MAX_OUTPUT_CHARS = 10000     # stdout/stderr truncation limit for LLM to
 SANDBOX_SEND_FILE_MAX_MB = 50        # Telegram Bot API limit for sending documents
 SANDBOX_UPLOAD_MAX_MB = 20           # Telegram Bot API limit for downloading files (getFile)
 
+# Skills (agent mode, requires ENABLE_BASH_SANDBOX)
+# Folders with instructions the agent loads on demand: personal ones live in `skills/` inside
+# the user's sandbox workspace, shared read-only ones in /workspace/public_skills. Only the
+# catalog (name + description + path) goes into the system prompt.
+ENABLE_SKILLS = True
+SKILLS_MAX_COUNT = 50                # max skills listed in the catalog
+SKILLS_MAX_DESCRIPTION_CHARS = 400   # per-skill description truncation in the catalog
+SKILLS_SCAN_TIMEOUT = 20             # httpx timeout for the sandbox skills catalog request
+
 # MCP servers available only in agent mode (in addition to MCP_SERVERS)
 MCP_SERVERS_AGENT: list[MCPServerConfig] = [
     # Example: agent-specific MCP servers

@@ -16,11 +16,13 @@ from starlette.routing import Route
 
 from common import (
     BASH_TIMEOUT_MAX,
+    PUBLIC_SKILLS_DIR,
     PathOutsideWorkspace,
     get_current_user,
     helper_cmd,
     kill_process_group,
     logger,
+    personal_skills_dir,
     resolve_path,
     run_file_op,
     workspace_for,
@@ -30,6 +32,8 @@ CHUNK_SIZE = 64 * 1024
 STREAM_TIMEOUT = 600  # generous bound so a hung sudo/helper cannot leak forever
 
 FILEOP_ALLOWED = {"read", "write", "edit", "stat", "list", "delete"}
+# Operations allowed to reach the shared read-only skills directory
+FILEOP_READONLY = {"read", "stat", "list"}
 
 
 async def health(request):
@@ -117,7 +121,7 @@ async def fileop(request):
         return JSONResponse({"error": "path is required"}, status_code=400)
 
     try:
-        resolved, linux_user = resolve_path(path)
+        resolved, linux_user = resolve_path(path, allow_public=op in FILEOP_READONLY)
     except PathOutsideWorkspace as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -140,10 +144,10 @@ def _error_status(error: str) -> int:
     return 400
 
 
-def _resolve_or_error(rel_path: str):
+def _resolve_or_error(rel_path: str, allow_public: bool = False):
     """Returns (abs_path, linux_user, None) or (None, None, error_response)."""
     try:
-        abs_path, linux_user = resolve_path(rel_path)
+        abs_path, linux_user = resolve_path(rel_path, allow_public=allow_public)
         return abs_path, linux_user, None
     except PathOutsideWorkspace as e:
         return None, None, JSONResponse({"error": str(e)}, status_code=400)
@@ -151,7 +155,7 @@ def _resolve_or_error(rel_path: str):
 
 async def files_get(request):
     rel_path = request.path_params.get("path", "")
-    abs_path, linux_user, err = _resolve_or_error(rel_path)
+    abs_path, linux_user, err = _resolve_or_error(rel_path, allow_public=True)
     if err:
         return err
 
@@ -267,11 +271,38 @@ async def files_delete(request):
     return JSONResponse(result)
 
 
+# ---------------------------------------------------------------------------
+# Skills catalog
+# ---------------------------------------------------------------------------
+
+async def skills(request):
+    """Frontmatter of every skill visible to the caller: personal first, then shared."""
+    linux_user = get_current_user()
+    personal_dir = personal_skills_dir(linux_user)
+    result = await run_file_op(linux_user, {
+        "op": "skills",
+        "paths": [
+            {"path": personal_dir, "scope": "personal"},
+            {"path": PUBLIC_SKILLS_DIR, "scope": "public"},
+        ],
+    })
+    if "error" in result:
+        return JSONResponse({"error": result["error"]}, status_code=_error_status(result["error"]))
+    logger.info("skills user=%s found=%s invalid=%s", linux_user,
+                len(result["skills"]), len(result["invalid"]))
+    return JSONResponse({
+        "personal_dir": personal_dir,
+        "public_dir": PUBLIC_SKILLS_DIR,
+        **result,
+    })
+
+
 def build_routes() -> list:
     return [
         Route("/health", health, methods=["GET"]),
         Route("/exec", exec_command, methods=["POST"]),
         Route("/fileop", fileop, methods=["POST"]),
+        Route("/skills", skills, methods=["GET"]),
         Route("/files", files_get, methods=["GET"]),
         Route("/files/{path:path}", files_get, methods=["GET"]),
         Route("/files/{path:path}", files_put, methods=["PUT"]),
