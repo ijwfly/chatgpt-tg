@@ -1,7 +1,7 @@
 from aiogram import Bot, types, Dispatcher, F
-from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.bot.rich_messages import send_rich_message, edit_rich_message_in_chat
 from app.llm_models import get_models, get_model_by_name
 from app.storage.db import User, DB
 from app.storage.user_role import check_access_conditions, UserRole
@@ -19,7 +19,7 @@ class ModelsMenu:
         self.dispatcher.callback_query.register(self.process_callback, F.data.startswith(f'{MODELS_PREFIX}.'))
 
     async def send_menu(self, message: types.Message, user: User):
-        await message.answer(self.get_model_info(user), reply_markup=self.get_keyboard(user), parse_mode=ParseMode.MARKDOWN)
+        await send_rich_message(message, self.get_model_info(user), reply_markup=self.get_keyboard(user))
 
     @staticmethod
     def is_model_available_for_user(llm_model, user: User):
@@ -32,22 +32,22 @@ class ModelsMenu:
             llm_model = get_model_by_name(user.current_model)
         except ValueError:
             return f"Current model is unknown: {user.current_model}"
-        info = f"*Current model*: `{llm_model.model_readable_name}`\n"
+        info = f"**Current model**: `{llm_model.model_readable_name}`\n"
         if llm_model.model_name != llm_model.model_readable_name:
-            info += f"*Full name*: `{llm_model.model_name}`\n"
+            info += f"**Full name**: `{llm_model.model_name}`\n"
 
         input_price = float(llm_model.model_price.input_tokens_price * 1000)
         output_price = float(llm_model.model_price.output_tokens_price * 1000)
-        info += f'*Pricing*:\n'
-        info += f'\t-\t${input_price:.2f} per 1M input tokens\n'
-        info += f'\t-\t${output_price:.2f} per 1M output tokens\n'
-        info += f'*Capabilities*:\n'
-        info += f'\t-\t*Streaming responses*: {llm_model.capabilities.streaming_responses}\n'
-        info += f'\t-\t*Function calling*: {llm_model.capabilities.function_calling or llm_model.capabilities.tool_calling}\n'
-        info += f'\t-\t*Image processing*: {llm_model.capabilities.image_processing}\n'
-        info += f'*Context configuration*:\n'
-        info += f'\t-\t*Short term memory tokens*: {llm_model.context_configuration.short_term_memory_tokens}\n'
-        info += f'\t-\t*Summary length in tokens*: {llm_model.context_configuration.summary_length}\n'
+        info += f'**Pricing**:\n'
+        info += f'- ${input_price:.2f} per 1M input tokens\n'
+        info += f'- ${output_price:.2f} per 1M output tokens\n'
+        info += f'\n**Capabilities**:\n'
+        info += f'- **Streaming responses**: {llm_model.capabilities.streaming_responses}\n'
+        info += f'- **Function calling**: {llm_model.capabilities.function_calling or llm_model.capabilities.tool_calling}\n'
+        info += f'- **Image processing**: {llm_model.capabilities.image_processing}\n'
+        info += f'\n**Context configuration**:\n'
+        info += f'- **Short term memory tokens**: {llm_model.context_configuration.short_term_memory_tokens}\n'
+        info += f'- **Summary length in tokens**: {llm_model.context_configuration.summary_length}\n'
         return info
 
     def get_keyboard(self, user: User):
@@ -86,10 +86,7 @@ class ModelsMenu:
             await self.db.update_user(user)
 
             await callback_query.answer()
-            await self.bot.edit_message_text(
-                text=self.get_model_info(user),
-                chat_id=callback_query.from_user.id,
-                message_id=callback_query.message.message_id,
-                reply_markup=self.get_keyboard(user),
-                parse_mode=ParseMode.MARKDOWN
+            await edit_rich_message_in_chat(
+                self.bot, callback_query.from_user.id, callback_query.message.message_id,
+                self.get_model_info(user), reply_markup=self.get_keyboard(user),
             )

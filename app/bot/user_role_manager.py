@@ -1,9 +1,8 @@
 from aiogram import types, Bot, Dispatcher, F
-from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 import settings
-from app.bot.utils import escape_tg_markdown
+from app.bot.rich_messages import escape_rich_markdown, send_rich_message_to_chat, edit_rich_message_in_chat
 from app.storage.db import User, DB
 from app.storage.user_role import UserRole, check_access_conditions
 
@@ -39,28 +38,29 @@ class UserRoleManager:
 
     @staticmethod
     def user_to_string(user):
-        result = [f'*User Id*: {user.id}', f'*Telegram Id*: {user.telegram_id}']
+        result = [f'**User Id**: {user.id}', f'**Telegram Id**: {user.telegram_id}']
         if user.full_name:
-            full_name = escape_tg_markdown(user.full_name)
-            result.append(f'*Full name*: {full_name}')
+            full_name = escape_rich_markdown(user.full_name)
+            result.append(f'**Full name**: {full_name}')
         if user.username:
-            username = escape_tg_markdown(user.username)
-            result.append(f'*Username*: @{username}')
-        result.append(f'*Role*: {user.role.value}')
+            username = escape_rich_markdown(user.username)
+            result.append(f'**Username**: @{username}')
+        result.append(f'**Role**: {user.role.value}')
         return '\n'.join(result)
 
     @classmethod
     async def send_new_user_to_admin(cls, bot: Bot, user: User):
         text = cls.user_to_string(user)
         text = '#admin\n' + text
-        await bot.send_message(
-            chat_id=settings.USER_ROLE_MANAGER_CHAT_ID, text=text,
-            reply_markup=cls.get_keyboard(user), parse_mode=ParseMode.MARKDOWN,
+        await send_rich_message_to_chat(
+            bot, settings.USER_ROLE_MANAGER_CHAT_ID, text, reply_markup=cls.get_keyboard(user),
         )
 
     async def update_message(self, message: types.Message, user: User):
         text = self.user_to_string(user)
-        await message.edit_text(text, reply_markup=self.get_keyboard(user), parse_mode=ParseMode.MARKDOWN)
+        await edit_rich_message_in_chat(
+            message.bot, message.chat.id, message.message_id, text, reply_markup=self.get_keyboard(user),
+        )
 
     @staticmethod
     def get_role_commands(user_role: UserRole):

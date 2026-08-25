@@ -3,7 +3,7 @@ import os
 import datetime
 import tempfile
 
-from aiogram.enums import ContentType, ParseMode
+from aiogram.enums import ContentType
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject
 from aiogram.types import FSInputFile
@@ -19,6 +19,7 @@ from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
 from app.bot.utils import (get_hide_button, get_usage_response_all_users, TypingWorker)
+from app.bot.rich_messages import send_rich_message
 from app.bot.utils import send_telegram_message
 from app.openai_helpers.utils import (calculate_whisper_usage_price, OpenAIAsync,
                                       calculate_image_generation_usage_price, calculate_tts_usage_price)
@@ -113,13 +114,13 @@ class TelegramBot:
         completion_usages = await self.db.get_user_current_month_completion_usage(user.id)
         for usage in completion_usages:
             total += usage.price
-            result.append(f'*{usage.model}:* {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${usage.price}')
+            result.append(f'**{usage.model}:** {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${usage.price}')
 
         whisper_usage = await self.db.get_user_current_month_whisper_usage(user.id)
         whisper_price = calculate_whisper_usage_price(whisper_usage)
         total += whisper_price
         if whisper_price:
-            result.append(f'*Speech2Text:* {whisper_usage} seconds, ${whisper_price}')
+            result.append(f'**Speech2Text:** {whisper_usage} seconds, ${whisper_price}')
 
         image_generation_usage = await self.db.get_user_current_month_image_generation_usage(user.id)
         for usage in image_generation_usage:
@@ -127,18 +128,16 @@ class TelegramBot:
                 usage['model'], usage['resolution'], usage['usage_count']
             )
             total += price
-            result.append(f'*{usage["model"]}:* {usage["usage_count"]} images, {usage["resolution"]} resolution, ${price}')
+            result.append(f'**{usage["model"]}:** {usage["usage_count"]} images, {usage["resolution"]} resolution, ${price}')
 
         tts_usages = await self.db.get_user_current_month_tts_usage(user.id)
         for tts_usage in tts_usages:
             price = calculate_tts_usage_price(tts_usage['characters_count'], tts_usage['model'])
             total += price
-            result.append(f'*{tts_usage["model"]}:* {tts_usage["characters_count"]} characters, ${price}')
+            result.append(f'**{tts_usage["model"]}:** {tts_usage["characters_count"]} characters, ${price}')
 
-        result.append(f'*Total:* ${total}')
-        await send_telegram_message(
-            message, '\n'.join(result), ParseMode.MARKDOWN, reply_markup=get_hide_button()
-        )
+        result.append(f'**Total:** ${total}')
+        await send_rich_message(message, '\n'.join(result), reply_markup=get_hide_button())
 
     async def get_usage_all_users(self, message: types.Message, user: User, command: CommandObject):
         if not check_access_conditions(UserRole.ADMIN, user.role):

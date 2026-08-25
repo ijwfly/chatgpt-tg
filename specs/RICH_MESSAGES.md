@@ -1,6 +1,6 @@
 # Rich Messages Migration (Telegram Bot API 10.1–10.3)
 
-Status: **Phases 0–4 done** — rich answers, draft streaming with the native Stop button. Phases 5–6 pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
+Status: **Phases 0–5 done** — rich answers, draft streaming with the native Stop button, rich menus. Phase 6 (docs, PR) pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
 
 ## 1. Why
 
@@ -86,7 +86,7 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 | 2 | Final answers via `sendRichMessage` (adapter + scheduler), new cutoff | ✅ |
 | 3 | Streaming via `DraftStream` with `ChatServiceMessage` fallback (rich edits) | ✅ |
 | 4 | Native Stop: `can_stop`, `StoppedGenerationMiddleware`, `allowed_updates` | ✅ |
-| 5 | Menus (`/usage`, `/models`, admin cards, settings), cleanup | ⬜ |
+| 5 | Menus (`/usage`, `/models`, admin cards, settings), cleanup | ✅ |
 | 6 | Docs (`CLAUDE.md`, `PROJECT_SPEC.md`, `RUNTIME_ARCHITECTURE.md`, `E2E_TESTS.md`, `CHANGELOG.md`), PR | ⬜ |
 
 ### Phase 1 result
@@ -104,6 +104,10 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 ### Phase 4 result
 
 `StoppedGenerationMiddleware` (outer middleware on `dp.update`, registered by `CancellationManager`) reads `update.model_extra['stopped_message_generation']`, cancels the token of `chat.id` and swallows the update; `TelegramBot.run()` passes `allowed_updates = resolve_used_update_types() + ['stopped_message_generation']`. `MockLLMClient.add_streaming_response(chunk_delay=)` makes a slow stream; the test runs the turn as a task, feeds `make_stopped_generation_update` mid-stream under `warnings.simplefilter('error', RuntimeWarning)` and checks the partial answer is finalised as a rich message. Idle-user stop updates are ignored without any Telegram call.
+
+### Phase 5 result
+
+`/usage` and `/models` (send + callback edit) use `**bold**` rich markdown via `send_rich_message` / `edit_rich_message_in_chat`; `/models` lists are real `- ` lists. Admin user cards use `escape_rich_markdown` + `send_rich_message_to_chat` / `edit_rich_message_in_chat`. `settings_menu` no longer passes a parse mode. `app/bot/*` has no `ParseMode` left; `utils.send_telegram_message` is plain-text only (no `parse_mode` parameter), `utils.edit_telegram_message`, `escape_tg_markdown` and the dead `detect_and_extract_code`/`CodeFragment` were removed. Tests in `test_commands.py::TestRichMenus`.
 
 ## 6. Tests to add (`tests/e2e/test_rich_messages.py` unless noted)
 

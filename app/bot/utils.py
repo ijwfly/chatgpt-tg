@@ -1,11 +1,8 @@
 import base64
-import dataclasses
 import io
-import re
 import asyncio
 from datetime import date
 from functools import lru_cache
-from typing import List
 from contextlib import asynccontextmanager
 
 import httpx
@@ -88,23 +85,6 @@ class Timer:
         self._current_timeout = self.timeout
 
 
-@dataclasses.dataclass
-class CodeFragment:
-    language: str
-    code: str
-
-
-def detect_and_extract_code(text) -> List[CodeFragment]:
-    pattern = r"```(\S+)\n(.*?)```"
-    matches = re.findall(pattern, text, re.DOTALL)
-    results = []
-    for match in matches:
-        language, code = match
-        fragment = CodeFragment(language, code)
-        results.append(fragment)
-    return results
-
-
 def get_username(user: types.User):
     full_name = user.full_name
     username = user.username
@@ -139,39 +119,13 @@ def get_hide_button():
     return keyboard.as_markup()
 
 
-def escape_tg_markdown(text):
-    escape_chars = '\*_`\['
-    return ''.join('\\' + char if char in escape_chars else char for char in text)
-
-
-async def send_telegram_message(message: types.Message, text: str, parse_mode=None, reply_markup=None):
+async def send_telegram_message(message: types.Message, text: str, reply_markup=None):
+    """Plain-text message (service texts, errors, transcriptions). LLM answers use app.bot.rich_messages."""
     if message.reply_to_message is None:
         send_message = message.answer
     else:
         send_message = message.reply
-
-    try:
-        return await send_message(text, parse_mode=parse_mode, reply_markup=reply_markup)
-    except TelegramBadRequest as e:
-        if not is_parse_error(e):
-            raise
-        # try to send message without parse_mode once
-        return await send_message(text, parse_mode=None, reply_markup=reply_markup)
-
-
-async def edit_telegram_message(message: types.Message, text: str, message_id, parse_mode=None, reply_markup=None):
-    chat_id = message.chat.id
-    try:
-        return await message.bot.edit_message_text(
-            text=text, chat_id=chat_id, message_id=message_id, parse_mode=parse_mode, reply_markup=reply_markup,
-        )
-    except TelegramBadRequest as e:
-        if not is_parse_error(e):
-            raise
-        # try to edit message without parse_mode once
-        return await message.bot.edit_message_text(
-            text=text, chat_id=chat_id, message_id=message_id, parse_mode=None, reply_markup=reply_markup,
-        )
+    return await send_message(text, parse_mode=None, reply_markup=reply_markup)
 
 
 async def send_photo(message: types.Message, photo_bytes, caption=None, reply_markup=None):

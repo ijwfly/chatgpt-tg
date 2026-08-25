@@ -1,7 +1,6 @@
 import settings
 
 from aiogram import Bot, types, Dispatcher, F
-from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.llm_models import get_models
@@ -120,7 +119,7 @@ class Settings:
         self.dispatcher.callback_query.register(self.process_callback, F.data.startswith(f'{SETTINGS_PREFIX}.'))
 
     async def send_settings(self, message: types.Message, user: User):
-        await message.answer("Settings:", reply_markup=self.get_keyboard(user), parse_mode=ParseMode.MARKDOWN)
+        await message.answer("Settings:", reply_markup=self.get_keyboard(user))
 
     def is_setting_available_for_user(self, setting_name: str, user: User):
         mininum_required_role = self.minimum_required_roles.get(setting_name)
