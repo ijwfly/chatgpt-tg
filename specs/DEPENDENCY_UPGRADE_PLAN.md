@@ -1,6 +1,6 @@
 # Dependency Upgrade Plan: aiogram 3 + current LLM SDKs
 
-Status: **in progress** — Phases 0–3 done (requirements restructured, aiogram 3.30, pydantic v2 API, openai 3.3.1; 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
+Status: **in progress** — Phases 0–4 done (requirements restructured, aiogram 3.30, pydantic v2 API, openai 3.3.1, anthropic 1.0.0; 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
 
 ## 1. Why this document exists
 
@@ -205,7 +205,7 @@ Commit: `Upgrade openai SDK to 3.x`.
 
 Result: `openai==3.3.1` installs alongside `httpx==0.27.1` (langfuse) and `httpx2==2.12.0`; no application code changes were needed — `AsyncStream.response`/`aclose()` (already wrapped in `suppress`) and `astream_to_file` still exist, `embeddings.py` was fixed in Phase 2, `langfuse.openai.AsyncOpenAI` constructs on 3.3.1. Live check of Whisper/TTS/DALL-E and a Langfuse trace remains part of the manual smoke.
 
-## 8. Phase 4 — anthropic 0.29 → 1.0
+## 8. Phase 4 — anthropic 0.29 → 1.0 — ✅ done
 
 Bump `anthropic==1.0.x`. Verified: `anthropic.AsyncClient` alias exists; we don't use `temperature`/`top_p`/`top_k`, `completions`, `with_raw_response`, custom httpx objects, or Bedrock — so no mandatory code changes.
 
@@ -216,6 +216,8 @@ Bump `anthropic==1.0.x`. Verified: `anthropic.AsyncClient` alias exists; we don'
 Fallback: `anthropic==0.125.0`.
 
 Commit: `Upgrade anthropic SDK to 1.0`.
+
+Result: `anthropic==1.0.0`; unknown stream event types are now logged at debug level and skipped instead of raising. `AsyncClient` alias and all `messages.create` kwargs we use still exist; `AnthropicInstrumentor().instrument()` runs. The `max_tokens=4096` knob was left as is. The Anthropic path has no E2E coverage — it is on the manual smoke list.
 
 ## 9. Phase 5 — mcp 1.13 → 2.x
 

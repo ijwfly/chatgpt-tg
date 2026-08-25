@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import List, Any, Optional, Callable, Union
 
 import pydantic
@@ -8,6 +9,8 @@ from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage, FunctionC
 from app.openai_helpers.function_storage import FunctionStorage
 
 from app.openai_helpers.llm_client_factory import LLMClientFactory
+
+logger = logging.getLogger(__name__)
 
 
 OPENAI_TO_ANTHROPIC_ROLE_MAPPING = {
@@ -168,7 +171,8 @@ class AnthropicChatGPT:
             elif resp_part.type == 'ping':
                 pass
             else:
-                raise NotImplementedError
+                # newer SDK/API versions add event types (e.g. server tool events); they carry nothing we accumulate
+                logger.debug('Ignoring unknown Anthropic stream event type: %s', resp_part.type)
 
             dialog_message = AnthropicDialogMessage(**result_dict)
             completion_usage = CompletionUsage(**usage_dict)
