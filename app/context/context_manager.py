@@ -51,6 +51,9 @@ class ContextManager:
             raise ValueError(f"Unknown GPT mode: {self.user.gpt_mode}")
         system_prompt = gpt_mode["system"]
 
+        if settings.FORMATTING_SYSTEM_PROMPT:
+            system_prompt += '\n\n' + settings.FORMATTING_SYSTEM_PROMPT
+
         now = datetime.datetime.now(settings.POSTGRES_TIMEZONE)
         system_prompt += f'\n\nCurrent date: {now.strftime("%A, %Y-%m-%d")}'
 

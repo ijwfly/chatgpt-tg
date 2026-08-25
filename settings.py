@@ -79,6 +79,10 @@ MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 POSTGRES_TIMEZONE = pytz.timezone('UTC')
 SUCCESSIVE_FUNCTION_CALLS_LIMIT = 12  # limit of successive function calls that model can make
 
+# Appended to every system prompt (all gpt modes, default and agent runtime). Answers are rendered by
+# Telegram as rich messages, so GitHub Flavored Markdown is available; see specs/RICH_MESSAGES.md.
+FORMATTING_SYSTEM_PROMPT = """You are running inside a Telegram bot. Your answers are rendered by Telegram as rich messages that support GitHub Flavored Markdown: headings (#), bold (**), italic (*), strikethrough (~~), inline code and fenced code blocks with a language, bullet and numbered lists, task lists, tables, block quotes (>), horizontal rules (---), links, footnotes, LaTeX formulas ($...$ and $$...$$) and collapsible <details> blocks. Use plain GitHub Flavored Markdown; do NOT escape regular characters with backslashes (no \( \) \. \- etc.) and do not use HTML except <details>/<summary>."""
+
 # Agent runtime settings
 AGENT_SYSTEM_PROMPT = """You are a proactive agent that completes tasks end-to-end. Do not stop at suggestions — take action and deliver results.
 

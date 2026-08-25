@@ -71,7 +71,11 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 - `scheduler_service` — the LLM result of a scheduled task goes through `send_rich_message_to_chat`.
 - Removed: `ParseMode` imports in `app/bot/*`, `utils.escape_tg_markdown`, dead `utils.detect_and_extract_code` / `CodeFragment`.
 
-### 4.5 Test infrastructure
+### 4.5 Model instructions
+
+`settings.FORMATTING_SYSTEM_PROMPT` is appended to every system prompt in `ContextManager.get_system_prompt()` (so it covers all `gpt_mode`s, the default runtime and the agent runtime): the model is told it runs inside a Telegram bot whose answers render as rich messages with GitHub Flavored Markdown (headings, tables, fences, task lists, LaTeX, `<details>`), and must not backslash-escape regular characters. Older deployment-local prompts that asked for "Telegram-compatible Markdown" should be dropped.
+
+### 4.6 Test infrastructure
 
 - `tests/conftest.py::_fake_telegram_result`: `sendRichMessage` → a message dict **without `text`** (as Telegram returns), `sendRichMessageDraft` → `True`.
 - `tests/helpers/bot_spy.py`: text of a request = `data['text']` or `data['rich_message']['markdown']`; `get_sent_messages()` covers `sendMessage` + `sendRichMessage`; new `get_rich_messages()`, `get_plain_messages()`, `get_drafts()`.

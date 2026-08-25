@@ -43,6 +43,21 @@ def _parse_error():
 
 class TestRichFinalAnswer:
 
+    async def test_system_prompt_describes_gfm_rich_messages(self, bot_app):
+        """The model is told it is inside a Telegram bot that renders GitHub Flavored Markdown."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 71000
+        mock_llm = MockLLMClient()
+        mock_llm.add_response('Hello!')
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        await dp.feed_update(mock_bot, make_text_message('Hi', user_id=user_id))
+        await asyncio.sleep(0.1)
+
+        system = mock_llm.calls[-1]['messages'][0]
+        assert system['role'] == 'system'
+        assert 'Telegram bot' in system['content'] and 'GitHub Flavored Markdown' in system['content']
+        assert 'do NOT escape regular characters' in system['content']
+
     async def test_final_answer_is_sent_as_rich_markdown(self, bot_app):
         """The LLM answer goes out verbatim as InputRichMessage.markdown, without any parse_mode."""
         telegram_bot, dp, mock_bot = bot_app

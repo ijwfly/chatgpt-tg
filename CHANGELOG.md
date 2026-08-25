@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `RICH_DRAFT_STREAMING = True` private chats stream ephemeral rich drafts (`sendRichMessageDraft`) with `<tg-thinking>` thinking/tool
   hints and the native Stop button (`can_stop` + `stopped_message_generation` handled by a middleware shim
   until aiogram ships Bot API 10.3); groups always use the edited message with an inline Stop button. A rejected
-  markup falls back to plain text. Design and phase notes: `specs/RICH_MESSAGES.md`.
+  markup falls back to plain text. `FORMATTING_SYSTEM_PROMPT` tells the model it is in a Telegram bot
+  that renders GitHub Flavored Markdown. Design and phase notes: `specs/RICH_MESSAGES.md`.
 
 ### Changed
 

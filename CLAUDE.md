@@ -20,7 +20,7 @@ Database migrations run automatically on Postgres startup via `migrations/pg_ini
 
 ## Configuration
 
-All configuration is in `settings.py`. The file has defaults at the top and local overrides at the bottom. API keys, tokens, and role settings are all configured there. **`settings.py` currently contains hardcoded secrets — these should not be committed.**
+All configuration is in `settings.py`. The file has defaults at the top and local overrides at the bottom. API keys, tokens, and role settings are all configured there. `FORMATTING_SYSTEM_PROMPT` is appended to every system prompt (`ContextManager.get_system_prompt`) and tells the model it runs in a Telegram bot rendering GitHub Flavored Markdown — do not duplicate formatting instructions in `gpt_mode` prompts or `AGENT_SYSTEM_PROMPT`. **`settings.py` currently contains hardcoded secrets — these should not be committed.**
 
 ## Architecture
 
