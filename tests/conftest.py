@@ -54,6 +54,14 @@ def _fake_telegram_result(method: str, data: dict):
     global _bot_message_id
     _bot_message_id += 1
 
+    if method == 'sendRichMessage':
+        # Telegram returns a rich message without `text`; the bot only relies on message_id
+        return {
+            'message_id': _bot_message_id,
+            'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
+            'chat': {'id': data.get('chat_id', 12345), 'type': 'private'},
+            'date': int(time.time()),
+        }
     if method in ('sendMessage', 'editMessageText', 'sendPhoto', 'sendDocument', 'sendVoice', 'editMessageReplyMarkup'):
         return {
             'message_id': _bot_message_id,
@@ -70,7 +78,7 @@ def _fake_telegram_result(method: str, data: dict):
             'username': 'test_bot',
         }
     else:
-        # sendChatAction, deleteMessage, answerCallbackQuery, setMyCommands, ...
+        # sendChatAction, sendRichMessageDraft, deleteMessage, answerCallbackQuery, setMyCommands, ...
         return True
 
 

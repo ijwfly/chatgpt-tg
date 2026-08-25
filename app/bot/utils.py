@@ -127,8 +127,10 @@ def message_is_forward(message: types.Message):
 
 
 def is_parse_error(error: TelegramBadRequest) -> bool:
-    """aiogram 3 has no dedicated CantParseEntities exception; it is a TelegramBadRequest with this message."""
-    return "can't parse entities" in str(error.message).lower()
+    """aiogram 3 has no dedicated CantParseEntities exception; Telegram reports markup errors as a
+    TelegramBadRequest whose message starts with "can't parse" (entities for legacy parse modes, rich markup
+    for rich messages)."""
+    return "can't parse" in str(error.message).lower()
 
 
 def get_hide_button():

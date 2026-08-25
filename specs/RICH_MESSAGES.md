@@ -1,6 +1,6 @@
 # Rich Messages Migration (Telegram Bot API 10.1–10.3)
 
-Status: **Phase 0 done** — branch and design. Phases 1–6 pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
+Status: **Phases 0–1 done** — helpers and test infrastructure in place, nothing switched yet. Phases 2–6 pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
 
 ## 1. Why
 
@@ -82,12 +82,16 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 | # | Phase | Status |
 |---|---|---|
 | 0 | Branch `claude/rich-messages`, this spec | ✅ |
-| 1 | `rich_messages.py` helpers, fence-aware splitter, `is_parse_error`, test infrastructure, splitter unit tests | ⬜ |
+| 1 | `rich_messages.py` helpers, fence-aware splitter, `is_parse_error`, test infrastructure, splitter unit tests | ✅ |
 | 2 | Final answers via `sendRichMessage` (adapter + scheduler), new cutoff | ⬜ |
 | 3 | Streaming via `DraftStream` with `ChatServiceMessage` fallback (rich edits) | ⬜ |
 | 4 | Native Stop: `can_stop`, `StoppedGenerationMiddleware`, `allowed_updates` | ⬜ |
 | 5 | Menus (`/usage`, `/models`, admin cards, settings), cleanup | ⬜ |
 | 6 | Docs (`CLAUDE.md`, `PROJECT_SPEC.md`, `RUNTIME_ARCHITECTURE.md`, `E2E_TESTS.md`, `CHANGELOG.md`), PR | ⬜ |
+
+### Phase 1 result
+
+`app/bot/rich_messages.py` (`send_rich_message`, `send_rich_message_to_chat`, `edit_rich_message`, `edit_rich_message_in_chat`, `send_rich_draft`, `split_markdown`, `escape_rich_markdown`), `is_parse_error` widened to `"can't parse"`, `sendRichMessage`/`sendRichMessageDraft` fakes in `tests/conftest.py`, `BotSpy` reads text from `rich_message.markdown` too (`get_rich_messages`, `get_plain_messages`, `get_drafts`, `get_all_draft_texts`), `make_text_message(chat_type=)` and `make_stopped_generation_update` in the factory, `tests/unit/test_rich_messages.py` for the splitter and escaper. Verified that `SendRichMessageDraft(..., can_stop=True)` serialises the extra field with aiogram 3.30.
 
 ## 6. Tests to add (`tests/e2e/test_rich_messages.py` unless noted)
 

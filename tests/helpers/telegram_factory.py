@@ -27,10 +27,10 @@ def _make_user_dict(user_id=12345, first_name='Test', last_name='User', username
     }
 
 
-def _make_chat_dict(chat_id=12345):
+def _make_chat_dict(chat_id=12345, chat_type='private'):
     return {
         'id': chat_id,
-        'type': 'private',
+        'type': chat_type,
     }
 
 
@@ -46,7 +46,7 @@ def _make_reply_to_dict(chat_id, message_id):
 
 
 def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=None,
-                      first_name='Test', last_name='User', username='testuser'):
+                      first_name='Test', last_name='User', username='testuser', chat_type='private'):
     if chat_id is None:
         chat_id = user_id
 
@@ -54,7 +54,7 @@ def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=Non
     message_dict = {
         'message_id': message_id,
         'from': _make_user_dict(user_id, first_name, last_name, username),
-        'chat': _make_chat_dict(chat_id),
+        'chat': _make_chat_dict(chat_id, chat_type),
         'date': int(time.time()),
         'text': text,
     }
@@ -239,6 +239,21 @@ def make_callback_query(data, message_id, user_id=12345, chat_id=None):
                 'date': int(time.time()),
                 'text': '...',
             },
+        },
+    }
+    return types.Update.model_validate(update_dict)
+
+
+def make_stopped_generation_update(chat_id, draft_id):
+    """Bot API 10.3 `stopped_message_generation` update (the user pressed the native Stop button on a draft).
+
+    aiogram 3.30 does not know this update type; it is kept as an extra field on `Update`.
+    """
+    update_dict = {
+        'update_id': _next_update_id(),
+        'stopped_message_generation': {
+            'chat': _make_chat_dict(chat_id),
+            'draft_id': draft_id,
         },
     }
     return types.Update.model_validate(update_dict)
