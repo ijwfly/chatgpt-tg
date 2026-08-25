@@ -1,6 +1,6 @@
 # Dependency Upgrade Plan: aiogram 3 + current LLM SDKs
 
-Status: **planned, not started**. This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
+Status: **in progress** — Phase 0 done (`requirements.txt` restructured, 136 tests green). This document is the executable checklist for the migration. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases are done strictly in order on one branch.
 
 ## 1. Why this document exists
 
@@ -41,7 +41,7 @@ Python stays **3.11** (`Dockerfile`, `.python-version`); every target supports i
 - Never combine an aiogram change and an SDK change in one commit — the test suite is the only safety net and its failures must be attributable.
 - Every phase: `bash scripts/test.sh`, then `docker-compose up -d --build` and the manual smoke list from §11.
 
-## 4. Phase 0 — restructure `requirements.txt` (no version changes)
+## 4. Phase 0 — restructure `requirements.txt` (no version changes) — ✅ done
 
 Goal: prove the flat-freeze was the only blocker, with zero behaviour change.
 
@@ -71,9 +71,11 @@ pytest==8.3.4
 pytest-asyncio==0.24.0
 ```
 
-Drop packages that nothing imports: `pydantic-settings`, `python-dotenv`, `huggingface-hub`, `tokenizers`, `hf-xet`, `jsonschema`, `docstring-parser`, `fsspec`, `filelock`, `tqdm`, `Babel`, `PyYAML`, `async-lru`. (`pydantic` itself arrives via openai/anthropic/aiogram 3; add it explicitly in Phase 2 when we pin it.)
+`async-lru` is imported (`app/`) and must stay. Drop packages that nothing imports: `pydantic-settings`, `python-dotenv`, `huggingface-hub`, `tokenizers`, `hf-xet`, `jsonschema`, `docstring-parser`, `fsspec`, `filelock`, `tqdm`, `Babel`, `PyYAML`. (`pydantic` itself arrives via openai/anthropic/aiogram 3; add it explicitly in Phase 2 when we pin it.)
 
 Verify: fresh venv install, `pip check`, `bash scripts/test.sh`, `docker-compose build`.
+
+Result: fresh py3.11 venv installs cleanly, `pip check` clean, 136 tests pass. Transitive drift observed: aiohttp 3.8.4→3.8.6, pydantic 2.11.7→2.13.4, magic-filter 1.0.9→1.0.12.
 
 ## 5. Phase 1 — aiogram 2.25 → 3.30
 
