@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Dependencies modernised** — `aiogram` 2.25 → 3.30, `openai` 1.35 → 3.3, `anthropic` 0.29 → 1.0,
+  `mcp` 1.13 → 2.1 (new `Client` API, `httpx2` transport), `pytest` 9 / `pytest-asyncio` 1.4, and
+  refreshed utility packages. `requirements.txt` now lists direct dependencies only.
+  Roadmap and per-phase notes: `specs/DEPENDENCY_UPGRADE_PLAN.md`.
+- **aiogram 3 migration** — routers/`Command`/`F` filters, `UserMiddleware` as a `dp.message`
+  middleware, `TelegramBadRequest`, `InlineKeyboardBuilder` keyboards, `BufferedInputFile`/`FSInputFile`
+  for outgoing files, `forward_origin` support for forwarded messages, `/usage_all` args via
+  `CommandObject`. Tests feed updates through `dp.feed_update(bot, update)` with a recording
+  `BaseSession` instead of a `Bot.request` mock.
+- Pydantic v1-style calls (`.dict()`, `.copy()`, `.parse_raw()`, `.schema()`) replaced with the v2 API.
+- Unknown Anthropic stream event types are skipped instead of aborting the response.
+
 ## [2.0.0] - 2026-07-06 — "Agent Mode"
 
 This is a major release. The bot grew from an OpenAI-only chat proxy into a
