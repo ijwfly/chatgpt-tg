@@ -1,12 +1,13 @@
 from contextlib import suppress
 from typing import Callable
 
-from aiogram.enums import ChatAction, ParseMode
+from aiogram.enums import ChatAction
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.bot.cancellation_manager import get_cancel_button
+from app.bot.rich_messages import RICH_MESSAGE_LENGTH_CUTOFF, send_rich_message, split_markdown
 from app.bot.service_message import ChatServiceMessage, ServiceState
 from app.bot.utils import send_telegram_message
 from app.context.context_manager import ContextManager
@@ -20,7 +21,9 @@ from app.runtime.user_input import UserInput
 from app.storage.db import User
 
 WAIT_BETWEEN_MESSAGE_UPDATES = 1
-TELEGRAM_MESSAGE_LENGTH_CUTOFF = 4080
+# rich messages allow 32768 characters; verbose tool output still goes through plain sendMessage
+TELEGRAM_MESSAGE_LENGTH_CUTOFF = RICH_MESSAGE_LENGTH_CUTOFF
+PLAIN_MESSAGE_LENGTH_CUTOFF = 4080
 THINKING_EMOJI = '\U0001f9e0'
 THINKING_MAX_CHARS = 300
 MIN_STREAMING_CONTENT_LEN = 50
@@ -116,21 +119,17 @@ class TelegramRuntimeAdapter:
                     final_dialog_message = event.dialog_message
 
                     if final_dialog_message and final_dialog_message.content:
-                        dialog_messages = self._split_dialog_message(final_dialog_message)
+                        dialog_messages = self._split_dialog_message(
+                            final_dialog_message, TELEGRAM_MESSAGE_LENGTH_CUTOFF,
+                        )
                         first, rest = dialog_messages[0], dialog_messages[1:]
 
-                        finalize_id = await service.finalize(
-                            first.content,
-                            parse_mode=ParseMode.MARKDOWN,
-                            reply_markup=None,
-                        )
+                        finalize_id = await service.finalize(first.content, reply_markup=None)
                         if event.needs_context_save and finalize_id is not None:
                             await self.context_manager.add_message(first, finalize_id)
 
                         for dm in rest:
-                            response = await send_telegram_message(
-                                self.message, dm.content, parse_mode=ParseMode.MARKDOWN,
-                            )
+                            response = await send_rich_message(self.message, dm.content)
                             if event.needs_context_save:
                                 await self.context_manager.add_message(dm, response.message_id)
 
@@ -161,7 +160,7 @@ class TelegramRuntimeAdapter:
                                 f'Function call: {event.function_name}({event.function_args})'
                                 f'\n\nResponse: {event.result}'
                             )
-                            text = text[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]
+                            text = text[:PLAIN_MESSAGE_LENGTH_CUTOFF]
                             await send_telegram_message(self.message, text)
         finally:
             if state in (ServiceState.THINKING, ServiceState.STREAMING, ServiceState.FUNCTION_HINT) \
@@ -169,22 +168,6 @@ class TelegramRuntimeAdapter:
                 await service.clear()
 
     @staticmethod
-    def _split_dialog_message(dialog_message, max_content_length=TELEGRAM_MESSAGE_LENGTH_CUTOFF):
-        content = dialog_message.content
-        if len(content) <= max_content_length:
-            return [dialog_message]
-
-        parts = []
-        while len(content) > max_content_length:
-            for separator in ['\n', '.', ' ']:
-                last_space_index = content.rfind(separator, 0, max_content_length)
-                if last_space_index != -1:
-                    break
-            if last_space_index == -1:
-                parts.append(content[:max_content_length])
-                content = content[max_content_length:]
-            else:
-                parts.append(content[:last_space_index])
-                content = content[last_space_index + 1:]
-        parts.append(content)
+    def _split_dialog_message(dialog_message, max_content_length):
+        parts = split_markdown(dialog_message.content, max_content_length)
         return [dialog_message.model_copy(update={"content": part}) for part in parts]

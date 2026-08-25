@@ -104,6 +104,11 @@ class MockedSession(BaseSession):
         super().__init__()
         self.requests = []
         self.responses = []
+        # api_method -> list of exceptions to raise on the next calls of that method (one per call)
+        self.failures = {}
+
+    def fail_next(self, api_method, exception):
+        self.failures.setdefault(api_method, []).append(exception)
 
     async def close(self):
         pass
@@ -112,6 +117,8 @@ class MockedSession(BaseSession):
         api_method = method.__api_method__
         data = _method_data(method)
         self.requests.append((api_method, data))
+        if self.failures.get(api_method):
+            raise self.failures[api_method].pop(0)
         result = _fake_telegram_result(api_method, data)
         self.responses.append((api_method, data, result))
         response = self.check_response(

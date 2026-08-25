@@ -123,7 +123,7 @@ class SchedulerService:
             if final_event is not None:
                 final_text = final_event.dialog_message.get_text_content()
                 if final_text:
-                    sent_message_id = await side_effects.send_message(final_text)
+                    sent_message_id = await side_effects.send_rich_message(final_text)
                     if final_event.needs_context_save:
                         # persist the result into the dialog branch so the user
                         # can reply to it and continue the conversation

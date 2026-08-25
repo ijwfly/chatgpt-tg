@@ -6,7 +6,7 @@ from typing import Optional
 from aiogram.types import Message
 from aiogram.exceptions import TelegramBadRequest
 
-from app.bot.utils import send_telegram_message, edit_telegram_message
+from app.bot.rich_messages import send_rich_message, edit_rich_message
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,8 @@ class ChatServiceMessage:
 
     Provides set_text/finalize/clear helpers that prefer in-place edits
     over send/delete cycles, with deduplication, optional throttling, and
-    TelegramBadRequest recovery.
+    TelegramBadRequest recovery. Text is rich markdown (plain-text fallback
+    lives in the rich_messages helpers).
     """
 
     def __init__(self, message: Message):
@@ -50,7 +51,6 @@ class ChatServiceMessage:
         self,
         text: str,
         *,
-        parse_mode: Optional[str] = None,
         reply_markup=None,
         throttle_seconds: float = 0,
     ) -> Optional[int]:
@@ -72,9 +72,7 @@ class ChatServiceMessage:
 
         if self.message_id is None:
             try:
-                response = await send_telegram_message(
-                    self.message, text, parse_mode=parse_mode, reply_markup=reply_markup,
-                )
+                response = await send_rich_message(self.message, text, reply_markup=reply_markup)
                 self.message_id = response.message_id
                 self.current_text = text
                 self.last_send_time = datetime.now()
@@ -82,10 +80,7 @@ class ChatServiceMessage:
                 logger.warning("Failed to send service message: %s", e)
         else:
             try:
-                await edit_telegram_message(
-                    self.message, text, self.message_id,
-                    parse_mode=parse_mode, reply_markup=reply_markup,
-                )
+                await edit_rich_message(self.message, text, self.message_id, reply_markup=reply_markup)
                 self.current_text = text
                 self.last_send_time = datetime.now()
             except TelegramBadRequest as e:
@@ -102,7 +97,6 @@ class ChatServiceMessage:
         self,
         text: str,
         *,
-        parse_mode: Optional[str] = None,
         reply_markup=None,
     ) -> Optional[int]:
         """Write the final answer into the service message and detach.
@@ -115,19 +109,14 @@ class ChatServiceMessage:
 
         if self.message_id is None:
             try:
-                response = await send_telegram_message(
-                    self.message, text, parse_mode=parse_mode, reply_markup=reply_markup,
-                )
+                response = await send_rich_message(self.message, text, reply_markup=reply_markup)
                 self.message_id = response.message_id
             except TelegramBadRequest as e:
                 logger.warning("Failed to send finalized service message: %s", e)
                 return None
         else:
             try:
-                await edit_telegram_message(
-                    self.message, text, self.message_id,
-                    parse_mode=parse_mode, reply_markup=reply_markup,
-                )
+                await edit_rich_message(self.message, text, self.message_id, reply_markup=reply_markup)
             except TelegramBadRequest as e:
                 logger.warning(
                     "Failed to edit service message %s on finalize: %s; sending fresh",
@@ -135,9 +124,7 @@ class ChatServiceMessage:
                 )
                 self.message_id = None
                 try:
-                    response = await send_telegram_message(
-                        self.message, text, parse_mode=parse_mode, reply_markup=reply_markup,
-                    )
+                    response = await send_rich_message(self.message, text, reply_markup=reply_markup)
                     self.message_id = response.message_id
                 except TelegramBadRequest as e2:
                     logger.warning("Failed to send replacement finalized message: %s", e2)

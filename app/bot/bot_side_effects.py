@@ -3,6 +3,8 @@ from typing import Optional
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
 
+from app.bot.rich_messages import send_rich_message_to_chat
+
 
 class BotSideEffectHandler:
     """SideEffectHandler that works via Bot + chat_id (no aiogram Message needed).
@@ -17,6 +19,11 @@ class BotSideEffectHandler:
 
     async def send_message(self, text: str) -> int:
         result = await self.bot.send_message(chat_id=self.chat_id, text=text)
+        return result.message_id
+
+    async def send_rich_message(self, markdown: str) -> int:
+        """LLM answers are rich markdown; service texts go through send_message."""
+        result = await send_rich_message_to_chat(self.bot, self.chat_id, markdown)
         return result.message_id
 
     async def send_photo(self, photo_bytes: bytes, caption: Optional[str] = None) -> int:
