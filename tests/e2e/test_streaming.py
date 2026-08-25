@@ -12,7 +12,7 @@ from tests.helpers.bot_spy import BotSpy
 class TestStreaming:
 
     async def test_streaming_sends_and_edits_message(self, bot_app):
-        """Streaming mode sends initial message then edits it with accumulated content."""
+        """Streaming mode streams drafts with accumulated content, then sends the final answer."""
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
 
@@ -43,16 +43,17 @@ class TestStreaming:
         await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
-        # Streaming should produce both sendMessage and editMessageText calls
+        # In a private chat streaming goes through rich drafts, the finished answer is a rich message
         sent = spy.get_sent_messages()
-        edited = spy.get_edited_messages()
-        # First sendMessage is from initial "Hi" response; second from streaming
-        assert len(sent) >= 2, f"Expected at least 2 sendMessage calls, got {len(sent)}"
-        assert len(edited) > 0, "Expected at least one editMessageText (streaming update)"
+        drafts = spy.get_drafts()
+        # First send is from the initial "Hi" response; second is the streamed answer
+        assert len(sent) >= 2, f"Expected at least 2 sent messages, got {len(sent)}"
+        assert len(drafts) > 0, "Expected at least one sendRichMessageDraft (streaming update)"
+        assert not spy.get_edited_messages(), "Drafts replace editMessageText in private chats"
 
-        # Final content should contain the streamed response
-        all_texts = spy.get_all_sent_texts() + spy.get_all_edited_texts()
-        assert any("streaming" in t for t in all_texts)
+        # Draft previews and the final answer carry the streamed content
+        assert any("streaming" in t for t in spy.get_all_draft_texts())
+        assert any("streaming" in t for t in spy.get_all_sent_texts())
 
     async def test_streaming_with_thinking_blocks(self, bot_app):
         """Streaming with <think> blocks shows thinking emoji, then final content."""
@@ -92,8 +93,8 @@ class TestStreaming:
         await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
-        all_texts = spy.get_all_sent_texts() + spy.get_all_edited_texts()
-        # Should have shown thinking emoji at some point
+        all_texts = spy.get_all_shown_texts()
+        # Should have shown thinking emoji at some point (inside a <tg-thinking> draft in private chats)
         assert any('\U0001f9e0' in t for t in all_texts), \
             f"Expected thinking emoji in messages, got: {all_texts}"
         # Final message should have actual response

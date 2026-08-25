@@ -1,6 +1,6 @@
 # Rich Messages Migration (Telegram Bot API 10.1–10.3)
 
-Status: **Phases 0–2 done** — final answers, the streaming service message and scheduled-task results go out as rich messages. Phases 3–6 pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
+Status: **Phases 0–3 done** — rich answers, draft streaming in private chats with a rich service-message fallback. Phases 4–6 pending. Each phase ends with a green `bash scripts/test.sh` and its own commit; phases run in order on branch `claude/rich-messages` (based on `claude/dependency-upgrade-plan`, PR targets that branch).
 
 ## 1. Why
 
@@ -84,7 +84,7 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 | 0 | Branch `claude/rich-messages`, this spec | ✅ |
 | 1 | `rich_messages.py` helpers, fence-aware splitter, `is_parse_error`, test infrastructure, splitter unit tests | ✅ |
 | 2 | Final answers via `sendRichMessage` (adapter + scheduler), new cutoff | ✅ |
-| 3 | Streaming via `DraftStream` with `ChatServiceMessage` fallback (rich edits) | ⬜ |
+| 3 | Streaming via `DraftStream` with `ChatServiceMessage` fallback (rich edits) | ✅ |
 | 4 | Native Stop: `can_stop`, `StoppedGenerationMiddleware`, `allowed_updates` | ⬜ |
 | 5 | Menus (`/usage`, `/models`, admin cards, settings), cleanup | ⬜ |
 | 6 | Docs (`CLAUDE.md`, `PROJECT_SPEC.md`, `RUNTIME_ARCHITECTURE.md`, `E2E_TESTS.md`, `CHANGELOG.md`), PR | ⬜ |
@@ -96,6 +96,10 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 ### Phase 2 result
 
 `ChatServiceMessage` sends/edits through `send_rich_message`/`edit_rich_message` (no `parse_mode` parameter any more), so both the streamed preview and the finalised answer are rich; `TelegramRuntimeAdapter` splits with `split_markdown` at `RICH_MESSAGE_LENGTH_CUTOFF` (verbose tool output keeps the 4080 plain cutoff), the remaining chunks go through `send_rich_message`. `BotSideEffectHandler.send_rich_message` + `scheduler_service` send the scheduled-task result as rich markdown. `MockedSession.fail_next(api_method, exc)` injects Telegram errors; `tests/e2e/test_rich_messages.py` covers the verbatim markdown payload + DB row, plain fallback on `can't parse`, and `reply_parameters` in sub-dialogues. The split test lowers the cutoff via monkeypatch.
+
+### Phase 3 result
+
+`DraftStream` (`service_message.py`) and `ChatServiceMessage` share one live-output interface (`set_thinking` / `set_hint` / `set_content` / `finish` / `freeze` / `clear` / `failed` / `needs_cleanup`); `TelegramRuntimeAdapter._new_live_output` picks `DraftStream` for `ChatType.PRIVATE` (`draft_id = user_message_id * 100 + phase`) and a `ChatServiceMessage` with the Stop keyboard otherwise; `show()` swaps in a service message as soon as a draft call fails. Drafts already carry `can_stop=True`. Thinking and tool hints are `<tg-thinking>` drafts, the finished answer is a fresh `sendRichMessage` without keyboard; the keepalive re-sends the last draft every 20 s. `BotSpy.get_all_shown_texts` / `assert_shown_text_contains` include drafts. Tests: private drafts (single draft id, one final rich message, no edit/delete), `<tg-thinking>` for thinking + hint, group chat edit path with Stop button, draft failure fallback, distinct draft ids per agent phase; the two legacy streaming tests now assert drafts.
 
 ## 6. Tests to add (`tests/e2e/test_rich_messages.py` unless noted)
 

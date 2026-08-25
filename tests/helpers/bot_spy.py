@@ -47,6 +47,16 @@ class BotSpy:
     def get_all_draft_texts(self):
         return [_text_of(m) for m in self.get_drafts()]
 
+    def get_all_shown_texts(self):
+        """Everything the user could have seen: sent and edited messages plus streamed drafts."""
+        return self.get_all_sent_texts() + self.get_all_edited_texts() + self.get_all_draft_texts()
+
+    def assert_shown_text_contains(self, substring):
+        texts = self.get_all_shown_texts()
+        assert any(substring in t for t in texts), (
+            f"Expected '{substring}' in sent/edited/draft messages, got: {texts}"
+        )
+
     def assert_sent_text_contains(self, substring):
         texts = self.get_all_sent_texts() + self.get_all_edited_texts()
         assert any(substring in t for t in texts), (

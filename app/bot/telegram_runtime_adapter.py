@@ -1,14 +1,14 @@
 from contextlib import suppress
 from typing import Callable
 
-from aiogram.enums import ChatAction
+from aiogram.enums import ChatAction, ChatType
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.bot.cancellation_manager import get_cancel_button
 from app.bot.rich_messages import RICH_MESSAGE_LENGTH_CUTOFF, send_rich_message, split_markdown
-from app.bot.service_message import ChatServiceMessage, ServiceState
+from app.bot.service_message import ChatServiceMessage, DraftStream, ServiceState
 from app.bot.utils import send_telegram_message
 from app.context.context_manager import ContextManager
 from app.runtime.conversation_session import ConversationSession
@@ -55,6 +55,23 @@ class TelegramRuntimeAdapter:
         self.message = message
         self.user = user
         self.context_manager = context_manager
+        self._phase = 0
+
+    def _stream_markup(self):
+        return InlineKeyboardBuilder().add(get_cancel_button()).as_markup()
+
+    def _new_live_output(self):
+        """Draft stream in private chats (native Stop button); a real service message elsewhere.
+
+        Each agent phase gets its own draft id so consecutive answers animate independently.
+        """
+        self._phase += 1
+        if self.message.chat.type == ChatType.PRIVATE:
+            return DraftStream(self.message, draft_id=self.message.message_id * 100 + self._phase)
+        return ChatServiceMessage(self.message, stream_markup=self._stream_markup())
+
+    def _fallback_live_output(self):
+        return ChatServiceMessage(self.message, stream_markup=self._stream_markup())
 
     async def handle_turn(
         self,
@@ -63,18 +80,23 @@ class TelegramRuntimeAdapter:
         session: ConversationSession,
         is_cancelled: Callable[[], bool],
     ):
-        service = ChatServiceMessage(self.message)
+        live = self._new_live_output()
         state = ServiceState.IDLE
         typing_action_sent = False
 
-        keyboard = InlineKeyboardBuilder().add(get_cancel_button()).as_markup()
-
         async def ensure_typing_action():
             nonlocal typing_action_sent
-            if not typing_action_sent and service.is_attached:
+            if not typing_action_sent:
                 with suppress(TelegramBadRequest):
-                    await self.message.bot.send_chat_action(chat_id=service.chat_id, action=ChatAction.TYPING)
+                    await self.message.bot.send_chat_action(chat_id=self.message.chat.id, action=ChatAction.TYPING)
                 typing_action_sent = True
+
+        async def show(coro):
+            """Runs a live-output update; if the draft transport failed, redo it on a service message."""
+            nonlocal live
+            await coro
+            if live.failed:
+                live = self._fallback_live_output()
 
         try:
             async for event in runtime.process_turn(user_input, session, is_cancelled):
@@ -85,11 +107,7 @@ class TelegramRuntimeAdapter:
                     if event.is_thinking:
                         thinking_display = _format_thinking_display(event.thinking_text)
                         throttle = WAIT_BETWEEN_MESSAGE_UPDATES if state == ServiceState.THINKING else 0
-                        await service.set_text(
-                            thinking_display,
-                            reply_markup=keyboard,
-                            throttle_seconds=throttle,
-                        )
+                        await show(live.set_thinking(thinking_display, throttle_seconds=throttle))
                         state = ServiceState.THINKING
                         await ensure_typing_action()
                         continue
@@ -100,18 +118,14 @@ class TelegramRuntimeAdapter:
 
                     if len(new_content) > TELEGRAM_MESSAGE_LENGTH_CUTOFF:
                         truncated = f'{new_content[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]} ⏳...'
-                        await service.set_text(truncated, reply_markup=keyboard)
-                        service.freeze()
+                        await show(live.set_content(truncated))
+                        live.freeze()
                         state = ServiceState.STREAMING_OVERFLOW
                         await ensure_typing_action()
                         continue
 
                     throttle = WAIT_BETWEEN_MESSAGE_UPDATES if state == ServiceState.STREAMING else 0
-                    await service.set_text(
-                        new_content,
-                        reply_markup=keyboard,
-                        throttle_seconds=throttle,
-                    )
+                    await show(live.set_content(new_content, throttle_seconds=throttle))
                     state = ServiceState.STREAMING
                     await ensure_typing_action()
 
@@ -124,32 +138,28 @@ class TelegramRuntimeAdapter:
                         )
                         first, rest = dialog_messages[0], dialog_messages[1:]
 
-                        finalize_id = await service.finalize(first.content, reply_markup=None)
-                        if event.needs_context_save and finalize_id is not None:
-                            await self.context_manager.add_message(first, finalize_id)
+                        first_id = await live.finish(first.content)
+                        if event.needs_context_save and first_id is not None:
+                            await self.context_manager.add_message(first, first_id)
 
                         for dm in rest:
                             response = await send_rich_message(self.message, dm.content)
                             if event.needs_context_save:
                                 await self.context_manager.add_message(dm, response.message_id)
 
-                        # Detach the finalized message and start fresh for any
-                        # following phase (e.g. another agent iteration).
-                        service = ChatServiceMessage(self.message)
+                        # The answer is out; any following phase (e.g. another agent
+                        # iteration) starts with a fresh live output.
+                        live = self._new_live_output()
                         typing_action_sent = False
                         state = ServiceState.IDLE
                     else:
-                        # Tool-only / empty response — keep service alive for next event.
+                        # Tool-only / empty response — keep the live output for the next event.
                         pass
 
                 elif isinstance(event, FunctionCallStarted):
                     if self.user.function_call_hints:
                         hint_text = event.status_message or f'Running {event.function_name}...'
-                        await service.set_text(
-                            hint_text,
-                            reply_markup=keyboard,
-                            throttle_seconds=0,
-                        )
+                        await show(live.set_hint(hint_text))
                         state = ServiceState.FUNCTION_HINT
                         await ensure_typing_action()
 
@@ -164,8 +174,13 @@ class TelegramRuntimeAdapter:
                             await send_telegram_message(self.message, text)
         finally:
             if state in (ServiceState.THINKING, ServiceState.STREAMING, ServiceState.FUNCTION_HINT) \
-                    and service.is_attached and not service.is_detached:
-                await service.clear()
+                    and live.needs_cleanup:
+                await live.clear()
+            else:
+                # drafts: stop the keepalive; service messages: no-op when nothing is attached
+                with suppress(TelegramBadRequest):
+                    if isinstance(live, DraftStream):
+                        await live.clear()
 
     @staticmethod
     def _split_dialog_message(dialog_message, max_content_length):

@@ -145,8 +145,8 @@ class TestFunctionCalling:
         await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.2)
 
-        # Hint message uses the function-specific status from SaveUserSettings
-        spy.assert_sent_text_contains("Saving user info...")
+        # Hint message uses the function-specific status from SaveUserSettings (a draft in private chats)
+        spy.assert_shown_text_contains("Saving user info...")
         # Final assistant text reaches the chat too
         spy.assert_sent_text_contains("OK!")
 

@@ -1,5 +1,6 @@
 """Telegram Rich Messages: LLM answers go out as `sendRichMessage(markdown)`, streaming uses drafts."""
 import asyncio
+import json
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import SendRichMessage
@@ -91,3 +92,159 @@ class TestRichFinalAnswer:
         rich = spy.get_rich_messages()[-1]
         assert rich['rich_message']['markdown'] == 'Reply answer'
         assert rich['reply_parameters']['message_id'] == update.message.message_id
+
+
+def _draft_error():
+    from aiogram.methods import SendRichMessageDraft
+    return TelegramBadRequest(method=SendRichMessageDraft(chat_id=0, draft_id=1, rich_message={'markdown': ''}),
+                              message='Bad Request: DRAFT_NOT_SUPPORTED')
+
+
+class TestDraftStreaming:
+
+    async def test_private_chat_streams_drafts_then_sends_one_rich_message(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71010
+        await _create_user(telegram_bot, dp, user_id, streaming_answers=True)
+        calls_before = len(spy.get_all_calls())
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(
+            content_chunks=['Streamed ', 'answer that ', 'is long enough ', 'to be drafted, ', 'finally done.'],
+        )
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Stream', user_id=user_id)
+        await dp.feed_update(mock_bot, update)
+        await asyncio.sleep(0.3)
+
+        drafts = spy.get_drafts()
+        assert drafts, 'expected sendRichMessageDraft calls in a private chat'
+        assert {d['draft_id'] for d in drafts} == {update.message.message_id * 100 + 1}
+        assert all(d['can_stop'] is True for d in drafts)
+        assert all(d['chat_id'] == user_id for d in drafts)
+        assert any('Streamed answer' in t for t in spy.get_all_draft_texts())
+
+        turn_calls = [m for m, _ in spy.get_all_calls()[calls_before:]]
+        assert turn_calls.count('sendRichMessage') == 1
+        assert 'editMessageText' not in turn_calls and 'deleteMessage' not in turn_calls and 'sendMessage' not in turn_calls
+        assert spy.get_rich_messages()[-1]['rich_message']['markdown'] == \
+            'Streamed answer that is long enough to be drafted, finally done.'
+        assert 'reply_markup' not in spy.get_rich_messages()[-1]
+
+    async def test_thinking_and_tool_hint_are_rendered_as_tg_thinking(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71011
+        await _create_user(
+            telegram_bot, dp, user_id, streaming_answers=True, use_functions=True, system_prompt_settings_enabled=True,
+        )
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(
+            content_chunks=['<think>', 'reasoning about the question', '</think>'],
+            tool_calls=[{
+                'id': 'call_1',
+                'function': {'name': 'save_user_settings', 'arguments': json.dumps({'settings_text': 'Name: Draft'})},
+            }],
+        )
+        mock_llm.add_streaming_response(content_chunks=['Saved, this answer is long ', 'enough to be shown.'])
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_text_message('Remember me', user_id=user_id))
+        await asyncio.sleep(0.4)
+
+        drafts = spy.get_all_draft_texts()
+        assert any(t.startswith('<tg-thinking>\U0001f9e0') and t.endswith('</tg-thinking>') for t in drafts), drafts
+        assert '<tg-thinking>Saving user info...</tg-thinking>' in drafts
+        assert not any('<tg-thinking>' in t for t in spy.get_all_sent_texts())
+        spy.assert_sent_text_contains('Saved, this answer')
+        assert (await telegram_bot.db.get_user(user_id)).system_prompt_settings == 'Name: Draft'
+
+    async def test_group_chat_edits_a_service_message_with_stop_button(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71012
+        group_id = -100710120
+        mock_llm = MockLLMClient()
+        mock_llm.add_response('Hello!')
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        await dp.feed_update(mock_bot, make_text_message('Hi', user_id=user_id, chat_id=group_id, chat_type='supergroup'))
+        await asyncio.sleep(0.1)
+        user = await telegram_bot.db.get_user(user_id)
+        user.streaming_answers = True
+        await telegram_bot.db.update_user(user)
+        calls_before = len(spy.get_all_calls())
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(
+            content_chunks=['Group answer that ', 'is long enough to ', 'trigger streaming ', 'edits in the group.'],
+        )
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_text_message('Stream', user_id=user_id, chat_id=group_id, chat_type='supergroup'))
+        await asyncio.sleep(0.3)
+
+        turn = spy.get_all_calls()[calls_before:]
+        assert not any(m == 'sendRichMessageDraft' for m, _ in turn)
+        first = next(d for m, d in turn if m == 'sendRichMessage')
+        assert first['chat_id'] == group_id
+        assert first['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'cancel.cancel'
+        edits = [d for m, d in turn if m == 'editMessageText']
+        assert edits and all('rich_message' in d for d in edits)
+        assert edits[-1]['rich_message']['markdown'].endswith('edits in the group.')
+        assert 'reply_markup' not in edits[-1]  # the finished answer has no Stop button
+        assert not any(m == 'deleteMessage' for m, _ in turn)
+
+    async def test_draft_failure_falls_back_to_service_message(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71013
+        await _create_user(telegram_bot, dp, user_id, streaming_answers=True)
+        mock_bot.session.fail_next('sendRichMessageDraft', _draft_error())
+        calls_before = len(spy.get_all_calls())
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(
+            content_chunks=['Fallback answer that ', 'is long enough to ', 'trigger streaming ', 'updates, done.'],
+        )
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_text_message('Stream', user_id=user_id))
+        await asyncio.sleep(0.3)
+
+        turn = spy.get_all_calls()[calls_before:]
+        methods = [m for m, _ in turn]
+        assert methods.count('sendRichMessageDraft') == 1  # the rejected one
+        assert 'sendRichMessage' in methods and 'editMessageText' in methods
+        assert 'deleteMessage' not in methods
+        spy.assert_sent_text_contains('updates, done.')
+
+    async def test_agent_phases_use_distinct_draft_ids(self, bot_app):
+        """A tool round-trip that produces text twice (agent phases) streams each phase under its own draft id."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71014
+        await _create_user(
+            telegram_bot, dp, user_id, streaming_answers=True, use_functions=True, system_prompt_settings_enabled=True,
+        )
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(
+            content_chunks=['First phase text that is long enough ', 'to be streamed before the tool call.'],
+            tool_calls=[{
+                'id': 'call_2',
+                'function': {'name': 'save_user_settings', 'arguments': json.dumps({'settings_text': 'Name: Phase'})},
+            }],
+        )
+        mock_llm.add_streaming_response(content_chunks=['Second phase text that is long enough ', 'to be streamed too.'])
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+
+        update = make_text_message('Two phases', user_id=user_id)
+        await dp.feed_update(mock_bot, update)
+        await asyncio.sleep(0.4)
+
+        draft_ids = [d['draft_id'] for d in spy.get_drafts()]
+        base = update.message.message_id * 100
+        assert set(draft_ids) >= {base + 1, base + 2}, draft_ids
