@@ -1,12 +1,36 @@
 import json
-from datetime import timedelta
+from contextlib import asynccontextmanager
 from typing import Optional
 
-from mcp.client.streamable_http import streamablehttp_client
-from mcp.client.session import ClientSession
+import httpx2
+from mcp import Client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared.exceptions import MCPError
 
 import settings
 from app.functions.base import OpenAIFunction
+
+
+@asynccontextmanager
+async def _streamable_http_transport(server_url: str, headers: Optional[dict[str, str]]):
+    """Streamable HTTP transport whose httpx2 client carries the custom headers.
+
+    The SDK does not close a user-supplied http_client, so it is owned (and closed) here. Timeouts mirror the
+    SDK defaults: short connect timeout, long read timeout for SSE streams.
+    """
+    async with httpx2.AsyncClient(
+        headers=headers or None,
+        timeout=httpx2.Timeout(30.0, read=float(settings.MCP_TOOL_CALL_TIMEOUT)),
+        follow_redirects=True,
+    ) as http_client:
+        async with streamable_http_client(server_url, http_client=http_client) as streams:
+            yield streams
+
+
+def make_mcp_client(server_url: str, headers: Optional[dict[str, str]] = None) -> Client:
+    """High-level MCP client (mcp 2.x) for a streamable HTTP server; handshake happens on `async with`."""
+    transport = _streamable_http_transport(server_url, headers)
+    return Client(transport, read_timeout_seconds=float(settings.MCP_TOOL_CALL_TIMEOUT))
 
 
 class MCPFunction(OpenAIFunction):
@@ -38,29 +62,26 @@ class MCPFunction(OpenAIFunction):
         self.tool_call_id = tool_call_id
         return self
 
+    def _client(self) -> Client:
+        return make_mcp_client(self.mcp_server_url, self.headers)
+
     async def run(self, params: dict) -> Optional[str]:
-        # TODO: Each invocation creates a new connection to the MCP server.
-        # For optimization, you can use ClientSessionGroup from the MCP SDK,
-        # which allows sessions to be reused between invocations.
+        # TODO: Each invocation creates a new connection to the MCP server; sessions could be reused.
         try:
-            async with streamablehttp_client(self.mcp_server_url, headers=self.headers) as (
-                    read_stream,
-                    write_stream,
-                    _,
-            ):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    result = await session.call_tool(
-                        self.name,
-                        arguments=params,
-                        read_timeout_seconds=timedelta(seconds=settings.MCP_TOOL_CALL_TIMEOUT),
-                    )
-                    if result is not None and hasattr(result, 'content') and len(result.content):
-                        return result.content[0].text
-                    else:
-                        return None
+            async with self._client() as client:
+                result = await client.call_tool(self.name, arguments=params)
+                if result is None or not result.content:
+                    return None
+                text = result.content[0].text
+                if result.is_error:
+                    return f"Error calling MCP tool: {text}"
+                return text
+        except MCPError as e:
+            # mcp 2.x raises on tool errors instead of returning is_error=True
+            return f"Error calling MCP tool: {e.message}"
         except Exception as e:
             return f"Error calling MCP tool: {e}"
+
     async def run_dict_args(self, params: dict):
         return await self.run(params)
 
@@ -88,31 +109,25 @@ class MCPFunction(OpenAIFunction):
         return f'Running {humanized}...'
 
 
-
 class MCPFunctionManager:
     def __init__(self, server_url: str, headers: Optional[dict[str, str]] = None):
         self.server_url = server_url
         self.headers = headers
 
+    def _client(self) -> Client:
+        return make_mcp_client(self.server_url, self.headers)
+
     async def get_tools(self):
-        # TODO: Each invocation creates a new connection to the MCP server.
-        # For optimization, you can use ClientSessionGroup from the MCP SDK,
-        # which allows sessions to be reused between invocations.
+        # TODO: Each invocation creates a new connection to the MCP server; sessions could be reused.
         result = []
-        async with streamablehttp_client(self.server_url, headers=self.headers) as (
-                read_stream,
-                write_stream,
-                _,
-        ):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                tools = await session.list_tools()
-                for tool in tools.tools:
-                    result.append(MCPFunction(
-                        self.server_url,
-                        tool.name,
-                        tool.description,
-                        tool.inputSchema,
-                        self.headers
-                    ))
+        async with self._client() as client:
+            tools = await client.list_tools()
+            for tool in tools.tools:
+                result.append(MCPFunction(
+                    self.server_url,
+                    tool.name,
+                    tool.description,
+                    tool.input_schema,
+                    self.headers
+                ))
         return result
