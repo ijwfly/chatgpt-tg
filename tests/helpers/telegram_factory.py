@@ -245,10 +245,7 @@ def make_callback_query(data, message_id, user_id=12345, chat_id=None):
 
 
 def make_stopped_generation_update(chat_id, draft_id):
-    """Bot API 10.3 `stopped_message_generation` update (the user pressed the native Stop button on a draft).
-
-    aiogram 3.30 does not know this update type; it is kept as an extra field on `Update`.
-    """
+    """Bot API 10.3 `stopped_message_generation` update (the user pressed the native Stop button on a draft)."""
     update_dict = {
         'update_id': _next_update_id(),
         'stopped_message_generation': {

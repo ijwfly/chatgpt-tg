@@ -11,7 +11,6 @@ from typing import List, Optional
 
 from aiogram import Bot, types
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.methods import SendRichMessageDraft
 from aiogram.types import InputRichMessage, ReplyParameters
 
 from app.bot.utils import is_parse_error
@@ -82,12 +81,11 @@ async def edit_rich_message_in_chat(bot: Bot, chat_id: int, message_id: int, mar
 async def send_rich_draft(bot: Bot, chat_id: int, draft_id: int, markdown: str, can_stop: bool = True) -> bool:
     """Streams an ephemeral draft (private chats only). The final text must still be sent as a message.
 
-    `can_stop` is a Bot API 10.3 field that aiogram 3.30 does not know yet; TelegramMethod allows extra
-    fields, so it is passed through as-is. TODO: use the named parameter once aiogram ships 10.3 support.
+    `can_stop` shows the native Stop button; pressing it delivers a `stopped_message_generation` update.
     """
-    return await bot(SendRichMessageDraft(
+    return await bot.send_rich_message_draft(
         chat_id=chat_id, draft_id=draft_id, rich_message=rich(markdown), can_stop=can_stop,
-    ))
+    )
 
 
 def escape_rich_markdown(text: str) -> str:

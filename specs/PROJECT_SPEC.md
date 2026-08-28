@@ -12,7 +12,7 @@
 
 **Technology stack:**
 - Language: Python 3.11
-- Telegram framework: aiogram 3.30
+- Telegram framework: aiogram 3.31
 - LLM SDK: openai 1.35.8, anthropic 0.29.0, mcp 1.13.0
 - Database: PostgreSQL 15.3 (asyncpg 0.27.0)
 - Web: FastAPI 0.116.1 + uvicorn (image proxy)
@@ -214,7 +214,7 @@ Answers are Telegram **Rich Messages** (`app/bot/rich_messages.py`, see `RICH_ME
 3. **Groups** — always the edit path
 4. **Throttling** — updates no more often than once every **1 second** (`WAIT_BETWEEN_MESSAGE_UPDATES`)
 5. **Length limit** — when exceeding **30000 characters** (`RICH_MESSAGE_LENGTH_CUTOFF`), updates stop and "⏳..." is appended; the final answer is split code-fence-aware (`split_markdown`)
-6. **Cancellation** — inline Stop callback or the Bot API 10.3 `stopped_message_generation` update (`StoppedGenerationMiddleware`): stream is closed, 20 tokens added to usage
+6. **Cancellation** — inline Stop callback or the Bot API 10.3 `stopped_message_generation` update (`CancellationManager.process_stopped_generation`): stream is closed, 20 tokens added to usage
 7. **Skip small updates** — content under 50 characters is not displayed
 
 ### 3.3 Context Window Management

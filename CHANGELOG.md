@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are sent with `sendRichMessage` as GitHub-flavoured markdown rendered by Telegram (headings, tables,
   code fences, LaTeX, `<details>`; 32768-character limit, code-fence-aware splitting). Streaming edits a rich message in place by default; with
   `RICH_DRAFT_STREAMING = True` private chats stream ephemeral rich drafts (`sendRichMessageDraft`) with `<tg-thinking>` thinking/tool
-  hints and the native Stop button (`can_stop` + `stopped_message_generation` handled by a middleware shim
-  until aiogram ships Bot API 10.3); groups always use the edited message with an inline Stop button. A rejected
+  hints and the native Stop button (`can_stop` + the `stopped_message_generation` update, aiogram 3.31 /
+  Bot API 10.3); groups always use the edited message with an inline Stop button. A rejected
   markup falls back to plain text. Design and phase notes: `specs/RICH_MESSAGES.md`.
 
 ### Changed
@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Legacy `parse_mode=Markdown` sending (and its `can't parse entities` retry) was removed together with
   `escape_tg_markdown`; `send_telegram_message` is plain-text only.
 
-- **Dependencies modernised** — `aiogram` 2.25 → 3.30, `openai` 1.35 → 3.3, `anthropic` 0.29 → 1.0,
+- **Dependencies modernised** — `aiogram` 2.25 → 3.31, `openai` 1.35 → 3.3, `anthropic` 0.29 → 1.0,
   `mcp` 1.13 → 2.1 (new `Client` API, `httpx2` transport), `pytest` 9 / `pytest-asyncio` 1.4, and
   refreshed utility packages. `requirements.txt` now lists direct dependencies only.
   Roadmap and per-phase notes: `specs/DEPENDENCY_UPGRADE_PLAN.md`.

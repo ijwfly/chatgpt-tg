@@ -313,8 +313,7 @@ class TestNativeStop:
         assert drafts and drafts[-1]['can_stop'] is True
 
         with warnings.catch_warnings():
-            # aiogram 3.30 warns about unknown update types; the middleware must swallow the update first
-            warnings.simplefilter('error', RuntimeWarning)
+            warnings.simplefilter('error', RuntimeWarning)  # an unhandled update type would warn here
             await dp.feed_update(mock_bot, make_stopped_generation_update(user_id, drafts[-1]['draft_id']))
         await asyncio.wait_for(turn, timeout=2)
 
@@ -333,7 +332,7 @@ class TestNativeStop:
         assert '71021' not in telegram_bot.cancellation_manager._cancellation_tokens
 
     def test_polling_requests_the_stopped_generation_update(self, bot_app):
+        """The registered handler makes aiogram include the update type in allowed_updates automatically."""
         telegram_bot, dp, mock_bot = bot_app
-        from app.bot.cancellation_manager import STOPPED_GENERATION_UPDATE
-        allowed = dp.resolve_used_update_types() + [STOPPED_GENERATION_UPDATE]
-        assert 'message' in allowed and 'callback_query' in allowed and STOPPED_GENERATION_UPDATE in allowed
+        allowed = dp.resolve_used_update_types()
+        assert 'message' in allowed and 'callback_query' in allowed and 'stopped_message_generation' in allowed

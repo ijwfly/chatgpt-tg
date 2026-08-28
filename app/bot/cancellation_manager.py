@@ -1,11 +1,7 @@
-from typing import Any, Awaitable, Callable, Dict
-
-from aiogram import BaseMiddleware, F, types
+from aiogram import F, types
 
 
 CANCELLATION_PREFIX = 'cancel'
-# Bot API 10.3 update sent when the user presses the native Stop button of a streamed draft
-STOPPED_GENERATION_UPDATE = 'stopped_message_generation'
 
 
 class CancellationToken:
@@ -22,34 +18,6 @@ class CancellationToken:
         self.is_canceled = True
 
 
-class StoppedGenerationMiddleware(BaseMiddleware):
-    """Handles the `stopped_message_generation` update with aiogram 3.30 (Bot API 10.2).
-
-    aiogram does not know this update type yet, so it only survives as an extra field on `Update` and the
-    dispatcher would skip it with a RuntimeWarning. As an outer middleware on `dp.update` this runs first,
-    cancels the user's turn and swallows the update. TODO: replace with the native observer once aiogram
-    ships Bot API 10.3 support.
-    """
-
-    def __init__(self, cancellation_manager: 'CancellationManager'):
-        self.cancellation_manager = cancellation_manager
-
-    async def __call__(
-        self,
-        handler: Callable[[types.Update, Dict[str, Any]], Awaitable[Any]],
-        update: types.Update,
-        data: Dict[str, Any],
-    ) -> Any:
-        payload = (update.model_extra or {}).get(STOPPED_GENERATION_UPDATE)
-        if payload is None:
-            return await handler(update, data)
-        chat = payload.get('chat') or {}
-        if chat.get('id') is not None:
-            # drafts exist only in private chats, so the chat id is the user id the token is keyed by
-            self.cancellation_manager.cancel(chat['id'])
-        return None
-
-
 class CancellationManager:
     """
     Class that manages the cancellation of message processing for streaming messages
@@ -57,7 +25,8 @@ class CancellationManager:
     def __init__(self, bot, dispatcher):
         self._cancellation_tokens = {}
         dispatcher.callback_query.register(self.process_callback, F.data.contains(CANCELLATION_PREFIX))
-        dispatcher.update.outer_middleware(StoppedGenerationMiddleware(self))
+        # native Stop button of a streamed rich draft (Bot API 10.3)
+        dispatcher.stopped_message_generation.register(self.process_stopped_generation)
         self.bot = bot
 
     async def process_callback(self, callback_query: types.CallbackQuery):
@@ -67,6 +36,10 @@ class CancellationManager:
         chat_id = callback_query.from_user.id
         self.cancel(chat_id)
         await callback_query.answer()
+
+    async def process_stopped_generation(self, event: types.MessageGenerationStopped):
+        """The user pressed Stop on a streamed draft; drafts exist only in private chats, so chat id == user id."""
+        self.cancel(event.chat.id)
 
     def get_token(self, tg_user_id):
         """

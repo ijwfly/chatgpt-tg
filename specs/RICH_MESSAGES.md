@@ -13,7 +13,9 @@ Telegram added **Rich Messages** in Bot API 10.1 (June 2026) and extended them i
 
 Today the bot passes LLM output verbatim with legacy `parse_mode=Markdown` and retries in plain text on `can't parse entities`; streaming edits a real message every second with an inline Stop button; long answers are split at 4080 characters without regard to markup (a split inside a code fence silently degrades the whole message to plain text).
 
-## 2. Verified facts (aiogram 3.30.0 installed = Bot API 10.2; docs at core.telegram.org/bots/api, 10.3)
+## 2. Verified facts (docs at core.telegram.org/bots/api, Bot API 10.3)
+
+> Originally implemented against aiogram 3.30 (Bot API 10.2) with workarounds for the 10.3 pieces; the project is now on **aiogram 3.31** (Bot API 10.3), where `can_stop` is a named parameter of `send_rich_message_draft`, `MessageGenerationStopped` is a real type and `dp.stopped_message_generation` is a native observer (its registration also puts the update type into `allowed_updates`). The workarounds below are kept for the record.
 
 - Available in aiogram 3.30: `Bot.send_rich_message(chat_id, rich_message, reply_parameters=, reply_markup=, …) -> Message`, `Bot.send_rich_message_draft(chat_id, draft_id: int != 0, rich_message, message_thread_id) -> bool`, `Bot.edit_message_text(…, rich_message=)`, `InputRichMessage(markdown= | html= | blocks=, media=, skip_entity_detection=, is_rtl=)`, `Message.rich_message: RichMessage(blocks)` (a rich message has `text=None`), `ContentType.RICH_MESSAGE`. `Message` has no `answer_rich_message`/`reply_rich_message` helpers — replies use `reply_parameters=ReplyParameters(message_id=…)`.
 - Missing in aiogram 3.30 (Bot API 10.3): `can_stop`, `keep_on_stop`, `MessageGenerationStopped`, `Update.stopped_message_generation`. aiogram PR #1888 is open, no release. Workarounds that work with 3.30:
@@ -29,7 +31,7 @@ Today the bot passes LLM output verbatim with legacy `parse_mode=Markdown` and r
 | Question | Decision |
 |---|---|
 | Streaming | **Default: real message + `editMessageText(rich_message=)`** everywhere (`settings.RICH_DRAFT_STREAMING = False` — current clients render draft streaming poorly). With the flag on, private chats use drafts (`sendRichMessageDraft`); groups and a draft call failing mid-turn still use the edit path. |
-| Stop button while drafting | Native `can_stop=True` + a middleware shim for the `stopped_message_generation` update until aiogram ships 10.3. The inline Stop button stays on the edit path. |
+| Stop button while drafting | Native `can_stop=True`; the `stopped_message_generation` update is handled by `CancellationManager.process_stopped_generation` on the native `dp.stopped_message_generation` observer (aiogram 3.31). The inline Stop button stays on the edit path. |
 | Rollout | Rich *messages* have no flag (legacy `parse_mode=Markdown` path removed; rollback is `git revert`). Draft *streaming* is behind `settings.RICH_DRAFT_STREAMING`, off by default. |
 | Scope | LLM answers (streamed and final, scheduled-task results) + `/usage`, `/models`, admin user cards. Plain service texts (errors, upload confirmations, transcriptions, verbose tool output, plan messages, captions) stay plain. |
 | Storage | Unchanged: the assistant message is stored as its markdown source, as before. No migrations. |
@@ -58,9 +60,8 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 
 ### 4.3 Native stop — `app/bot/cancellation_manager.py`, `app/bot/telegram_bot.py`
 
-- `StoppedGenerationMiddleware` (outer middleware on `dispatcher.update`): if `update.model_extra` has `stopped_message_generation`, cancel the token for `payload['chat']['id']` and return without calling the handler (so the dispatcher's unknown-update warning never fires). Registered by `CancellationManager`.
-- `TelegramBot.run()`: `start_polling(bot, allowed_updates=[*dispatcher.resolve_used_update_types(), 'stopped_message_generation'])`.
-- Follow-up (not in this branch): once aiogram releases Bot API 10.3 support, replace the shim with the native observer and pass `can_stop` as a named parameter.
+- `CancellationManager.process_stopped_generation(event: MessageGenerationStopped)` registered on `dispatcher.stopped_message_generation` cancels the token for `event.chat.id` (drafts exist only in private chats, so chat id == user id). aiogram adds the update type to `allowed_updates` because a handler is registered — no manual list in `start_polling`.
+- History: with aiogram 3.30 this was an outer middleware on `dp.update` reading `update.model_extra`, plus an explicit `allowed_updates`; replaced in the aiogram 3.31 commit.
 
 ### 4.4 Menus
 
@@ -85,7 +86,7 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 | 1 | `rich_messages.py` helpers, fence-aware splitter, `is_parse_error`, test infrastructure, splitter unit tests | ✅ |
 | 2 | Final answers via `sendRichMessage` (adapter + scheduler), new cutoff | ✅ |
 | 3 | Streaming via `DraftStream` with `ChatServiceMessage` fallback (rich edits) | ✅ |
-| 4 | Native Stop: `can_stop`, `StoppedGenerationMiddleware`, `allowed_updates` | ✅ |
+| 4 | Native Stop: `can_stop`, `stopped_message_generation` handler | ✅ |
 | 5 | Menus (`/usage`, `/models`, admin cards, settings), cleanup | ✅ |
 | 6 | Docs (`CLAUDE.md`, `PROJECT_SPEC.md`, `RUNTIME_ARCHITECTURE.md`, `E2E_TESTS.md`, `CHANGELOG.md`), PR | ✅ |
 
@@ -103,7 +104,7 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 
 ### Phase 4 result
 
-`StoppedGenerationMiddleware` (outer middleware on `dp.update`, registered by `CancellationManager`) reads `update.model_extra['stopped_message_generation']`, cancels the token of `chat.id` and swallows the update; `TelegramBot.run()` passes `allowed_updates = resolve_used_update_types() + ['stopped_message_generation']`. `MockLLMClient.add_streaming_response(chunk_delay=)` makes a slow stream; the test runs the turn as a task, feeds `make_stopped_generation_update` mid-stream under `warnings.simplefilter('error', RuntimeWarning)` and checks the partial answer is finalised as a rich message. Idle-user stop updates are ignored without any Telegram call.
+Initially (aiogram 3.30) a `StoppedGenerationMiddleware` on `dp.update` read `update.model_extra['stopped_message_generation']` and `TelegramBot.run()` added the update type to `allowed_updates` by hand. After the upgrade to aiogram 3.31 (Bot API 10.3) this is `CancellationManager.process_stopped_generation` on the native `dp.stopped_message_generation` observer and `send_rich_draft` passes `can_stop` as a named parameter. `MockLLMClient.add_streaming_response(chunk_delay=)` makes a slow stream; the test runs the turn as a task, feeds `make_stopped_generation_update` mid-stream under `warnings.simplefilter('error', RuntimeWarning)` and checks the partial answer is finalised as a rich message. Idle-user stop updates are ignored without any Telegram call.
 
 ### Phase 5 result
 
