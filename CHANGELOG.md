@@ -5,6 +5,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Telegram Rich Messages** (Bot API 10.1–10.3) — LLM answers, `/usage`, `/models` and admin user cards
+  are sent with `sendRichMessage` as GitHub-flavoured markdown rendered by Telegram (headings, tables,
+  code fences, LaTeX, `<details>`; 32768-character limit, code-fence-aware splitting). Streaming edits a rich message in place by default; with
+  `RICH_DRAFT_STREAMING = True` private chats stream ephemeral rich drafts (`sendRichMessageDraft`) with `<tg-thinking>` thinking/tool
+  hints and the native Stop button (`can_stop` + the `stopped_message_generation` update, aiogram 3.31 /
+  Bot API 10.3); groups always use the edited message with an inline Stop button. A rejected
+  markup falls back to plain text. Design and phase notes: `specs/RICH_MESSAGES.md`.
+
+### Changed
+
+- Legacy `parse_mode=Markdown` sending (and its `can't parse entities` retry) was removed together with
+  `escape_tg_markdown`; `send_telegram_message` is plain-text only.
+
+- **Dependencies modernised** — `aiogram` 2.25 → 3.31, `openai` 1.35 → 3.3, `anthropic` 0.29 → 1.0,
+  `mcp` 1.13 → 2.1 (new `Client` API, `httpx2` transport), `pytest` 9 / `pytest-asyncio` 1.4, and
+  refreshed utility packages. `requirements.txt` now lists direct dependencies only.
+  Roadmap and per-phase notes: `specs/DEPENDENCY_UPGRADE_PLAN.md`.
+- **aiogram 3 migration** — routers/`Command`/`F` filters, `UserMiddleware` as a `dp.message`
+  middleware, `TelegramBadRequest`, `InlineKeyboardBuilder` keyboards, `BufferedInputFile`/`FSInputFile`
+  for outgoing files, `forward_origin` support for forwarded messages, `/usage_all` args via
+  `CommandObject`. Tests feed updates through `dp.feed_update(bot, update)` with a recording
+  `BaseSession` instead of a `Bot.request` mock.
+- Pydantic v1-style calls (`.dict()`, `.copy()`, `.parse_raw()`, `.schema()`) replaced with the v2 API.
+- Unknown Anthropic stream event types are skipped instead of aborting the response.
+
+### Fixed
+
+- Non-streaming Claude responses failed with a pydantic validation error (SDK content blocks were passed
+  into `AnthropicDialogMessage` unconverted — broken since the move to pydantic 2). Covered by the new
+  `tests/e2e/test_anthropic.py`.
+
 ## [2.0.0] - 2026-07-06 — "Agent Mode"
 
 This is a major release. The bot grew from an OpenAI-only chat proxy into a

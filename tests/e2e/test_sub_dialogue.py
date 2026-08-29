@@ -22,7 +22,7 @@ class TestSubDialogue:
 
         user_id = 77777
         update_a = make_text_message('Message A', user_id=user_id)
-        await dp.process_update(update_a)
+        await dp.feed_update(mock_bot, update_a)
         await asyncio.sleep(0.1)
 
         # Get the message_id of bot's response (from sendMessage calls)
@@ -42,7 +42,7 @@ class TestSubDialogue:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update_b = make_text_message('Unrelated message', user_id=user_id)
-        await dp.process_update(update_b)
+        await dp.feed_update(mock_bot, update_b)
         await asyncio.sleep(0.1)
 
         # Verify second call got both messages A and B in context

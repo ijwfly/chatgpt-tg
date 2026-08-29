@@ -12,18 +12,19 @@ E2E tests exercise the full message pipeline — from "user sends message" to "b
 |-----------|----------|-----|
 | PostgreSQL | **Real** (docker container) | Critical path — migrations, queries, data integrity |
 | LLM APIs | **Mocked** (`MockLLMClient` injected via `LLMClientFactory._model_clients`) | Deterministic, no API costs |
-| Telegram transport | **Mocked** (`Bot.request` AsyncMock) | No real bot token needed |
+| Telegram transport | **Mocked** (`MockedSession`, an aiogram `BaseSession` that records requests) | No real bot token needed |
 | Batching Timer | **Patched** to 0.001s | Fast tests without 0.3s waits |
 | Functions (WolframAlpha, etc.) | **Disabled** via settings | Not needed for core flow tests |
 | MCP Servers | **Disabled** (`MCP_SERVERS = []`) | Not needed for core flow tests |
+| Anthropic API | **Mocked** (`MockAnthropicClient` emits real `anthropic` SDK objects) | Validates our request/response conversion against the installed SDK types |
 
-### Key approach: `dp.process_update()`
+### Key approach: `dp.feed_update(bot, update)`
 
-aiogram 2.x `Dispatcher.process_update(update)` is a public async method that runs the full handler pipeline: middleware -> message handlers -> response. We construct fake `types.Update` objects and feed them into the dispatcher.
+aiogram 3 `Dispatcher.feed_update(bot, update)` is the public entry point that runs the full handler pipeline: middleware -> message handlers -> response. We construct fake `types.Update` objects and feed them into the dispatcher together with the mock bot; aiogram binds the bot to the update, so `message.answer()`/`message.bot` work in every task the handler spawns. Messages that bypass the dispatcher (e.g. calling `process_batch` directly) must be mounted explicitly with `message.as_(mock_bot)`.
 
-### Bot.request mock
+### MockedSession
 
-All outgoing Telegram calls funnel through `Bot.request(method_name, data)`. The mock returns valid dicts for each method:
+All outgoing Telegram calls funnel through the bot session's `make_request(bot, method, timeout)`. `MockedSession` (in `conftest.py`) records `(api_method, data)` in `session.requests`, builds a valid result dict for each API method and parses it through aiogram's `check_response`, so handlers receive real `Message` objects bound to the bot:
 
 | method | Return | Used by |
 |--------|--------|---------|
@@ -36,9 +37,9 @@ All outgoing Telegram calls funnel through `Bot.request(method_name, data)`. The
 | `answerCallbackQuery` | `True` | Inline button callbacks |
 | `setMyCommands` | `True` | on_startup bot commands |
 
-### TelegramObject.bot monkey-patch
+Note: aiogram 3 sends replies as `reply_parameters: {message_id}` (not `reply_to_message_id`) — assert on that key when checking which message a reply targets.
 
-aiogram 2.x uses `ContextVar` for `Bot` instance, which breaks across asyncio tasks (Timer batching, TypingWorker). The test infrastructure patches `TelegramObject.bot` property to always return the mock bot, avoiding ContextVar issues.
+LLM answers are rich messages: the payload is `data['rich_message']['markdown']` of a `sendRichMessage` request (no `text`), streaming with `settings.RICH_DRAFT_STREAMING = True` (the `draft_streaming` fixture) produces `sendRichMessageDraft` requests in private chats. `BotSpy` normalises both (`get_sent_messages()` = plain + rich, `get_drafts()`, `get_all_shown_texts()`). `MockedSession.fail_next(api_method, exc)` makes the next call of that method raise, e.g. to test the plain-text fallback.
 
 ---
 
@@ -51,14 +52,16 @@ tests/
 │   ├── __init__.py
 │   ├── telegram_factory.py         # Factory for aiogram Update/Message objects
 │   ├── mock_llm_client.py          # MockLLMClient with canned response queue
-│   └── bot_spy.py                  # Assertion helpers over captured Bot.request calls
+│   ├── mock_anthropic_client.py    # Anthropic client returning real SDK Message/stream event objects
+│   └── bot_spy.py                  # Assertion helpers over captured Telegram requests
 ├── e2e/
 │   ├── __init__.py
 │   ├── test_simple_message.py      # Text message -> LLM response (4 tests)
 │   ├── test_commands.py            # /reset, /usage (2 tests)
 │   ├── test_sub_dialogue.py        # Multi-message dialogue context (1 test)
 │   ├── test_function_calling.py    # Tool calling via SaveUserSettings (3 tests)
-│   ├── test_streaming.py           # Streaming responses and thinking blocks (2 tests)
+│   ├── test_streaming.py           # Streaming responses and thinking blocks (3 tests)
+│   ├── test_rich_messages.py       # Rich answers, draft streaming, native Stop, fallbacks (13 tests)
 │   ├── test_context_management.py  # Reset, expiration, reply branching (3 tests)
 │   ├── test_settings.py            # Settings menu and toggles (3 tests)
 │   ├── test_forwarded_messages.py  # Forwarded message context (1 test)
@@ -103,10 +106,9 @@ container and are mocked away in e2e.
 2. Patches `Timer.__init__` to 0.001s timeout
 3. Clears `LLMClientFactory._model_clients`
 4. Sets `DBFactory.connection_pool` to test pool (prevents on_startup from creating its own)
-5. Patches `TelegramObject.bot` property
-6. Calls `on_startup(None)` — registers handlers, middleware, starts scheduled tasks
-7. Yields `(telegram_bot, dp, mock_bot)`
-8. Teardown: restores `TelegramObject.bot`, stops `monthly_usage_task`, restores LLM clients
+5. Calls `on_startup()` — registers handlers, middleware, starts scheduled tasks
+6. Yields `(telegram_bot, dp, mock_bot)`
+7. Teardown: stops `monthly_usage_task`, restores LLM clients
 
 ---
 
@@ -136,7 +138,7 @@ Auto-incrementing counters for `update_id` and `message_id`.
 
 ### bot_spy.py
 
-`BotSpy(mock_bot)` — assertion helpers over captured `Bot.request` calls:
+`BotSpy(mock_bot)` — assertion helpers over the requests recorded by `MockedSession`:
 
 - `get_sent_messages()` — all `sendMessage` calls
 - `get_edited_messages()` — all `editMessageText` calls
@@ -191,7 +193,7 @@ Auto-incrementing counters for `update_id` and `message_id`.
 
 | Test | Scenario | Verifies |
 |------|----------|----------|
-| `test_streaming_sends_and_edits_message` | Streaming response with multiple chunks | sendMessage during streaming + editMessageText after |
+| `test_streaming_sends_and_edits_message` | Streaming response with multiple chunks | sendRichMessage + editMessageText(rich_message) edits, no drafts by default |
 | `test_streaming_with_thinking_blocks` | Streaming with `<think>` tags | Thinking emoji shown during thinking, final content visible |
 
 **Pipeline covered:** `ChatGptManager.send_user_message_streaming -> ChatGPT.send_messages_streaming -> handle_response_generator (streaming edits, thinking parsing)`
@@ -287,6 +289,6 @@ Applied in `conftest.py` before any app imports:
 3. **`DBFactory.connection_pool` is class-level** — pre-set in bot_app fixture to reuse session pool
 4. **`monthly_usage_task.start()` in on_startup** — creates background task, stopped in teardown
 5. **Streaming mock** — `add_streaming_response()` returns an async generator with `MockDelta` objects supporting `dict()` conversion (required by `merge_dicts()` in `send_messages_streaming`)
-6. **`TypingWorker`** — background task calls `bot.send_chat_action` in a loop; handled by Bot.request mock returning `True`
-7. **Error tests** — `process_batch` sends "Something went wrong" then re-raises; tests must use `pytest.raises(ValueError)` around `dp.process_update()`
+6. **`TypingWorker`** — background task calls `bot.send_chat_action` in a loop; handled by `MockedSession` returning `True`
+7. **Error tests** — `process_batch` sends "Something went wrong" then re-raises; tests must use `pytest.raises(ValueError)` around `dp.feed_update()`
 8. **Streaming edits timing** — `WAIT_BETWEEN_MESSAGE_UPDATES = 2s` prevents edits in fast tests; streaming tests verify sendMessage during streaming + editMessageText after (from `handle_gpt_response`)

@@ -1,17 +1,16 @@
 import base64
-import dataclasses
 import io
-import re
 import asyncio
 from datetime import date
 from functools import lru_cache
-from typing import List
 from contextlib import asynccontextmanager
 
 import httpx
 import requests
 from aiogram import types
-from aiogram.utils.exceptions import CantParseEntities
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import BufferedInputFile
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from async_lru import alru_cache
 
 import settings
@@ -47,7 +46,7 @@ class TypingWorker:
     async def start_typing(self):
         async def typing_worker():
             while self.typing_queries_count < TYPING_QUERIES_LIMIT:
-                await self.bot.send_chat_action(self.chat_id, self.action)
+                await self.bot.send_chat_action(chat_id=self.chat_id, action=self.action)
                 await asyncio.sleep(TYPING_DELAY)
                 self.typing_queries_count += 1
 
@@ -86,23 +85,6 @@ class Timer:
         self._current_timeout = self.timeout
 
 
-@dataclasses.dataclass
-class CodeFragment:
-    language: str
-    code: str
-
-
-def detect_and_extract_code(text) -> List[CodeFragment]:
-    pattern = r"```(\S+)\n(.*?)```"
-    matches = re.findall(pattern, text, re.DOTALL)
-    results = []
-    for match in matches:
-        language, code = match
-        fragment = CodeFragment(language, code)
-        results.append(fragment)
-    return results
-
-
 def get_username(user: types.User):
     full_name = user.full_name
     username = user.username
@@ -118,40 +100,32 @@ def get_username(user: types.User):
 
 
 def message_is_forward(message: types.Message):
-    return message.forward_from or message.forward_from_chat or message.forward_sender_name
+    # Bot API 7+ reports forwards via forward_origin; the legacy fields are kept for old updates
+    return bool(
+        message.forward_origin or message.forward_from or message.forward_from_chat or message.forward_sender_name
+    )
+
+
+def is_parse_error(error: TelegramBadRequest) -> bool:
+    """aiogram 3 has no dedicated CantParseEntities exception; Telegram reports markup errors as a
+    TelegramBadRequest whose message starts with "can't parse" (entities for legacy parse modes, rich markup
+    for rich messages)."""
+    return "can't parse" in str(error.message).lower()
 
 
 def get_hide_button():
-    keyboard = types.InlineKeyboardMarkup(1)
+    keyboard = InlineKeyboardBuilder()
     keyboard.add(types.InlineKeyboardButton(text='Hide', callback_data='hide'))
-    return keyboard
+    return keyboard.as_markup()
 
 
-def escape_tg_markdown(text):
-    escape_chars = '\*_`\['
-    return ''.join('\\' + char if char in escape_chars else char for char in text)
-
-
-async def send_telegram_message(message: types.Message, text: str, parse_mode=None, reply_markup=None):
+async def send_telegram_message(message: types.Message, text: str, reply_markup=None):
+    """Plain-text message (service texts, errors, transcriptions). LLM answers use app.bot.rich_messages."""
     if message.reply_to_message is None:
         send_message = message.answer
     else:
         send_message = message.reply
-
-    try:
-        return await send_message(text, parse_mode=parse_mode, reply_markup=reply_markup)
-    except CantParseEntities:
-        # try to send message without parse_mode once
-        return await send_message(text, reply_markup=reply_markup)
-
-
-async def edit_telegram_message(message: types.Message, text: str, message_id, parse_mode=None, reply_markup=None):
-    chat_id = message.chat.id
-    try:
-        return await message.bot.edit_message_text(text, chat_id, message_id, parse_mode=parse_mode, reply_markup=reply_markup)
-    except CantParseEntities:
-        # try to edit message without parse_mode once
-        return await message.bot.edit_message_text(text, chat_id, message_id, reply_markup=reply_markup)
+    return await send_message(text, parse_mode=None, reply_markup=reply_markup)
 
 
 async def send_photo(message: types.Message, photo_bytes, caption=None, reply_markup=None):
@@ -160,11 +134,12 @@ async def send_photo(message: types.Message, photo_bytes, caption=None, reply_ma
     else:
         send_message = message.reply_photo
 
-    return await send_message(photo_bytes, caption=caption, reply_markup=reply_markup)
+    photo = BufferedInputFile(photo_bytes, filename='image.png')
+    return await send_message(photo, caption=caption, reply_markup=reply_markup)
 
 
 async def send_document(message: types.Message, document_bytes, filename, caption=None):
-    document = types.InputFile(io.BytesIO(document_bytes), filename=filename)
+    document = BufferedInputFile(document_bytes, filename=filename)
     if message.reply_to_message is None:
         send_message = message.answer_document
     else:

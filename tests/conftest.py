@@ -1,3 +1,4 @@
+import json
 import os
 import time
 import asyncio
@@ -35,7 +36,8 @@ from app.llm_models import get_models
 get_models.cache_clear()
 
 from aiogram import Bot, Dispatcher
-from aiogram.types.base import TelegramObject
+from aiogram.client.default import Default
+from aiogram.client.session.base import BaseSession
 from app.bot.telegram_bot import TelegramBot
 from app.storage.db import DBFactory, DB
 from app.openai_helpers.llm_client_factory import LLMClientFactory
@@ -43,67 +45,95 @@ from tests.helpers.bot_spy import BotSpy
 
 import asyncpg
 
-# Store reference to the test bot for the property override
-_test_bot_ref = None
-
-
 # ---- Message ID counter for bot request mock ----
 _bot_message_id = 5000
 
 
-def _make_bot_request_handler(responses=None):
-    """Create an async handler for Bot.request that returns valid Telegram response dicts.
+def _fake_telegram_result(method: str, data: dict):
+    """Builds a valid Telegram API result dict for an outgoing request (no network)."""
+    global _bot_message_id
+    _bot_message_id += 1
 
-    If `responses` list is passed, every (method, data, result) triple is appended to it, so tests
-    can find out which telegram message id the bot got back for a sent message.
+    if method == 'sendRichMessage':
+        # Telegram returns a rich message without `text`; the bot only relies on message_id
+        return {
+            'message_id': _bot_message_id,
+            'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
+            'chat': {'id': data.get('chat_id', 12345), 'type': 'private'},
+            'date': int(time.time()),
+        }
+    if method in ('sendMessage', 'editMessageText', 'sendPhoto', 'sendDocument', 'sendVoice', 'editMessageReplyMarkup'):
+        return {
+            'message_id': _bot_message_id,
+            'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
+            'chat': {'id': data.get('chat_id', 12345), 'type': 'private'},
+            'date': int(time.time()),
+            'text': data.get('text', '') or data.get('caption', '') or '',
+        }
+    elif method == 'getMe':
+        return {
+            'id': 0,
+            'is_bot': True,
+            'first_name': 'TestBot',
+            'username': 'test_bot',
+        }
+    else:
+        # sendChatAction, sendRichMessageDraft, deleteMessage, answerCallbackQuery, setMyCommands, ...
+        return True
+
+
+def _method_data(method) -> dict:
+    """Request payload of an aiogram TelegramMethod as a plain dict (camelCase-free, no Default sentinels)."""
+    data = {}
+    for key, value in method.model_dump(exclude_none=True).items():
+        if isinstance(value, Default):
+            continue
+        data[key] = value
+    return data
+
+
+class MockedSession(BaseSession):
+    """aiogram session that never talks to Telegram.
+
+    Every outgoing request is recorded as (api_method, data) in `requests`, and the
+    (api_method, data, result) triple in `responses`, so tests can find out which telegram
+    message id the bot got back for a sent message.
     """
-    async def mock_request(method, data=None, *args, **kwargs):
-        global _bot_message_id
-        _bot_message_id += 1
 
-        if method in ('sendMessage', 'editMessageText', 'sendPhoto', 'sendDocument', 'editMessageReplyMarkup'):
-            chat_id = 12345
-            if data:
-                chat_id = data.get('chat_id', 12345)
-            result = {
-                'message_id': _bot_message_id,
-                'from': {'id': 0, 'is_bot': True, 'first_name': 'Bot'},
-                'chat': {'id': chat_id, 'type': 'private'},
-                'date': int(time.time()),
-                'text': data.get('text', '') if data else '',
-            }
-            if responses is not None:
-                responses.append((method, data or {}, result))
-            return result
-        elif method in ('sendChatAction', 'deleteMessage', 'answerCallbackQuery'):
-            return True
-        elif method == 'setMyCommands':
-            return True
-        elif method == 'getMe':
-            return {
-                'id': 0,
-                'is_bot': True,
-                'first_name': 'TestBot',
-                'username': 'test_bot',
-            }
-        else:
-            return True
+    def __init__(self):
+        super().__init__()
+        self.requests = []
+        self.responses = []
+        # api_method -> list of exceptions to raise on the next calls of that method (one per call)
+        self.failures = {}
 
-    return mock_request
+    def fail_next(self, api_method, exception):
+        self.failures.setdefault(api_method, []).append(exception)
+
+    async def close(self):
+        pass
+
+    async def make_request(self, bot, method, timeout=None):
+        api_method = method.__api_method__
+        data = _method_data(method)
+        self.requests.append((api_method, data))
+        if self.failures.get(api_method):
+            raise self.failures[api_method].pop(0)
+        result = _fake_telegram_result(api_method, data)
+        self.responses.append((api_method, data, result))
+        response = self.check_response(
+            bot=bot, method=method, status_code=200, content=json.dumps({'ok': True, 'result': result}),
+        )
+        return response.result
+
+    async def stream_content(self, url, headers=None, timeout=30, chunk_size=65536, raise_for_status=True):
+        yield b''
 
 
 # ---- Fixtures ----
 
-@pytest.fixture(scope='session')
-def event_loop():
-    """Single event loop for the entire test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
 @pytest_asyncio.fixture(scope='session')
-async def db_pool(event_loop):
+async def db_pool():
     """Session-scoped connection pool."""
     dsn = f'postgres://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DATABASE}'
     pool = await asyncpg.create_pool(dsn)
@@ -139,10 +169,10 @@ async def clean_db(db_pool):
 
 @pytest.fixture
 def mock_bot():
-    """Bot with mocked request method."""
-    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
-    bot.sent_responses = []
-    bot.request = AsyncMock(side_effect=_make_bot_request_handler(bot.sent_responses))
+    """Bot whose session records requests instead of calling Telegram."""
+    session = MockedSession()
+    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, session=session)
+    bot.sent_responses = session.responses
     return bot
 
 
@@ -154,7 +184,7 @@ def spy(mock_bot):
 @pytest_asyncio.fixture
 async def bot_app(mock_bot, db, db_pool):
     """Full bot application: TelegramBot + Dispatcher, initialized."""
-    dp = Dispatcher(mock_bot)
+    dp = Dispatcher()
     telegram_bot = TelegramBot(mock_bot, dp)
 
     # Patch Timer to be near-instant
@@ -173,24 +203,11 @@ async def bot_app(mock_bot, db, db_pool):
         # Inject our test pool into DBFactory so on_startup uses it
         DBFactory.connection_pool = db_pool
 
-        # Monkey-patch TelegramObject.bot to always return our mock bot
-        # This avoids ContextVar issues across asyncio tasks
-        global _test_bot_ref
-        _test_bot_ref = mock_bot
-        _original_bot_property = TelegramObject.bot.fget
-
-        def _patched_bot(self):
-            return _test_bot_ref
-
-        TelegramObject.bot = property(_patched_bot)
-
-        await telegram_bot.on_startup(None)
+        # aiogram 3 binds the bot to every update passed through dp.feed_update(bot, update),
+        # so no ContextVar tricks are needed for message.bot to work across tasks.
+        await telegram_bot.on_startup()
 
         yield telegram_bot, dp, mock_bot
-
-        # Restore original property
-        TelegramObject.bot = property(_original_bot_property)
-        _test_bot_ref = None
 
         # Stop scheduled tasks but DON'T close the DB pool
         if telegram_bot.scheduler_service:

@@ -27,7 +27,7 @@ class TestSimpleMessage:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi there')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         spy.assert_sent_text_contains("Hello! I'm a test bot.")
@@ -40,7 +40,7 @@ class TestSimpleMessage:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hello', user_id=99999)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         user = await telegram_bot.db.get_user(99999)
@@ -56,7 +56,7 @@ class TestSimpleMessage:
 
         user_id = 88888
         update = make_text_message('Test message', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         user = await telegram_bot.db.get_user(user_id)
@@ -72,7 +72,7 @@ class TestSimpleMessage:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('What is 2+2?')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         assert len(mock_llm.calls) == 1

@@ -171,3 +171,4 @@ settings_local.py
 docker-compose.override.yml
 
 .DS_STORE
+backups/

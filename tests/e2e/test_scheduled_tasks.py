@@ -18,7 +18,7 @@ async def _create_agent_user(telegram_bot, dp, user_id):
     LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
     update = make_text_message('Hi', user_id=user_id)
-    await dp.process_update(update)
+    await dp.feed_update(telegram_bot.bot, update)
     await asyncio.sleep(0.1)
 
     user = await telegram_bot.db.get_user(user_id)
@@ -58,7 +58,7 @@ class TestScheduleTaskTool:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Schedule a reminder', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Reminder scheduled!")
@@ -98,7 +98,7 @@ class TestScheduleTaskTool:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Schedule daily standup', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Daily task scheduled!")
@@ -140,7 +140,7 @@ class TestScheduleTaskTool:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('List my tasks', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Here are your tasks.")
@@ -184,7 +184,7 @@ class TestScheduleTaskTool:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Cancel that task', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Task cancelled.")
@@ -220,7 +220,7 @@ class TestScheduleTaskTool:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Schedule bad', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         # Verify error was returned to LLM
@@ -262,7 +262,7 @@ class TestScheduledTaskTimezone:
             LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
             update = make_text_message('Schedule for tomorrow morning', user_id=user_id)
-            await dp.process_update(update)
+            await dp.feed_update(mock_bot, update)
             await asyncio.sleep(0.3)
 
             tasks = await telegram_bot.db.get_scheduled_tasks(user_id)
@@ -312,7 +312,7 @@ class TestScheduledTaskTimezone:
             LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
             update = make_text_message('Schedule daily task', user_id=user_id)
-            await dp.process_update(update)
+            await dp.feed_update(mock_bot, update)
             await asyncio.sleep(0.3)
 
             tasks = await telegram_bot.db.get_scheduled_tasks(user_id)
@@ -352,7 +352,7 @@ class TestScheduledTaskContext:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Schedule the thing we discussed', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         tasks = await telegram_bot.db.get_scheduled_tasks(user_id)
@@ -382,7 +382,7 @@ class TestScheduledTaskContext:
         mock_llm.add_response(content="Noted, turquoise it is.")
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
         update = make_text_message('My favorite color is turquoise', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.2)
 
         mock_llm = MockLLMClient()
@@ -405,7 +405,7 @@ class TestScheduledTaskContext:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Remind me about it later', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
         tasks = await telegram_bot.db.get_scheduled_tasks(user_id)

@@ -27,10 +27,10 @@ def _make_user_dict(user_id=12345, first_name='Test', last_name='User', username
     }
 
 
-def _make_chat_dict(chat_id=12345):
+def _make_chat_dict(chat_id=12345, chat_type='private'):
     return {
         'id': chat_id,
-        'type': 'private',
+        'type': chat_type,
     }
 
 
@@ -46,7 +46,7 @@ def _make_reply_to_dict(chat_id, message_id):
 
 
 def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=None,
-                      first_name='Test', last_name='User', username='testuser'):
+                      first_name='Test', last_name='User', username='testuser', chat_type='private'):
     if chat_id is None:
         chat_id = user_id
 
@@ -54,7 +54,7 @@ def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=Non
     message_dict = {
         'message_id': message_id,
         'from': _make_user_dict(user_id, first_name, last_name, username),
-        'chat': _make_chat_dict(chat_id),
+        'chat': _make_chat_dict(chat_id, chat_type),
         'date': int(time.time()),
         'text': text,
     }
@@ -66,7 +66,7 @@ def make_text_message(text, user_id=12345, chat_id=None, reply_to_message_id=Non
         'update_id': _next_update_id(),
         'message': message_dict,
     }
-    return types.Update(**update_dict)
+    return types.Update.model_validate(update_dict)
 
 
 def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
@@ -92,8 +92,9 @@ def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
         message_dict['caption'] = caption
 
     if forward_sender_name is not None:
-        message_dict['forward_date'] = int(time.time())
-        message_dict['forward_sender_name'] = forward_sender_name
+        message_dict['forward_origin'] = {
+            'type': 'hidden_user', 'date': int(time.time()), 'sender_user_name': forward_sender_name,
+        }
 
     if reply_to_message_id is not None:
         message_dict['reply_to_message'] = _make_reply_to_dict(chat_id, reply_to_message_id)
@@ -102,7 +103,7 @@ def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
         'update_id': _next_update_id(),
         'message': message_dict,
     }
-    return types.Update(**update_dict)
+    return types.Update.model_validate(update_dict)
 
 
 def make_voice_message(file_id='test-voice-id', file_size=2048, duration=3,
@@ -132,7 +133,7 @@ def make_voice_message(file_id='test-voice-id', file_size=2048, duration=3,
         'update_id': _next_update_id(),
         'message': message_dict,
     }
-    return types.Update(**update_dict)
+    return types.Update.model_validate(update_dict)
 
 
 def make_video_note_message(file_id='test-video-note-id', file_size=2048, duration=5,
@@ -162,7 +163,7 @@ def make_video_note_message(file_id='test-video-note-id', file_size=2048, durati
         'update_id': _next_update_id(),
         'message': message_dict,
     }
-    return types.Update(**update_dict)
+    return types.Update.model_validate(update_dict)
 
 
 def make_command_message(command, user_id=12345, chat_id=None, **kwargs):
@@ -182,7 +183,6 @@ def make_forward_message(text, forward_sender_name=None, forward_from=None,
                                             if k in ('first_name', 'last_name', 'username')}),
         'chat': _make_chat_dict(chat_id),
         'date': int(time.time()),
-        'forward_date': int(time.time()),
     }
 
     if text is not None:
@@ -198,20 +198,27 @@ def make_forward_message(text, forward_sender_name=None, forward_from=None,
             'file_size': 1024,
         }]
 
+    # Bot API 7+: forwards are described by forward_origin (legacy forward_* fields are no longer sent)
     if forward_from:
-        message_dict['forward_from'] = {
-            'id': forward_from.get('id', 99999),
-            'is_bot': False,
-            'first_name': forward_from.get('first_name', 'Forwarded'),
+        message_dict['forward_origin'] = {
+            'type': 'user',
+            'date': int(time.time()),
+            'sender_user': {
+                'id': forward_from.get('id', 99999),
+                'is_bot': False,
+                'first_name': forward_from.get('first_name', 'Forwarded'),
+            },
         }
     elif forward_sender_name:
-        message_dict['forward_sender_name'] = forward_sender_name
+        message_dict['forward_origin'] = {
+            'type': 'hidden_user', 'date': int(time.time()), 'sender_user_name': forward_sender_name,
+        }
 
     update_dict = {
         'update_id': _next_update_id(),
         'message': message_dict,
     }
-    return types.Update(**update_dict)
+    return types.Update.model_validate(update_dict)
 
 
 def make_callback_query(data, message_id, user_id=12345, chat_id=None):
@@ -234,4 +241,16 @@ def make_callback_query(data, message_id, user_id=12345, chat_id=None):
             },
         },
     }
-    return types.Update(**update_dict)
+    return types.Update.model_validate(update_dict)
+
+
+def make_stopped_generation_update(chat_id, draft_id):
+    """Bot API 10.3 `stopped_message_generation` update (the user pressed the native Stop button on a draft)."""
+    update_dict = {
+        'update_id': _next_update_id(),
+        'stopped_message_generation': {
+            'chat': _make_chat_dict(chat_id),
+            'draft_id': draft_id,
+        },
+    }
+    return types.Update.model_validate(update_dict)

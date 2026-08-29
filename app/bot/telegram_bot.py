@@ -1,8 +1,12 @@
+import asyncio
 import os
 import datetime
 import tempfile
 
-from aiogram.utils.exceptions import BadRequest
+from aiogram.enums import ContentType
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command, CommandObject
+from aiogram.types import FSInputFile
 from dateutil.relativedelta import relativedelta
 
 import settings
@@ -15,14 +19,14 @@ from app.bot.settings_menu import Settings
 from app.bot.user_middleware import UserMiddleware
 from app.bot.user_role_manager import UserRoleManager
 from app.bot.utils import (get_hide_button, get_usage_response_all_users, TypingWorker)
+from app.bot.rich_messages import send_rich_message
 from app.bot.utils import send_telegram_message
 from app.openai_helpers.utils import (calculate_whisper_usage_price, OpenAIAsync,
                                       calculate_image_generation_usage_price, calculate_tts_usage_price)
 from app.storage.db import DBFactory, User
 from app.storage.user_role import check_access_conditions, UserRole
 
-from aiogram import types, Bot, Dispatcher
-from aiogram.utils import executor
+from aiogram import types, Bot, Dispatcher, F
 
 
 class TelegramBot:
@@ -30,13 +34,13 @@ class TelegramBot:
         self.db = None
         self.bot = bot
         self.dispatcher = dispatcher
-        self.dispatcher.register_message_handler(self.open_settings, commands=['settings'])
-        self.dispatcher.register_message_handler(self.open_models, commands=['models'])
-        self.dispatcher.register_message_handler(self.get_usage, commands=['usage'])
-        self.dispatcher.register_message_handler(self.get_usage_all_users, commands=['usage_all'])
-        self.dispatcher.register_message_handler(self.reset_dialog, commands=['reset'])
-        self.dispatcher.register_message_handler(self.generate_speech, commands=['text2speech'])
-        self.dispatcher.register_callback_query_handler(self.process_hide_callback, lambda c: c.data == 'hide')
+        self.dispatcher.message.register(self.open_settings, Command('settings'))
+        self.dispatcher.message.register(self.open_models, Command('models'))
+        self.dispatcher.message.register(self.get_usage, Command('usage'))
+        self.dispatcher.message.register(self.get_usage_all_users, Command('usage_all'))
+        self.dispatcher.message.register(self.reset_dialog, Command('reset'))
+        self.dispatcher.message.register(self.generate_speech, Command('text2speech'))
+        self.dispatcher.callback_query.register(self.process_hide_callback, F.data == 'hide')
 
         # initialized in on_startup
         self.settings = None
@@ -47,7 +51,7 @@ class TelegramBot:
         self.scheduler_service = None
         self.batched_handler = None
 
-    async def on_startup(self, _):
+    async def on_startup(self, **kwargs):
         self.db = await DBFactory.create_database(
             settings.POSTGRES_USER, settings.POSTGRES_PASSWORD,
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
@@ -56,7 +60,7 @@ class TelegramBot:
         self.models_menu = ModelsMenu(self.bot, self.dispatcher, self.db)
         self.cancellation_manager = CancellationManager(self.bot, self.dispatcher)
         self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
-        self.dispatcher.middleware.setup(UserMiddleware(self.db))
+        self.dispatcher.message.middleware(UserMiddleware(self.db))
 
         self.monthly_usage_task = build_monthly_usage_task(self.bot, self.db)
         self.monthly_usage_task.start()
@@ -65,16 +69,16 @@ class TelegramBot:
         self.scheduler_service.start()
 
         self.batched_handler = BatchedInputHandler(self.bot, self.db, self.cancellation_manager)
-        self.dispatcher.register_message_handler(self.batched_handler.handle, content_types=[
-            types.ContentType.TEXT, types.ContentType.VIDEO, types.ContentType.PHOTO, types.ContentType.VOICE,
-            types.ContentType.DOCUMENT, types.ContentType.AUDIO, types.ContentType.VIDEO_NOTE,
-        ])
+        self.dispatcher.message.register(self.batched_handler.handle, F.content_type.in_({
+            ContentType.TEXT, ContentType.VIDEO, ContentType.PHOTO, ContentType.VOICE,
+            ContentType.DOCUMENT, ContentType.AUDIO, ContentType.VIDEO_NOTE,
+        }))
 
         # all commands are added to global scope by default, except for admin commands
         commands = self.role_manager.get_role_commands(UserRole.ADVANCED)
         await self.bot.set_my_commands(commands)
 
-    async def on_shutdown(self, _):
+    async def on_shutdown(self, **kwargs):
         if self.scheduler_service:
             await self.scheduler_service.stop()
         if self.monthly_usage_task:
@@ -83,21 +87,23 @@ class TelegramBot:
         self.db = None
 
     def run(self):
-        executor.start_polling(self.dispatcher, on_startup=self.on_startup, on_shutdown=self.on_shutdown)
+        self.dispatcher.startup.register(self.on_startup)
+        self.dispatcher.shutdown.register(self.on_shutdown)
+        asyncio.run(self.dispatcher.start_polling(self.bot))
 
     async def process_hide_callback(self, callback_query: types.CallbackQuery):
         await self.bot.delete_message(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id
         )
-        await self.bot.answer_callback_query(callback_query.id)
+        await callback_query.answer()
 
     async def reset_dialog(self, message: types.Message, user: User):
         await self.db.create_reset_message(user.id, message.chat.id)
         await message.answer('👌')
 
     async def get_usage(self, message: types.Message, user: User):
-        await self.bot.delete_message(message.chat.id, message.message_id)
+        await self.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
 
         total = 0
         result = []
@@ -105,13 +111,13 @@ class TelegramBot:
         completion_usages = await self.db.get_user_current_month_completion_usage(user.id)
         for usage in completion_usages:
             total += usage.price
-            result.append(f'*{usage.model}:* {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${usage.price}')
+            result.append(f'**{usage.model}:** {usage.prompt_tokens} prompt, {usage.completion_tokens} completion, ${usage.price}')
 
         whisper_usage = await self.db.get_user_current_month_whisper_usage(user.id)
         whisper_price = calculate_whisper_usage_price(whisper_usage)
         total += whisper_price
         if whisper_price:
-            result.append(f'*Speech2Text:* {whisper_usage} seconds, ${whisper_price}')
+            result.append(f'**Speech2Text:** {whisper_usage} seconds, ${whisper_price}')
 
         image_generation_usage = await self.db.get_user_current_month_image_generation_usage(user.id)
         for usage in image_generation_usage:
@@ -119,27 +125,25 @@ class TelegramBot:
                 usage['model'], usage['resolution'], usage['usage_count']
             )
             total += price
-            result.append(f'*{usage["model"]}:* {usage["usage_count"]} images, {usage["resolution"]} resolution, ${price}')
+            result.append(f'**{usage["model"]}:** {usage["usage_count"]} images, {usage["resolution"]} resolution, ${price}')
 
         tts_usages = await self.db.get_user_current_month_tts_usage(user.id)
         for tts_usage in tts_usages:
             price = calculate_tts_usage_price(tts_usage['characters_count'], tts_usage['model'])
             total += price
-            result.append(f'*{tts_usage["model"]}:* {tts_usage["characters_count"]} characters, ${price}')
+            result.append(f'**{tts_usage["model"]}:** {tts_usage["characters_count"]} characters, ${price}')
 
-        result.append(f'*Total:* ${total}')
-        await send_telegram_message(
-            message, '\n'.join(result), types.ParseMode.MARKDOWN, reply_markup=get_hide_button()
-        )
+        result.append(f'**Total:** ${total}')
+        await send_rich_message(message, '\n'.join(result), reply_markup=get_hide_button())
 
-    async def get_usage_all_users(self, message: types.Message, user: User):
+    async def get_usage_all_users(self, message: types.Message, user: User, command: CommandObject):
         if not check_access_conditions(UserRole.ADMIN, user.role):
             return
 
-        await self.bot.delete_message(message.chat.id, message.message_id)
+        await self.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
 
         # parse command args
-        args = message.get_args().split(' ')
+        args = (command.args or '').split(' ')
         month = None
         if len(args) == 1 and args[0].replace('-', '').isdecimal():
             month_offset = int(args[0])
@@ -200,8 +204,8 @@ class TelegramBot:
                 mp3_filename = os.path.join(temp_dir, f'voice_{message.message_id}.mp3')
                 await response.astream_to_file(mp3_filename)
                 try:
-                    await message.answer_voice(open(mp3_filename, 'rb'))
-                except BadRequest as e:
+                    await message.answer_voice(FSInputFile(mp3_filename))
+                except TelegramBadRequest as e:
                     error_message = f'Error: {e}\nYou should probably try to enable voice messages in your ' \
                                     f'Telegram privacy settings'
                     await message.answer(error_message)

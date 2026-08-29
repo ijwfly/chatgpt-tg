@@ -24,7 +24,7 @@ async def get_embeddings(strings: List[str]) -> List[EmbeddedText]:
         input=strings,
     )
     result = []
-    for string, embedding_openai in zip(strings, response['data']):
+    for string, embedding_openai in zip(strings, response.data):
         embedding = embedding_openai.embedding
         result.append(EmbeddedText(string, embedding))
     return result

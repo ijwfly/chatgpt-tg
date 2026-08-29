@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-The LLM Runtime layer (`app/runtime/`) separates LLM logic (context management, streaming, tool calling, usage tracking) from transport logic (Telegram message editing, thinking emoji, cancel buttons, 4080-char splits).
+The LLM Runtime layer (`app/runtime/`) separates LLM logic (context management, streaming, tool calling, usage tracking) from transport logic (Telegram rich messages and drafts, message editing, thinking display, Stop button, markdown splitting).
 
 This enables:
 1. Plugging different runtimes into the same Telegram bot (Anthropic Agents SDK, OpenAI Responses API, custom pipelines)
@@ -173,9 +173,10 @@ User sends messages to Telegram
 ┌────────────────────────────────────────────────┐
 │  TelegramRuntimeAdapter                         │
 │  • Iterates runtime.process_turn() events       │
-│  • StreamingContentDelta → throttled message    │
-│    editing, thinking emoji, cancel button        │
-│  • FinalResponse → split + send/edit final msg, │
+│  • StreamingContentDelta → rich draft (private)  │
+│    or throttled message editing (groups),        │
+│    thinking display, Stop button                 │
+│  • FinalResponse → split + sendRichMessage,      │
 │    save to context with real TG message_id       │
 │  • FunctionCallCompleted → verbose display      │
 └─────────────────────┬──────────────────────────┘

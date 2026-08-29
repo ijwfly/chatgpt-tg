@@ -23,4 +23,4 @@ class TelegramSideEffectHandler:
 
     async def edit_message(self, message_id: int, text: str) -> None:
         chat_id = self.message.chat.id
-        await self.message.bot.edit_message_text(text, chat_id, message_id)
+        await self.message.bot.edit_message_text(text=text, chat_id=chat_id, message_id=message_id)

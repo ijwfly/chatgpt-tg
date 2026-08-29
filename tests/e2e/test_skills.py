@@ -35,7 +35,7 @@ async def _create_agent_user(telegram_bot, dp, user_id):
     mock_llm.add_response("Hello!")
     LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
-    await dp.process_update(make_text_message('Hi', user_id=user_id))
+    await dp.feed_update(telegram_bot.bot, make_text_message('Hi', user_id=user_id))
     await asyncio.sleep(0.1)
 
     user = await telegram_bot.db.get_user(user_id)
@@ -45,13 +45,13 @@ async def _create_agent_user(telegram_bot, dp, user_id):
     return user
 
 
-async def _run_turn(dp, user_id, text, response='Done.', sleep=0.3):
+async def _run_turn(dp, mock_bot, user_id, text, response='Done.', sleep=0.3):
     """One agent turn with a single-response LLM. Returns the mock client."""
     mock_llm = MockLLMClient()
     mock_llm.add_response(response)
     LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
-    await dp.process_update(make_text_message(text, user_id=user_id))
+    await dp.feed_update(mock_bot, make_text_message(text, user_id=user_id))
     await asyncio.sleep(sleep)
     return mock_llm
 
@@ -80,7 +80,7 @@ class TestSkillsCatalog:
             telegram_id=user_id,
         )
 
-        mock_llm = await _run_turn(dp, user_id, 'here is my statement')
+        mock_llm = await _run_turn(dp, mock_bot, user_id, 'here is my statement')
 
         prompt = _system_prompt(mock_llm)
         assert '## Skills' in prompt
@@ -105,7 +105,7 @@ class TestSkillsCatalog:
             telegram_id=user_id,
         )
 
-        mock_llm = await _run_turn(dp, user_id, 'make me a skill')
+        mock_llm = await _run_turn(dp, mock_bot, user_id, 'make me a skill')
 
         prompt = _system_prompt(mock_llm)
         assert prompt.count('- skill-creator') == 1
@@ -119,7 +119,7 @@ class TestSkillsCatalog:
         await _create_agent_user(telegram_bot, dp, user_id)
         FakeSandboxClient.skills_result = make_catalog(telegram_id=user_id)
 
-        mock_llm = await _run_turn(dp, user_id, 'hello there')
+        mock_llm = await _run_turn(dp, mock_bot, user_id, 'hello there')
 
         assert '## Skills' not in _system_prompt(mock_llm)
 
@@ -135,7 +135,7 @@ class TestSkillsCatalog:
             raise SandboxError('Sandbox unavailable: connection refused')
 
         with patch.object(FakeSandboxClient, 'list_skills', failing_list_skills):
-            mock_llm = await _run_turn(dp, user_id, 'do something', response='Answered anyway.')
+            mock_llm = await _run_turn(dp, mock_bot, user_id, 'do something', response='Answered anyway.')
 
         spy.assert_sent_text_contains('Answered anyway.')
         assert '## Skills' not in _system_prompt(mock_llm)
@@ -151,7 +151,7 @@ class TestSkillsCatalog:
         )
         settings.ENABLE_SKILLS = False
 
-        mock_llm = await _run_turn(dp, user_id, 'hello')
+        mock_llm = await _run_turn(dp, mock_bot, user_id, 'hello')
 
         assert FakeSandboxClient.skills_calls == []
         assert '## Skills' not in _system_prompt(mock_llm)
@@ -168,7 +168,7 @@ class TestSkillsCatalog:
             telegram_id=user_id,
         )
 
-        mock_llm = await _run_turn(dp, user_id, 'hello')
+        mock_llm = await _run_turn(dp, mock_bot, user_id, 'hello')
 
         prompt = _system_prompt(mock_llm)
         skill_lines = [line for line in prompt.splitlines() if line.startswith('- skill-')]
@@ -202,7 +202,7 @@ class TestSkillsCatalog:
         mock_llm.add_response('Grouped by week as the skill says.')
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
-        await dp.process_update(make_text_message('here is my statement', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('here is my statement', user_id=user_id))
         await asyncio.sleep(0.5)
 
         spy.assert_sent_text_contains('Grouped by week as the skill says.')
@@ -233,7 +233,7 @@ class TestSkillsCatalog:
         mock_llm.add_response('Task finished.')
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
-        await dp.process_update(make_text_message('analyze my statement', user_id=user_id))
+        await dp.feed_update(mock_bot, make_text_message('analyze my statement', user_id=user_id))
         await asyncio.sleep(1.0)
 
         sub_calls = [

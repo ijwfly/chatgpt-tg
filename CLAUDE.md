@@ -81,7 +81,8 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - **Sub-dialogues**: replying to a message creates a branch — `DialogManager` loads only that branch's history. Chat messages without a context row of their own (upload confirmations, the user's voice message behind a transcription) are registered as aliases in `message_tg_alias`, so replying to them resolves to the right row
 - **Context expiration**: messages older than `MESSAGE_EXPIRATION_WINDOW` (default 1h) start fresh context
 - **Auto-summarization**: when context exceeds `short_term_memory_tokens`, older messages get summarized via LLM
-- **Streaming**: responses are streamed to Telegram, editing the message every 2 seconds with cancel button
+- **Rich messages**: LLM answers, `/usage`, `/models` and admin cards are sent as Telegram Rich Messages (`sendRichMessage` with `InputRichMessage(markdown=...)`, GFM markdown, 32768-char limit) via `app/bot/rich_messages.py`; a rejected markup falls back to plain `sendMessage`. Service texts (errors, confirmations, transcriptions, verbose tool output) stay plain via `utils.send_telegram_message`. See `specs/RICH_MESSAGES.md`
+- **Streaming**: by default a real rich message is created and edited every second with an inline Stop button (`ChatServiceMessage`). With `settings.RICH_DRAFT_STREAMING = True` (off by default — clients render drafts poorly) private chats stream an ephemeral rich draft (`sendRichMessageDraft`, `DraftStream` in `app/bot/service_message.py`, thinking/tool hints as `<tg-thinking>`, native Stop button via `can_stop`), finished with a fresh `sendRichMessage`; groups (or a failed draft call) fall back to the edit path. The Bot API 10.3 `stopped_message_generation` update is handled by `CancellationManager.process_stopped_generation` (registered on `dp.stopped_message_generation`, aiogram ≥ 3.31)
 - **`<think>` tags**: models that output thinking blocks have them parsed, displayed as emoji status during streaming, then stripped before saving
 - **User roles**: `UserRole` enum (STRANGER, BASIC, ADVANCED, ADMIN, NOONE) gates access to features and models
 - **Image proxy**: `main_image_proxy.py` serves Telegram file IDs as URLs for OpenAI vision API
@@ -96,14 +97,14 @@ bash scripts/test.sh
 
 The script starts a test PostgreSQL container, runs all tests, and tears down the container. All tests must pass before considering the work done. If a test fails, fix the issue before committing.
 
-Test details: `specs/E2E_TESTS.md`
+Test details: `specs/E2E_TESTS.md` (Telegram is mocked with a recording `BaseSession`; updates are fed via `dp.feed_update(mock_bot, update)`; `BotSpy` reads text from both `sendMessage.text` and `sendRichMessage.rich_message.markdown`, drafts via `get_drafts()`)
 
 ### Libraries
-- `aiogram` 2.x (Telegram bot framework)
+- `aiogram` 3.x (Telegram bot framework; handlers registered via `dp.message.register(...)`/`dp.callback_query.register(...)` with `Command`/`F` filters, `UserMiddleware` is a `dp.message` middleware, outgoing files are `BufferedInputFile`/`FSInputFile`)
 - `openai` (OpenAI API)
 - `anthropic` (Anthropic API)
 - `asyncpg` (PostgreSQL)
-- `pydantic` 2.x (data models — but some code uses v1 methods like `.parse_raw()`, `.schema()`)
+- `pydantic` 2.x (data models; v2 API only — `model_dump`, `model_copy`, `model_validate_json`, `model_json_schema`)
 - `tiktoken` (token counting)
 - `pydub` + `ffmpeg` (audio processing)
 - `mcp` (MCP client)

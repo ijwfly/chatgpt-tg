@@ -7,7 +7,7 @@ from app.storage.db import DBFactory
 from aiogram import Bot, Dispatcher
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
 
 async def main():
@@ -24,8 +24,7 @@ async def main():
             await asyncio.sleep(0.3)
     finally:
         await DBFactory.close_database()
-        session = await bot.get_session()
-        await session.close()
+        await bot.session.close()
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 import settings
 
-from aiogram import Bot, types, Dispatcher
+from aiogram import Bot, types, Dispatcher, F
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.llm_models import get_models
 from app.storage.db import User, DB
@@ -115,10 +116,10 @@ class Settings:
             'tts-voice': settings.USER_ROLE_TTS,
             'streaming_answers': settings.USER_ROLE_STREAMING_ANSWERS,
         }
-        self.dispatcher.register_callback_query_handler(self.process_callback, lambda c: SETTINGS_PREFIX in c.data)
+        self.dispatcher.callback_query.register(self.process_callback, F.data.startswith(f'{SETTINGS_PREFIX}.'))
 
     async def send_settings(self, message: types.Message, user: User):
-        await message.answer("Settings:", reply_markup=self.get_keyboard(user), parse_mode=types.ParseMode.MARKDOWN)
+        await message.answer("Settings:", reply_markup=self.get_keyboard(user))
 
     def is_setting_available_for_user(self, setting_name: str, user: User):
         mininum_required_role = self.minimum_required_roles.get(setting_name)
@@ -127,7 +128,7 @@ class Settings:
         return True
 
     def get_keyboard(self, user: User):
-        keyboard = types.InlineKeyboardMarkup()
+        keyboard = InlineKeyboardBuilder()
         for setting_name, setting_obj in self.settings.items():
             if not self.is_setting_available_for_user(setting_name, user):
                 continue
@@ -135,7 +136,8 @@ class Settings:
             text = setting_obj.get_button_string(user)
             keyboard.add(types.InlineKeyboardButton(text=text, callback_data=f'{SETTINGS_PREFIX}.{setting_name}'))
         keyboard.add(types.InlineKeyboardButton(text='Hide settings', callback_data=f'{SETTINGS_PREFIX}.{HIDE_COMMAND}'))
-        return keyboard
+        keyboard.adjust(1)
+        return keyboard.as_markup()
 
     def toggle_setting(self, user: User, setting_name: str):
         if not self.is_setting_available_for_user(setting_name, user):
@@ -151,14 +153,14 @@ class Settings:
                 chat_id=callback_query.from_user.id,
                 message_id=callback_query.message.message_id
             )
-            await self.bot.answer_callback_query(callback_query.id)
+            await callback_query.answer()
         else:
             setting = command
             user = await self.db.get_or_create_user(callback_query.from_user.id)
             user = self.toggle_setting(user, setting)
             await self.db.update_user(user)
 
-            await self.bot.answer_callback_query(callback_query.id)
+            await callback_query.answer()
             await self.bot.edit_message_reply_markup(
                 chat_id=callback_query.from_user.id,
                 message_id=callback_query.message.message_id,

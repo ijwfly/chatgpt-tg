@@ -24,12 +24,12 @@ class TestContextManagement:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update_a = make_text_message('Message A', user_id=user_id)
-        await dp.process_update(update_a)
+        await dp.feed_update(mock_bot, update_a)
         await asyncio.sleep(0.1)
 
         # Send /reset
         update_reset = make_command_message('reset', user_id=user_id)
-        await dp.process_update(update_reset)
+        await dp.feed_update(mock_bot, update_reset)
         await asyncio.sleep(0.05)
 
         # Send "Message B" with fresh LLM
@@ -38,7 +38,7 @@ class TestContextManagement:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update_b = make_text_message('Message B', user_id=user_id)
-        await dp.process_update(update_b)
+        await dp.feed_update(mock_bot, update_b)
         await asyncio.sleep(0.1)
 
         # LLM context for Message B should NOT contain "Message A"
@@ -60,7 +60,7 @@ class TestContextManagement:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update_a = make_text_message('Message A', user_id=user_id)
-        await dp.process_update(update_a)
+        await dp.feed_update(mock_bot, update_a)
         await asyncio.sleep(0.1)
 
         # Age all messages by 2 hours (MESSAGE_EXPIRATION_WINDOW defaults to 3600s = 1h)
@@ -76,7 +76,7 @@ class TestContextManagement:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update_b = make_text_message('Message B', user_id=user_id)
-        await dp.process_update(update_b)
+        await dp.feed_update(mock_bot, update_b)
         await asyncio.sleep(0.1)
 
         # LLM context should NOT contain "Message A"
@@ -99,7 +99,7 @@ class TestContextManagement:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update_a = make_text_message('Branch A message', user_id=user_id)
-        await dp.process_update(update_a)
+        await dp.feed_update(mock_bot, update_a)
         await asyncio.sleep(0.1)
 
         # Get bot response message_id (last sendMessage or editMessageText)
@@ -117,7 +117,7 @@ class TestContextManagement:
 
         # /reset to clear linear context
         update_reset = make_command_message('reset', user_id=user_id)
-        await dp.process_update(update_reset)
+        await dp.feed_update(mock_bot, update_reset)
         await asyncio.sleep(0.05)
 
         # Send "Branch B message" (new linear context)
@@ -126,7 +126,7 @@ class TestContextManagement:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update_b = make_text_message('Branch B message', user_id=user_id)
-        await dp.process_update(update_b)
+        await dp.feed_update(mock_bot, update_b)
         await asyncio.sleep(0.1)
 
         # Reply to Branch A's bot response
@@ -139,7 +139,7 @@ class TestContextManagement:
             user_id=user_id,
             reply_to_message_id=bot_response_tg_msg_id,
         )
-        await dp.process_update(update_reply)
+        await dp.feed_update(mock_bot, update_reply)
         await asyncio.sleep(0.1)
 
         # LLM context for the reply should contain "Branch A" but NOT "Branch B"

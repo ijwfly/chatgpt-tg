@@ -25,7 +25,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Enable functions and system_prompt_settings
@@ -50,7 +50,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Save my name as Test', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.2)
 
         spy.assert_sent_text_contains("Settings saved!")
@@ -72,7 +72,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Enable functions, settings, and verbose mode
@@ -98,7 +98,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Save my name as Verbose', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.2)
 
         spy.assert_sent_text_contains("Function call: save_user_settings")
@@ -115,7 +115,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         user = await telegram_bot.db.get_user(user_id)
@@ -142,11 +142,11 @@ class TestFunctionCalling:
         deletes_before = len(spy.get_calls_for_method('deleteMessage'))
 
         update2 = make_text_message('Save my name as Hint', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.2)
 
-        # Hint message uses the function-specific status from SaveUserSettings
-        spy.assert_sent_text_contains("Saving user info...")
+        # Hint message uses the function-specific status from SaveUserSettings (a draft in private chats)
+        spy.assert_shown_text_contains("Saving user info...")
         # Final assistant text reaches the chat too
         spy.assert_sent_text_contains("OK!")
 
@@ -169,7 +169,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         user = await telegram_bot.db.get_user(user_id)
@@ -196,7 +196,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Update twice', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Done!")
@@ -221,7 +221,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         user = await telegram_bot.db.get_user(user_id)
@@ -245,7 +245,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Save my name as NoHint', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.2)
 
         all_texts = spy.get_all_sent_texts() + spy.get_all_edited_texts()
@@ -253,14 +253,15 @@ class TestFunctionCalling:
             f"Expected no hint message when hints disabled, got: {all_texts}"
         )
 
-    async def test_long_final_response_splits_into_chunks(self, bot_app):
+    async def test_long_final_response_splits_into_chunks(self, bot_app, monkeypatch):
         """Final response longer than the Telegram cutoff is split into multiple messages."""
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
 
         user_id = 44450
 
-        # ~ 6750 chars, well over the 4080 cutoff, splits into >= 2 chunks
+        # rich messages allow 30000 chars; lower the cutoff so a ~6750-char answer splits into >= 2 chunks
+        monkeypatch.setattr('app.bot.telegram_runtime_adapter.TELEGRAM_MESSAGE_LENGTH_CUTOFF', 4080)
         long_content = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 120
 
         mock_llm = MockLLMClient()
@@ -268,11 +269,11 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Tell a long story', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.2)
 
         sends = spy.get_sent_messages()
-        long_sends = [m for m in sends if 'Lorem ipsum' in m.get('text', '')]
+        long_sends = [m for m in sends if 'Lorem ipsum' in (m.get('rich_message') or {}).get('markdown', '')]
         assert len(long_sends) >= 2, (
             f"Expected long final to split into >= 2 messages, got {len(long_sends)}"
         )
@@ -293,7 +294,7 @@ class TestFunctionCalling:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         user = await telegram_bot.db.get_user(user_id)
@@ -318,7 +319,7 @@ class TestFunctionCalling:
 
         update2 = make_text_message('Loop forever', user_id=user_id)
         with pytest.raises(ValueError):
-            await dp.process_update(update2)
+            await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Something went wrong")

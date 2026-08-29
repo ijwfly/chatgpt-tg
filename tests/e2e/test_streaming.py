@@ -12,7 +12,7 @@ from tests.helpers.bot_spy import BotSpy
 class TestStreaming:
 
     async def test_streaming_sends_and_edits_message(self, bot_app):
-        """Streaming mode sends initial message then edits it with accumulated content."""
+        """Streaming mode sends a message, then edits it with accumulated content (default: no drafts)."""
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
 
@@ -24,7 +24,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Enable streaming
@@ -40,19 +40,19 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Tell me something', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
-        # Streaming should produce both sendMessage and editMessageText calls
+        # Default mode: a rich message is sent, then edited with accumulated content (rich_message payloads)
         sent = spy.get_sent_messages()
         edited = spy.get_edited_messages()
-        # First sendMessage is from initial "Hi" response; second from streaming
-        assert len(sent) >= 2, f"Expected at least 2 sendMessage calls, got {len(sent)}"
+        # First send is from the initial "Hi" response; second is the streamed answer
+        assert len(sent) >= 2, f"Expected at least 2 sent messages, got {len(sent)}"
         assert len(edited) > 0, "Expected at least one editMessageText (streaming update)"
+        assert not spy.get_drafts(), "Draft streaming is off by default"
 
         # Final content should contain the streamed response
-        all_texts = spy.get_all_sent_texts() + spy.get_all_edited_texts()
-        assert any("streaming" in t for t in all_texts)
+        assert any("streaming" in t for t in spy.get_all_sent_texts() + spy.get_all_edited_texts())
 
     async def test_streaming_with_thinking_blocks(self, bot_app):
         """Streaming with <think> blocks shows thinking emoji, then final content."""
@@ -67,7 +67,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Enable streaming
@@ -89,10 +89,10 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Think about this', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
-        all_texts = spy.get_all_sent_texts() + spy.get_all_edited_texts()
+        all_texts = spy.get_all_shown_texts()
         # Should have shown thinking emoji at some point
         assert any('\U0001f9e0' in t for t in all_texts), \
             f"Expected thinking emoji in messages, got: {all_texts}"
@@ -113,7 +113,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi', user_id=user_id)
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Enable streaming + functions
@@ -139,7 +139,7 @@ class TestStreaming:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
 
         update2 = make_text_message('Save my name as StreamTest', user_id=user_id)
-        await dp.process_update(update2)
+        await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
         spy.assert_sent_text_contains("Settings saved!")

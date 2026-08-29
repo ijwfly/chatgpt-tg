@@ -22,7 +22,7 @@ class TestCommands:
         spy = BotSpy(mock_bot)
 
         update = make_command_message('reset')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         # /reset responds with emoji acknowledgment
@@ -34,7 +34,7 @@ class TestCommands:
         spy = BotSpy(mock_bot)
 
         update = make_command_message('usage')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         # /usage responds with "Total:" in the message
@@ -49,13 +49,13 @@ class TestCommands:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Now send /usage
         spy = BotSpy(mock_bot)
         update = make_command_message('usage')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         spy.assert_sent_text_contains('$')
@@ -72,7 +72,7 @@ class TestCommands:
         LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
 
         update = make_text_message('Hi')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.1)
 
         # Insert a fake completion_usage row for a removed model
@@ -89,8 +89,62 @@ class TestCommands:
         # Now send /usage — should not crash and should include the removed model's price
         spy = BotSpy(mock_bot)
         update = make_command_message('usage')
-        await dp.process_update(update)
+        await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.05)
 
         spy.assert_sent_text_contains('gpt-removed')
         spy.assert_sent_text_contains('$')
+
+
+class TestRichMenus:
+
+    async def test_usage_is_a_rich_message_with_bold_rows(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 81001
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response('Hello!')
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        await dp.feed_update(mock_bot, make_text_message('Hi', user_id=user_id))
+        await asyncio.sleep(0.1)
+
+        await dp.feed_update(mock_bot, make_command_message('usage', user_id=user_id))
+        await asyncio.sleep(0.05)
+
+        usage = spy.get_rich_messages()[-1]
+        markdown = usage['rich_message']['markdown']
+        assert '**Total:**' in markdown and '**gpt-3.5-turbo:**' in markdown
+        assert 'parse_mode' not in usage
+        assert usage['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'hide'
+
+    async def test_models_menu_sends_and_edits_rich_markdown(self, bot_app):
+        from tests.helpers.telegram_factory import make_callback_query
+
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 81002
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response('Hello!')
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        await dp.feed_update(mock_bot, make_text_message('Hi', user_id=user_id))
+        await asyncio.sleep(0.1)
+
+        await dp.feed_update(mock_bot, make_command_message('models', user_id=user_id))
+        await asyncio.sleep(0.05)
+
+        menu = spy.get_rich_messages()[-1]
+        assert menu['rich_message']['markdown'].startswith('**Current model**: `')
+        assert '- **Streaming responses**:' in menu['rich_message']['markdown']
+        buttons = [b for row in menu['reply_markup']['inline_keyboard'] for b in row]
+        model_button = next(b for b in buttons if b['callback_data'].startswith('models.') and b['callback_data'] != 'models.hide')
+        menu_message_id = spy.get_last_message_id_for_method('sendRichMessage')
+
+        await dp.feed_update(mock_bot, make_callback_query(model_button['callback_data'], menu_message_id, user_id=user_id))
+        await asyncio.sleep(0.05)
+
+        edit = spy.get_edited_messages()[-1]
+        assert edit['message_id'] == menu_message_id
+        assert edit['rich_message']['markdown'].startswith('**Current model**: `')
+        assert 'parse_mode' not in edit and 'text' not in edit
