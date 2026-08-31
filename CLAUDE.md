@@ -86,6 +86,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - **`<think>` tags**: models that output thinking blocks have them parsed, displayed as emoji status during streaming, then stripped before saving
 - **User roles**: `UserRole` enum (STRANGER, BASIC, ADVANCED, ADMIN, NOONE) gates access to features and models
 - **Image proxy**: `main_image_proxy.py` serves Telegram file IDs as URLs for OpenAI vision API
+- **Observability**: Langfuse tracing behind the `app/observability/` facade (no-op when disabled). Rule: `langfuse`/`opentelemetry` may only be imported inside that package; runtimes call `begin_turn`/`tool_span`/`agent_span` (1–2 lines per call site). One trace per turn, `session_id` = dialog tree root, `user_id` = db id. See `specs/OBSERVABILITY.md` for details and the removal recipe
 
 ## Testing
 

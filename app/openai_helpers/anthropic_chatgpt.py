@@ -93,11 +93,10 @@ class AnthropicDialogMessage(pydantic.BaseModel):
 
 
 class AnthropicChatGPT:
-    def __init__(self, llm_model, system_prompt: str, function_storage: FunctionStorage = None, langfuse_metadata: dict = None):
+    def __init__(self, llm_model, system_prompt: str, function_storage: FunctionStorage = None):
         self.function_storage = function_storage
         self.llm_model = llm_model
         self.system_prompt = system_prompt
-        self._langfuse_metadata = langfuse_metadata or {}
 
     async def send_messages(self, messages_to_send: List[DialogMessage]) -> (DialogMessage, CompletionUsage):
         additional_fields = self.create_additional_fields()

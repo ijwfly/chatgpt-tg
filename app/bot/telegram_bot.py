@@ -10,6 +10,7 @@ from aiogram.types import FSInputFile
 from dateutil.relativedelta import relativedelta
 
 import settings
+from app import observability
 from app.bot.batched_input_handler import BatchedInputHandler
 from app.bot.cancellation_manager import CancellationManager
 from app.bot.models_menu import ModelsMenu
@@ -79,6 +80,8 @@ class TelegramBot:
         await self.bot.set_my_commands(commands)
 
     async def on_shutdown(self, **kwargs):
+        # flush buffered observability spans before connections go down
+        observability.shutdown()
         if self.scheduler_service:
             await self.scheduler_service.stop()
         if self.monthly_usage_task:

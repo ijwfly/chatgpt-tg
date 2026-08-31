@@ -239,9 +239,11 @@ This gives you full access to all model parameters: `model_price` (with `LLMPric
 
 **Observability (optional)**
 
-Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (and optionally `LANGFUSE_BASE_URL`) to
-trace LLM requests with [Langfuse](https://langfuse.com). Tracing is disabled when the keys
-are empty.
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (and optionally `LANGFUSE_BASE_URL`,
+`LANGFUSE_ENVIRONMENT`) to trace LLM requests with [Langfuse](https://langfuse.com):
+one trace per conversation turn with nested generations, tool and sub-agent spans, linked
+to the user and the dialog session. Tracing is disabled when the keys are empty.
+See `specs/OBSERVABILITY.md` for details and the removal recipe.
 
 <details>
 <summary>Migrating from dict-based EXTRA_MODELS</summary>

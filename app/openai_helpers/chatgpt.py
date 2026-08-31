@@ -170,11 +170,10 @@ def parse_thinking(content: str) -> tuple:
 
 
 class ChatGPT:
-    def __init__(self, llm_model, system_prompt: str, function_storage: FunctionStorage = None, langfuse_metadata: dict = None):
+    def __init__(self, llm_model, system_prompt: str, function_storage: FunctionStorage = None):
         self.function_storage = function_storage
         self.llm_model = llm_model
         self.system_prompt = system_prompt
-        self._langfuse_metadata = langfuse_metadata or {}
 
     async def _convert_images_to_base64(self, messages: List[DialogMessage]) -> List[DialogMessage]:
         if self.llm_model.capabilities.image_input_format != 'base64':
@@ -350,7 +349,7 @@ class ChatGPT:
                 break
 
     def create_additional_fields(self):
-        additional_fields = dict(self._langfuse_metadata)
+        additional_fields = {}
         if self.function_storage is not None:
             if self.llm_model.capabilities.tool_calling:
                 additional_fields.update({
