@@ -5,30 +5,42 @@ Rule: `langfuse` / `opentelemetry` may only be imported inside this package
 only, in 1-2 lines per call site, so the whole integration can be removed by
 deleting this package and those call sites. See specs/OBSERVABILITY.md.
 
-The backend is chosen once at import time from settings.LANGFUSE_ENABLED:
-the real Langfuse backend or a no-op backend with the same duck-typed API.
+The backend is chosen once, lazily, on the first facade call from
+settings.LANGFUSE_ENABLED: the real Langfuse backend or a no-op backend with
+the same duck-typed API. The lazy choice keeps this module importable from
+inside the settings import itself (settings_local may pull in app.llm_models,
+which imports this package before settings has finished initializing).
 """
 import settings
 
-if settings.LANGFUSE_ENABLED:
-    from app.observability import _langfuse as _backend
-else:
-    from app.observability import _noop as _backend
+_backend = None
+
+
+def _get_backend():
+    global _backend
+    if _backend is None:
+        if settings.LANGFUSE_ENABLED:
+            from app.observability import _langfuse
+            _backend = _langfuse
+        else:
+            from app.observability import _noop
+            _backend = _noop
+    return _backend
 
 
 def init() -> None:
     """Initialize tracing. Call once at process start, before any LLM client is created."""
-    _backend.init()
+    _get_backend().init()
 
 
 def shutdown() -> None:
     """Flush and close the tracing client. Call on process shutdown."""
-    _backend.shutdown()
+    _get_backend().shutdown()
 
 
 def create_openai_client(api_key, base_url=None):
     """Return an AsyncOpenAI instance — Langfuse drop-in wrapper when enabled, plain otherwise."""
-    return _backend.create_openai_client(api_key, base_url)
+    return _get_backend().create_openai_client(api_key, base_url)
 
 
 def begin_turn(*, name: str, user_id: str, session_id, input_text=None, tags=()):
@@ -38,7 +50,7 @@ def begin_turn(*, name: str, user_id: str, session_id, input_text=None, tags=())
     end(error=None) closes the turn (idempotent, never raises). Must be called
     and ended within the same asyncio task.
     """
-    return _backend.begin_turn(
+    return _get_backend().begin_turn(
         name=name, user_id=user_id, session_id=session_id,
         input_text=input_text, tags=tags,
     )
@@ -46,12 +58,12 @@ def begin_turn(*, name: str, user_id: str, session_id, input_text=None, tags=())
 
 def tool_span(name: str, input=None):
     """Context manager for a tool execution span. Yields a SpanHandle with set_output(value)."""
-    return _backend.span(name=name, as_type='tool', input=input)
+    return _get_backend().span(name=name, as_type='tool', input=input)
 
 
 def agent_span(name: str, input=None):
     """Context manager for a sub-agent run span. Yields a SpanHandle with set_output(value)."""
-    return _backend.span(name=name, as_type='agent', input=input)
+    return _get_backend().span(name=name, as_type='agent', input=input)
 
 
 def turn_session_id(session, context_manager):
