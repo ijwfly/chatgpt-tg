@@ -48,9 +48,10 @@ use the raw `OpenAIAsync` singleton) and context summarization attribution.
 | `LANGFUSE_ENVIRONMENT` | Optional environment tag (`production`, `staging`, …) |
 
 The backend (real vs no-op) is chosen **once at import time** from
-`settings.LANGFUSE_ENABLED` — changing it requires a process restart. Note that
-`LANGFUSE_ENABLED` is computed before `settings_local.py` overrides are applied: if you set
-the keys in `settings_local.py` instead of env vars, also set `LANGFUSE_ENABLED = True` there.
+`settings.LANGFUSE_ENABLED` — changing it requires a process restart. `LANGFUSE_ENABLED` is
+derived from the keys **after** `settings_local.py` overrides are applied, so setting the
+keys in `settings_local.py` is enough; an explicit `LANGFUSE_ENABLED` in `settings_local.py`
+still wins (e.g. to force tracing off while keeping the keys).
 
 ## Architecture and THE RULE
 
