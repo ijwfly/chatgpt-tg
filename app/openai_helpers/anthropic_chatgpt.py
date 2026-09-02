@@ -1,11 +1,13 @@
 import json
 import logging
+from contextlib import suppress
 from typing import List, Any, Optional, Callable, Union
 
 import pydantic
 
 from app.bot.utils import get_image_base64, merge_dicts
 from app.openai_helpers.chatgpt import DialogMessage, CompletionUsage, FunctionCall, ToolCall
+from app.openai_helpers.count_tokens import count_string_tokens
 from app.openai_helpers.function_storage import FunctionStorage
 
 from app.openai_helpers.llm_client_factory import LLMClientFactory
@@ -177,6 +179,17 @@ class AnthropicChatGPT:
             dialog_message = AnthropicDialogMessage(**result_dict)
             completion_usage = CompletionUsage(**usage_dict)
             yield dialog_message.to_dialog_message(), completion_usage
+            if is_cancelled():
+                # the final message_delta with the real output_tokens never arrives: estimate from what was
+                # streamed, plus a margin for tokens generated after the stop (same idea as the OpenAI client)
+                streamed_text = ''.join(part.get('text') or '' for part in result_dict.get('content', []))
+                completion_usage.completion_tokens = max(
+                    completion_usage.completion_tokens, count_string_tokens(streamed_text) + 20,
+                )
+                completion_usage.total_tokens = completion_usage.prompt_tokens + completion_usage.completion_tokens
+                with suppress(BaseException):
+                    await resp_generator.close()
+                break
 
     def create_additional_fields(self):
         additional_fields = {}

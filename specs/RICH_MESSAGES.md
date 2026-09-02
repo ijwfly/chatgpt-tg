@@ -56,11 +56,16 @@ Two live-output implementations behind one small interface (`set_content`, `set_
 1. **`DraftStream`** — private chats. `draft_id = user_message_id * 100 + phase` (non-zero, unique per agent phase). Dedup + 1 s throttle as today. `set_thinking` → `<tg-thinking>🧠 last line</tg-thinking>` (same `_format_thinking_display` rules), `set_hint` → `<tg-thinking>Running X...</tg-thinking>`, `set_content` → accumulated markdown minus the trailing (partial) word, shown once ≥ `MIN_STREAMING_CONTENT_LEN`. A keepalive task re-sends the last draft every 20 s while the turn is running (drafts expire after 30 s, tool calls can take longer). Any `TelegramBadRequest` from a draft call logs and switches the turn to `ChatServiceMessage`.
 2. **`ChatServiceMessage`** — groups and fallback: the existing class, sending/editing via `send_rich_message` / `edit_rich_message` with the inline Stop button. `parse_mode` parameter removed.
 
+**Pacing / flood control.** Both classes share `_PacedOutput` + one `SendGate` per turn (created by `TelegramRuntimeAdapter`, `min_interval = WAIT_BETWEEN_MESSAGE_UPDATES`): a state change goes out immediately when the gate allows, otherwise the latest text is kept pending and a single flush task delivers it as soon as the gate opens (trailing-edge throttle — nothing bursts, nothing is dropped; consecutive tool hints / phases / the draft→message fallback no longer restart the interval). `TelegramRetryAfter` on a draft or streaming edit only extends the gate by `retry_after` and keeps the text pending. Final answers (`finish`/`finalize`, the extra chunks) go through `rich_messages.with_flood_retry`: one wait of `retry_after` (≤ `FLOOD_RETRY_MAX_WAIT`) and a retry. `cancel_pending()` (called by `finish`/`finalize`/`clear` and the adapter's `finally`) guarantees no queued update lands after the answer.
+
 `handle_turn`: `DraftStream` when `settings.RICH_DRAFT_STREAMING` is on and `message.chat.type == 'private'`, otherwise `ChatServiceMessage`. `FinalResponse`: `split_markdown(content, RICH_MESSAGE_LENGTH_CUTOFF)`; on the draft path every chunk is a fresh `send_rich_message` (the draft disappears by itself); on the edit path the first chunk is edited into the service message (no delete/create flicker), the rest are sent. `context_manager.add_message(dm, message_id)` unchanged. Overflow during streaming (> cutoff) keeps the `⏳...` + freeze behaviour. Verbose tool output stays plain.
 
 ### 4.3 Native stop — `app/bot/cancellation_manager.py`, `app/bot/telegram_bot.py`
 
 - `CancellationManager.process_stopped_generation(event: MessageGenerationStopped)` registered on `dispatcher.stopped_message_generation` cancels the token for `event.chat.id` (drafts exist only in private chats, so chat id == user id). aiogram adds the update type to `allowed_updates` because a handler is registered — no manual list in `start_polling`.
+- **Registration order matters.** `Dispatcher.start_polling` computes `allowed_updates = resolve_used_update_types()` *before* it runs the startup hooks, so `CancellationManager` is created in `TelegramBot.__init__`, not in `on_startup` (that bug made prod poll without `stopped_message_generation`: the native Stop did nothing). `test_polling_requests_the_stopped_generation_update` builds a bare `TelegramBot` without `on_startup` to guard the order.
+- The cancellation token is honoured by both streaming clients (`ChatGPT` and `AnthropicChatGPT` break out of the stream, closing it) and `ChatGptManager.send_user_message_streaming` strips tool calls from a cancelled message, so a Stop mid tool-call never executes a tool with truncated arguments.
+- Drafts cannot carry an inline keyboard (`sendRichMessageDraft` has no `reply_markup`): with `RICH_DRAFT_STREAMING` on, the native Stop is the only Stop in private chats; the inline button remains on the edit path (groups, fallback, flag off).
 - History: with aiogram 3.30 this was an outer middleware on `dp.update` reading `update.model_extra`, plus an explicit `allowed_updates`; replaced in the aiogram 3.31 commit.
 
 ### 4.4 Menus
@@ -124,7 +129,7 @@ Initially (aiogram 3.30) a `StoppedGenerationMiddleware` on `dp.update` read `up
 ## 7. Risks / manual checks
 
 - Exact Telegram error text for malformed rich markdown (send a broken `<details>`); widen `is_parse_error` if the wording differs.
-- Rate limits on `sendRichMessageDraft` (throttle stays 1 s; raise on 429).
+- Rate limits on `sendRichMessageDraft`: handled — `SendGate` paces every live-output call and a 429 (`TelegramRetryAfter`) holds the output for `retry_after` instead of crashing the turn (`TestFloodControl`, `tests/unit/test_service_message.py`).
 - `<tg-thinking>` inside `markdown=` (documented as allowed) and the 20 s keepalive during a long `bash_exec` in agent mode.
 - Old Telegram clients: rendering of rich messages is Telegram's fallback, not controllable here.
 - LLM prose with a bare `<` (`a<b`) outside code may be parsed as HTML; watch for it, add minimal escaping outside fences if needed.

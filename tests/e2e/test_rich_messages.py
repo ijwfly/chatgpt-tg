@@ -3,8 +3,8 @@ import asyncio
 import json
 
 import pytest
-from aiogram.exceptions import TelegramBadRequest
-from aiogram.methods import SendRichMessage
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+from aiogram.methods import EditMessageText, SendRichMessage, SendRichMessageDraft
 
 import settings
 
@@ -34,6 +34,13 @@ def draft_streaming():
     settings.RICH_DRAFT_STREAMING = True
     yield
     settings.RICH_DRAFT_STREAMING = old
+
+
+@pytest.fixture
+def fast_updates(monkeypatch):
+    """Live-output pacing off (SendGate interval 0), for tests whose turn ends within a second."""
+    from app.bot import telegram_runtime_adapter
+    monkeypatch.setattr(telegram_runtime_adapter, 'WAIT_BETWEEN_MESSAGE_UPDATES', 0)
 
 
 def _parse_error():
@@ -145,7 +152,7 @@ class TestDraftStreaming:
             'Streamed answer that is long enough to be drafted, finally done.'
         assert 'reply_markup' not in spy.get_rich_messages()[-1]
 
-    async def test_thinking_and_tool_hint_are_rendered_as_tg_thinking(self, bot_app, draft_streaming):
+    async def test_thinking_and_tool_hint_are_rendered_as_tg_thinking(self, bot_app, draft_streaming, fast_updates):
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
         user_id = 71011
@@ -236,7 +243,7 @@ class TestDraftStreaming:
         assert 'reply_markup' not in edits[-1]  # the finished answer has no Stop button
         assert not any(m == 'deleteMessage' for m, _ in turn)
 
-    async def test_draft_failure_falls_back_to_service_message(self, bot_app, draft_streaming):
+    async def test_draft_failure_falls_back_to_service_message(self, bot_app, draft_streaming, fast_updates):
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
         user_id = 71013
@@ -260,7 +267,7 @@ class TestDraftStreaming:
         assert 'deleteMessage' not in methods
         spy.assert_sent_text_contains('updates, done.')
 
-    async def test_agent_phases_use_distinct_draft_ids(self, bot_app, draft_streaming):
+    async def test_agent_phases_use_distinct_draft_ids(self, bot_app, draft_streaming, fast_updates):
         """A tool round-trip that produces text twice (agent phases) streams each phase under its own draft id."""
         telegram_bot, dp, mock_bot = bot_app
         spy = BotSpy(mock_bot)
@@ -331,8 +338,88 @@ class TestNativeStop:
         assert len(mock_bot.session.requests) == calls_before
         assert '71021' not in telegram_bot.cancellation_manager._cancellation_tokens
 
-    def test_polling_requests_the_stopped_generation_update(self, bot_app):
-        """The registered handler makes aiogram include the update type in allowed_updates automatically."""
-        telegram_bot, dp, mock_bot = bot_app
+    def test_polling_requests_the_stopped_generation_update(self, mock_bot):
+        """start_polling derives allowed_updates from the handlers registered *before* the startup hooks run,
+        so the stop handler must be registered in TelegramBot.__init__, not in on_startup."""
+        from aiogram import Dispatcher
+        from app.bot.telegram_bot import TelegramBot
+
+        dp = Dispatcher()
+        TelegramBot(mock_bot, dp)
         allowed = dp.resolve_used_update_types()
         assert 'message' in allowed and 'callback_query' in allowed and 'stopped_message_generation' in allowed
+
+
+def _flood_error(method, retry_after=1):
+    return TelegramRetryAfter(
+        method=method, message=f'Too Many Requests: retry after {retry_after}', retry_after=retry_after,
+    )
+
+
+class TestFloodControl:
+
+    async def test_flood_control_on_a_draft_does_not_break_the_turn(self, bot_app, draft_streaming):
+        """A 429 on sendRichMessageDraft holds the live output for retry_after seconds; the answer still arrives."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71030
+        await _create_user(telegram_bot, dp, user_id, streaming_answers=True)
+
+        chunks = [f'chunk {i} of a streamed answer that keeps going, ' for i in range(20)]
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(content_chunks=chunks, chunk_delay=0.02)
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        mock_bot.session.fail_next('sendRichMessageDraft', _flood_error(
+            SendRichMessageDraft(chat_id=user_id, draft_id=1, rich_message={'markdown': ''}),
+        ))
+
+        await dp.feed_update(mock_bot, make_text_message('Stream please', user_id=user_id))
+        await asyncio.sleep(0.2)
+
+        assert not any('Something went wrong' in text for text in spy.get_all_sent_texts())
+        final = spy.get_rich_messages()[-1]['rich_message']['markdown']
+        assert 'chunk 0' in final and 'chunk 19' in final
+        assert spy.get_drafts(), 'the rejected draft call was made'
+
+    async def test_flood_control_on_the_final_edit_is_retried(self, bot_app):
+        """Edit path (default): the finalising editMessageText waits out retry_after and is sent again."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71031
+        await _create_user(telegram_bot, dp, user_id, streaming_answers=True)
+
+        chunks = [f'chunk {i} of a streamed answer that keeps going, ' for i in range(10)]
+        mock_llm = MockLLMClient()
+        mock_llm.add_streaming_response(content_chunks=chunks, chunk_delay=0.02)
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        mock_bot.session.fail_next('editMessageText', _flood_error(
+            EditMessageText(chat_id=user_id, message_id=1, text='x'),
+        ))
+
+        await dp.feed_update(mock_bot, make_text_message('Stream please', user_id=user_id))
+        await asyncio.sleep(0.2)
+
+        assert not any('Something went wrong' in text for text in spy.get_all_sent_texts())
+        edits = spy.get_edited_messages()
+        assert len(edits) == 2 and 'chunk 9' in edits[-1]['rich_message']['markdown'], edits
+        assert 'reply_markup' not in edits[-1]  # the Stop button is gone from the finished answer
+
+    async def test_flood_control_on_the_final_rich_message_is_retried(self, bot_app, draft_streaming):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 71032
+        await _create_user(telegram_bot, dp, user_id)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response('The whole answer.')
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        mock_bot.session.fail_next('sendRichMessage', _flood_error(
+            SendRichMessage(chat_id=user_id, rich_message={'markdown': ''}),
+        ))
+
+        await dp.feed_update(mock_bot, make_text_message('Answer please', user_id=user_id))
+        await asyncio.sleep(0.2)
+
+        answers = [m for m in spy.get_rich_messages() if m['rich_message']['markdown'] == 'The whole answer.']
+        assert len(answers) == 2  # the rejected call and the retry
+        assert not any('Something went wrong' in text for text in spy.get_all_sent_texts())
