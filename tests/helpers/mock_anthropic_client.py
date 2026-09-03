@@ -41,14 +41,16 @@ class MockAnthropicClient(BaseLLMClient):
         })
 
     def add_streaming_response(self, text_chunks=(), tool_use=None, input_tokens=10, output_tokens=20,
-                               extra_event=None):
+                               extra_event=None, chunk_delay=0):
         """Streaming reply: text deltas, optionally a tool_use block streamed as input_json_delta chunks.
 
         `extra_event` is yielded before message_stop to imitate an event type this code base does not know.
+        `chunk_delay` (seconds) is slept before every delta, to leave room for a cancellation.
         """
         self.responses.append({
             'streaming': True, 'text_chunks': list(text_chunks), 'tool_use': tool_use,
             'input_tokens': input_tokens, 'output_tokens': output_tokens, 'extra_event': extra_event,
+            'chunk_delay': chunk_delay,
         })
 
     async def chat_completions_create(self, model, messages, **additional_fields):
@@ -91,9 +93,9 @@ async def _stream(resp, model):
         yield RawContentBlockStartEvent(type='content_block_start', index=index,
                                         content_block=TextBlock(type='text', text=''))
         for chunk in resp['text_chunks']:
+            await asyncio.sleep(resp.get('chunk_delay') or 0)
             yield RawContentBlockDeltaEvent(type='content_block_delta', index=index,
                                             delta=TextDelta(type='text_delta', text=chunk))
-            await asyncio.sleep(0)
         yield RawContentBlockStopEvent(type='content_block_stop', index=index)
         index += 1
 
@@ -104,6 +106,7 @@ async def _stream(resp, model):
         payload = json.dumps(tu['input'])
         half = len(payload) // 2
         for part in (payload[:half], payload[half:]):
+            await asyncio.sleep(resp.get('chunk_delay') or 0)
             yield RawContentBlockDeltaEvent(type='content_block_delta', index=index,
                                             delta=InputJSONDelta(type='input_json_delta', partial_json=part))
         yield RawContentBlockStopEvent(type='content_block_stop', index=index)

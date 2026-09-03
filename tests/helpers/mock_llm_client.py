@@ -171,6 +171,8 @@ async def _build_streaming_response(resp_data, model):
 
     # If tool_calls provided, yield a chunk with tool call data
     if tool_calls_data:
+        if resp_data.get('chunk_delay'):
+            await asyncio.sleep(resp_data['chunk_delay'])
         chunk = MagicMock()
         delta = MagicMock()
         delta.content = None
@@ -192,6 +194,8 @@ async def _build_streaming_response(resp_data, model):
         yield chunk
 
     # Final chunk with usage info and empty choices
+    if resp_data.get('chunk_delay'):
+        await asyncio.sleep(resp_data['chunk_delay'])
     final_chunk = MagicMock()
     final_chunk.choices = []
     final_chunk.usage = MockUsage(prompt_tokens, completion_tokens, prompt_tokens + completion_tokens)

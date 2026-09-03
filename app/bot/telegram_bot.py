@@ -10,6 +10,7 @@ from aiogram.types import FSInputFile
 from dateutil.relativedelta import relativedelta
 
 import settings
+from app import observability
 from app.bot.batched_input_handler import BatchedInputHandler
 from app.bot.cancellation_manager import CancellationManager
 from app.bot.models_menu import ModelsMenu
@@ -41,11 +42,14 @@ class TelegramBot:
         self.dispatcher.message.register(self.reset_dialog, Command('reset'))
         self.dispatcher.message.register(self.generate_speech, Command('text2speech'))
         self.dispatcher.callback_query.register(self.process_hide_callback, F.data == 'hide')
+        # Registered here, not in on_startup: Dispatcher.start_polling derives `allowed_updates` from the
+        # handlers registered *before* the startup hooks run, and the native Stop button of rich drafts
+        # needs the `stopped_message_generation` update to be requested from Telegram.
+        self.cancellation_manager = CancellationManager(self.bot, self.dispatcher)
 
         # initialized in on_startup
         self.settings = None
         self.models_menu = None
-        self.cancellation_manager = None
         self.role_manager = None
         self.monthly_usage_task = None
         self.scheduler_service = None
@@ -58,7 +62,6 @@ class TelegramBot:
         )
         self.settings = Settings(self.bot, self.dispatcher, self.db)
         self.models_menu = ModelsMenu(self.bot, self.dispatcher, self.db)
-        self.cancellation_manager = CancellationManager(self.bot, self.dispatcher)
         self.role_manager = UserRoleManager(self.bot, self.dispatcher, self.db)
         self.dispatcher.message.middleware(UserMiddleware(self.db))
 
@@ -79,6 +82,8 @@ class TelegramBot:
         await self.bot.set_my_commands(commands)
 
     async def on_shutdown(self, **kwargs):
+        # flush buffered observability spans before connections go down
+        observability.shutdown()
         if self.scheduler_service:
             await self.scheduler_service.stop()
         if self.monthly_usage_task:

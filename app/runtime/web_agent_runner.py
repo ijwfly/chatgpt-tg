@@ -13,6 +13,7 @@ import logging
 import time
 
 import settings
+from app import observability
 from app.context.dialog_manager import DialogUtils
 from app.llm_models import get_model_by_name
 from app.openai_helpers.anthropic_chatgpt import AnthropicChatGPT
@@ -20,12 +21,26 @@ from app.openai_helpers.chatgpt import ChatGPT
 from app.openai_helpers.llm_client import AnthropicAsyncClient
 from app.openai_helpers.function_storage import FunctionStorage
 from app.openai_helpers.utils import calculate_completion_usage_price
-from app.runtime.langfuse_utils import build_langfuse_metadata
 
 logger = logging.getLogger(__name__)
 
 
 async def run_web_agent(
+    user, db, context_manager, side_effects, *,
+    system_prompt: str,
+    task: str,
+    tool_classes: List[type],
+) -> str:
+    with observability.agent_span('web-agent', input=task) as span:
+        result = await _run_web_agent_inner(
+            user, db, context_manager, side_effects,
+            system_prompt=system_prompt, task=task, tool_classes=tool_classes,
+        )
+        span.set_output(result)
+        return result
+
+
+async def _run_web_agent_inner(
     user, db, context_manager, side_effects, *,
     system_prompt: str,
     task: str,
@@ -43,11 +58,10 @@ async def run_web_agent(
     for tool_cls in tool_classes:
         function_storage.register(tool_cls)
 
-    langfuse_metadata = build_langfuse_metadata(user)
     if issubclass(llm_model.api_client, AnthropicAsyncClient):
-        chatgpt = AnthropicChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata)
+        chatgpt = AnthropicChatGPT(llm_model, system_prompt, function_storage)
     else:
-        chatgpt = ChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata)
+        chatgpt = ChatGPT(llm_model, system_prompt, function_storage)
 
     messages = [DialogUtils.prepare_user_message(task)]
     started_at = time.monotonic()
@@ -63,7 +77,9 @@ async def run_web_agent(
         try:
             function_class = function_storage.get_function_class(function_name)
             function = function_class(user, db, context_manager, side_effects, tool_call_id)
-            result = await function.run_str_args(arguments)
+            with observability.tool_span(f'tool:{function_name}', input=arguments) as span:
+                result = await function.run_str_args(arguments)
+                span.set_output(result)
         except Exception as e:
             result = f"Error: {e}"
         return result if result is not None else "(no output)"

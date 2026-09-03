@@ -1,8 +1,8 @@
 from typing import Callable, AsyncGenerator, Optional
 
 import settings
+from app import observability
 from app.bot.chatgpt_manager import ChatGptManager
-from app.runtime.langfuse_utils import build_langfuse_metadata
 from app.context.context_manager import ContextManager, build_context_manager
 from app.context.dialog_manager import DialogUtils
 from app.llm_models import get_model_by_name
@@ -26,6 +26,7 @@ class DefaultLLMRuntime:
         self.user = user
         self.side_effects = side_effects
         self._context_manager = context_manager
+        self._turn = None
 
     async def process_turn(
         self,
@@ -48,19 +49,32 @@ class DefaultLLMRuntime:
         system_prompt = await context_manager.get_system_prompt()
 
         # HACK: TODO: refactor to factory
-        langfuse_metadata = build_langfuse_metadata(self.user)
         if self.user.current_model == llm_model.ANTHROPIC_CLAUDE_35_SONNET:
-            chat_gpt_manager = ChatGptManager(AnthropicChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata), self.db)
+            chat_gpt_manager = ChatGptManager(AnthropicChatGPT(llm_model, system_prompt, function_storage), self.db)
         else:
-            chat_gpt_manager = ChatGptManager(ChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata), self.db)
+            chat_gpt_manager = ChatGptManager(ChatGPT(llm_model, system_prompt, function_storage), self.db)
 
-        context_dialog_messages = await context_manager.get_context_messages()
-        response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
+        turn = observability.begin_turn(
+            name='default-turn',
+            user_id=str(self.user.id),
+            session_id=observability.turn_session_id(session, context_manager),
+            input_text=observability.turn_input_text(user_input),
+            tags=('default',),
+        )
+        self._turn = turn
+        try:
+            context_dialog_messages = await context_manager.get_context_messages()
+            response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
-        async for event in self._handle_response(
-            chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled
-        ):
-            yield event
+            async for event in self._handle_response(
+                chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled
+            ):
+                yield event
+        except Exception as e:
+            turn.end(error=e)
+            raise
+        finally:
+            turn.end()
 
     async def _handle_response(
         self, chat_gpt_manager, context_manager, response_generator,
@@ -96,6 +110,8 @@ class DefaultLLMRuntime:
             dialog_message = dialog_message.strip_thinking()
 
         has_content = bool(dialog_message.content)
+        if has_content and self._turn is not None:
+            self._turn.set_output(dialog_message.get_text_content())
 
         # Yield final response — adapter is responsible for saving content messages to context
         # (it needs the transport message_id for sub-dialogue tracking)
@@ -194,7 +210,9 @@ class DefaultLLMRuntime:
             if function_class is None:
                 function_class = function_storage.get_function_class(function_name)
             function = function_class(self.user, self.db, context_manager, self.side_effects, tool_call_id)
-            function_response_raw = await function.run_str_args(function_args)
+            with observability.tool_span(f'tool:{function_name}', input=function_args) as span:
+                function_response_raw = await function.run_str_args(function_args)
+                span.set_output(function_response_raw)
         except Exception as e:
             function_response_raw = f"Error: {e}"
 

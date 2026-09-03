@@ -5,12 +5,13 @@ Telegram itself (headings, tables, code fences, LaTeX, ...), up to 32768 charact
 to a plain-text `sendMessage` when Telegram rejects the markup, so a formatting glitch never loses an answer.
 See specs/RICH_MESSAGES.md.
 """
+import asyncio
 import logging
 import re
 from typing import List, Optional
 
 from aiogram import Bot, types
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import InputRichMessage, ReplyParameters
 
 from app.bot.utils import is_parse_error
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 # Telegram allows 32768 characters in a rich message; keep headroom for fence re-opening and entity expansion
 RICH_MESSAGE_LENGTH_CUTOFF = 30000
+# a final answer waits out flood control up to this long (seconds) before giving up
+FLOOD_RETRY_MAX_WAIT = 30
 
 _FENCE_RE = re.compile(r'^\s{0,3}(`{3,}|~{3,})(.*)$')
 
@@ -86,6 +89,22 @@ async def send_rich_draft(bot: Bot, chat_id: int, draft_id: int, markdown: str, 
     return await bot.send_rich_message_draft(
         chat_id=chat_id, draft_id=draft_id, rich_message=rich(markdown), can_stop=can_stop,
     )
+
+
+async def with_flood_retry(call, max_wait: float = FLOOD_RETRY_MAX_WAIT):
+    """Awaits `call()` (a coroutine factory); on flood control waits `retry_after` (once, capped) and retries.
+
+    For messages that must not be lost (final answers). Live output (drafts, streaming edits) is paced
+    by `SendGate` in service_message.py instead and never waits here.
+    """
+    try:
+        return await call()
+    except TelegramRetryAfter as e:
+        if e.retry_after > max_wait:
+            raise
+        logger.warning('Flood control on %s, retrying in %s s', e.method.__api_method__, e.retry_after)
+        await asyncio.sleep(e.retry_after)
+        return await call()
 
 
 def escape_rich_markdown(text: str) -> str:

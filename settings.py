@@ -173,16 +173,21 @@ MCP_SERVERS: list[MCPServerConfig] = [
 # Accepts LLModel instances or dicts (legacy format). See settings_local.py.example.
 EXTRA_MODELS: list = []
 
-# Langfuse observability (https://langfuse.com)
-# Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY to enable
+# Langfuse observability (https://langfuse.com), see specs/OBSERVABILITY.md
+# Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY (env or settings_local) to enable
 import os
 LANGFUSE_PUBLIC_KEY = os.getenv('LANGFUSE_PUBLIC_KEY', '')
 LANGFUSE_SECRET_KEY = os.getenv('LANGFUSE_SECRET_KEY', '')
 LANGFUSE_BASE_URL = os.getenv('LANGFUSE_BASE_URL', 'https://cloud.langfuse.com')
-LANGFUSE_ENABLED = bool(LANGFUSE_PUBLIC_KEY)
+LANGFUSE_ENVIRONMENT = os.getenv('LANGFUSE_ENVIRONMENT', '')
 
 # Local overrides — create settings_local.py (gitignored) to override any setting
 try:
     from settings_local import *
 except ImportError:
     pass
+
+# Derived after local overrides so keys set in settings_local enable tracing;
+# an explicit LANGFUSE_ENABLED in settings_local still wins
+if 'LANGFUSE_ENABLED' not in globals():
+    LANGFUSE_ENABLED = bool(LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY)
