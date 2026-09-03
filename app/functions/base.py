@@ -1,8 +1,10 @@
+import json
 from typing import Optional
 
 import pydantic
 from abc import ABC, abstractmethod
 
+import settings
 from app.runtime.side_effects import SideEffectHandler
 
 
@@ -12,6 +14,9 @@ class OpenAIFunctionParams(pydantic.BaseModel):
 
 class OpenAIFunction(ABC):
     PARAMS_SCHEMA = OpenAIFunctionParams
+    # Parameter whose value best answers "what is happening right now" for this call. It is
+    # appended to the status message shown in chat while the function runs.
+    STATUS_DETAIL_PARAM: Optional[str] = None
 
     def __init__(self, user, db, context_manager, side_effects: SideEffectHandler, tool_call_id: str = None):
         self.user = user
@@ -72,3 +77,44 @@ class OpenAIFunction(ABC):
         """
         name = cls.get_name().replace('_', ' ').strip()
         return f'Running {name}...'
+
+    @classmethod
+    def get_status_detail(cls, params: dict) -> Optional[str]:
+        """
+        Per-call addition to the status message: what exactly is being searched, run or read.
+        Override when the detail has to be built from several parameters.
+        """
+        if not cls.STATUS_DETAIL_PARAM:
+            return None
+        return params.get(cls.STATUS_DETAIL_PARAM)
+
+
+def _clean_status_detail(detail) -> str:
+    """One-line, length-capped version of a tool argument."""
+    if detail is None or isinstance(detail, bool):
+        return ''
+    text = ' '.join(str(detail).split())
+    limit = settings.FUNCTION_HINT_DETAIL_MAX_CHARS
+    if len(text) > limit:
+        text = text[:limit].rstrip() + '…'
+    return text
+
+
+def build_status_message(function_class, function_args: str) -> str:
+    """Status hint for one tool call: the function's title plus a short detail of this call.
+
+    Never raises: a hint is cosmetic and must not break the tool call it describes.
+    """
+    title = function_class.get_status_message()
+    detail = None
+    try:
+        params = json.loads(function_args) if function_args else {}
+        if isinstance(params, dict):
+            detail = function_class.get_status_detail(params)
+    except Exception:
+        detail = None
+
+    detail = _clean_status_detail(detail)
+    if not detail:
+        return title
+    return f'{title.rstrip(". ")}: {detail}'

@@ -22,6 +22,7 @@ class BashExecParams(OpenAIFunctionParams):
 
 class BashExec(OpenAIFunction):
     PARAMS_SCHEMA = BashExecParams
+    STATUS_DETAIL_PARAM = 'command'
 
     async def run(self, params: BashExecParams) -> Optional[str]:
         try:
@@ -69,6 +70,7 @@ class ReadFileParams(OpenAIFunctionParams):
 
 class ReadFile(OpenAIFunction):
     PARAMS_SCHEMA = ReadFileParams
+    STATUS_DETAIL_PARAM = 'path'
 
     async def run(self, params: ReadFileParams) -> Optional[str]:
         try:
@@ -101,6 +103,7 @@ class WriteFileParams(OpenAIFunctionParams):
 
 class WriteFile(OpenAIFunction):
     PARAMS_SCHEMA = WriteFileParams
+    STATUS_DETAIL_PARAM = 'path'
 
     async def run(self, params: WriteFileParams) -> Optional[str]:
         try:
@@ -132,6 +135,7 @@ class EditFileParams(OpenAIFunctionParams):
 
 class EditFile(OpenAIFunction):
     PARAMS_SCHEMA = EditFileParams
+    STATUS_DETAIL_PARAM = 'path'
 
     async def run(self, params: EditFileParams) -> Optional[str]:
         try:
@@ -165,6 +169,7 @@ class SendFileToChatParams(OpenAIFunctionParams):
 
 class SendFileToChat(OpenAIFunction):
     PARAMS_SCHEMA = SendFileToChatParams
+    STATUS_DETAIL_PARAM = 'path'
 
     async def run(self, params: SendFileToChatParams) -> Optional[str]:
         max_bytes = settings.SANDBOX_SEND_FILE_MAX_MB * 1024 * 1024

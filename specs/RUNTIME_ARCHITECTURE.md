@@ -116,10 +116,12 @@ Transport-agnostic conversation identification. Used by `DialogManager` to load 
 RuntimeEvent                        # base
 ├── StreamingContentDelta           # partial LLM output (visible_text, thinking_text, is_thinking)
 ├── FinalResponse                   # complete response (dialog_message, needs_context_save)
-├── FunctionCallStarted             # function execution begins (name, args, tool_call_id)
+├── FunctionCallStarted             # function execution begins (name, args, tool_call_id, status_message)
 ├── FunctionCallCompleted           # function execution ends (name, args, result, tool_call_id)
 └── ErrorEvent                      # error occurred (error, message)
 ```
+
+**FunctionCallStarted**: `status_message` is the hint shown in chat while the tool runs. It is built by `build_status_message()` (`app/functions/base.py`) from the tool's `get_status_message()` title plus a per-call detail — `STATUS_DETAIL_PARAM` names the argument that summarises the call (`command`, `query`, `path`), and tools whose detail spans several arguments override `get_status_detail()`. The detail is collapsed to one line and capped at `settings.FUNCTION_HINT_DETAIL_MAX_CHARS`; the transport escapes the whole hint (`TelegramRuntimeAdapter._format_hint`) since it carries model-supplied text.
 
 **StreamingContentDelta**: emitted for each streaming chunk. Contains both `visible_text` (for display) and `thinking_text` (from `<think>` tags). The `is_thinking` flag tells the adapter whether to show thinking UI.
 
