@@ -35,4 +35,7 @@ class ChatGptManager:
 
         price = calculate_completion_usage_price(completion_usage.prompt_tokens, completion_usage.completion_tokens, completion_usage.model)
         await self.db.create_completion_usage(user.id, completion_usage.prompt_tokens, completion_usage.completion_tokens, completion_usage.total_tokens, completion_usage.model, price)
+        if is_cancelled():
+            # a stopped stream leaves tool calls with truncated arguments; the runtimes must not execute them
+            dialog_message = dialog_message.model_copy(update={'tool_calls': None, 'function_call': None})
         yield dialog_message

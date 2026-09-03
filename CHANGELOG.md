@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Bot API 10.3); groups always use the edited message with an inline Stop button. A rejected
   markup falls back to plain text. Design and phase notes: `specs/RICH_MESSAGES.md`.
 
+### Fixed
+
+- **Stop button** — the native Stop of rich drafts never reached the bot: `CancellationManager` was created in
+  `on_startup`, after `start_polling` had already derived `allowed_updates`, so Telegram never sent
+  `stopped_message_generation`. It is now registered in `TelegramBot.__init__`. The Anthropic streaming client
+  ignored the cancellation token (Stop did nothing for Claude models); it now stops reading the stream like the
+  OpenAI client, and a Stop that lands mid tool-call drops the truncated call instead of executing it.
+- **Flood control while streaming** — `TelegramRetryAfter` on `sendRichMessageDraft` / `editMessageText` crashed
+  the turn. Live output is now paced by a per-turn `SendGate` (trailing-edge throttle: the latest state is sent
+  when the interval allows, never bursts, never dropped) and a 429 only holds it for `retry_after`; final
+  answers wait and retry once (`with_flood_retry`).
+
 ### Changed
 
 - Legacy `parse_mode=Markdown` sending (and its `can't parse entities` retry) was removed together with

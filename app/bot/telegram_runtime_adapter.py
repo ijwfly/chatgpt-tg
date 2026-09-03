@@ -10,8 +10,9 @@ import settings
 from app.bot.cancellation_manager import get_cancel_button
 from app.bot.rich_messages import (
     RICH_MESSAGE_LENGTH_CUTOFF, escape_rich_markdown, send_rich_message, split_markdown,
+    with_flood_retry,
 )
-from app.bot.service_message import ChatServiceMessage, DraftStream, ServiceState
+from app.bot.service_message import ChatServiceMessage, DraftStream, SendGate, ServiceState
 from app.bot.utils import send_telegram_message
 from app.context.context_manager import ContextManager
 from app.runtime.conversation_session import ConversationSession
@@ -69,6 +70,9 @@ class TelegramRuntimeAdapter:
         self.user = user
         self.context_manager = context_manager
         self._phase = 0
+        # one pacing gate per turn: live-output calls stay >= WAIT_BETWEEN_MESSAGE_UPDATES apart and
+        # back off together after flood control, across agent phases and the draft -> message fallback
+        self._gate = SendGate(WAIT_BETWEEN_MESSAGE_UPDATES)
 
     def _stream_markup(self):
         return InlineKeyboardBuilder().add(get_cancel_button()).as_markup()
@@ -81,11 +85,11 @@ class TelegramRuntimeAdapter:
         """
         self._phase += 1
         if settings.RICH_DRAFT_STREAMING and self.message.chat.type == ChatType.PRIVATE:
-            return DraftStream(self.message, draft_id=self.message.message_id * 100 + self._phase)
-        return ChatServiceMessage(self.message, stream_markup=self._stream_markup())
+            return DraftStream(self.message, draft_id=self.message.message_id * 100 + self._phase, gate=self._gate)
+        return ChatServiceMessage(self.message, stream_markup=self._stream_markup(), gate=self._gate)
 
     def _fallback_live_output(self):
-        return ChatServiceMessage(self.message, stream_markup=self._stream_markup())
+        return ChatServiceMessage(self.message, stream_markup=self._stream_markup(), gate=self._gate)
 
     async def handle_turn(
         self,
@@ -157,7 +161,7 @@ class TelegramRuntimeAdapter:
                             await self.context_manager.add_message(first, first_id)
 
                         for dm in rest:
-                            response = await send_rich_message(self.message, dm.content)
+                            response = await with_flood_retry(lambda: send_rich_message(self.message, dm.content))
                             if event.needs_context_save:
                                 await self.context_manager.add_message(dm, response.message_id)
 
@@ -191,10 +195,10 @@ class TelegramRuntimeAdapter:
                     and live.needs_cleanup:
                 await live.clear()
             else:
-                # drafts: stop the keepalive; service messages: no-op when nothing is attached
-                with suppress(TelegramBadRequest):
-                    if isinstance(live, DraftStream):
-                        await live.clear()
+                # nothing to delete: just make sure no queued update or draft keepalive lands after the turn
+                await live.cancel_pending()
+                if isinstance(live, DraftStream):
+                    await live.clear()
 
     @staticmethod
     def _split_dialog_message(dialog_message, max_content_length):

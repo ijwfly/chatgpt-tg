@@ -5,6 +5,7 @@ import logging
 import time
 
 import settings
+from app import observability
 from app.bot.chatgpt_manager import ChatGptManager
 from app.context.context_manager import ContextManager, build_context_manager
 from app.context.dialog_manager import DialogUtils
@@ -28,7 +29,6 @@ from app.runtime.events import (
     RuntimeEvent, StreamingContentDelta, FinalResponse,
     FunctionCallStarted, FunctionCallCompleted, ErrorEvent,
 )
-from app.runtime.langfuse_utils import build_langfuse_metadata
 from app.runtime.plan_manager import PlanManager
 from app.runtime.side_effects import SideEffectHandler
 from app.runtime.user_input import UserInput
@@ -67,6 +67,7 @@ class AgentRuntime:
         self.user = user
         self.side_effects = side_effects
         self._context_manager = context_manager
+        self._turn = None
 
     async def process_turn(
         self,
@@ -131,11 +132,10 @@ class AgentRuntime:
             system_prompt += '\n\n' + skills_prompt
 
         # Create LLM client (same pattern as DefaultLLMRuntime)
-        langfuse_metadata = build_langfuse_metadata(self.user)
         if self.user.current_model == llm_model.ANTHROPIC_CLAUDE_35_SONNET:
-            chat_gpt = AnthropicChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata)
+            chat_gpt = AnthropicChatGPT(llm_model, system_prompt, function_storage)
         else:
-            chat_gpt = ChatGPT(llm_model, system_prompt, function_storage, langfuse_metadata=langfuse_metadata)
+            chat_gpt = ChatGPT(llm_model, system_prompt, function_storage)
         chat_gpt_manager = ChatGptManager(chat_gpt, self.db)
 
         # Build sub-agent runner
@@ -152,6 +152,14 @@ class AgentRuntime:
             plan_manager=plan_manager,
             sub_agent_runner=sub_agent_runner,
         )
+        turn = observability.begin_turn(
+            name='agent-turn',
+            user_id=str(self.user.id),
+            session_id=observability.turn_session_id(session, context_manager),
+            input_text=observability.turn_input_text(user_input),
+            tags=('agent',),
+        )
+        self._turn = turn
         ctx_token = agent_context_var.set(agent_ctx)
 
         try:
@@ -160,9 +168,13 @@ class AgentRuntime:
                 bg_manager, plan_manager, is_cancelled,
             ):
                 yield event
+        except Exception as e:
+            turn.end(error=e)
+            raise
         finally:
             await bg_manager.cancel_all()
             agent_context_var.reset(ctx_token)
+            turn.end()
 
     async def _agent_loop(
         self, chat_gpt, chat_gpt_manager: ChatGptManager, context_manager: ContextManager,
@@ -244,6 +256,8 @@ class AgentRuntime:
 
             has_content = bool(dialog_message.content)
             has_tool_calls = bool(dialog_message.tool_calls or dialog_message.function_call)
+            if has_content and self._turn is not None:
+                self._turn.set_output(dialog_message.get_text_content())
             yield FinalResponse(
                 dialog_message=dialog_message,
                 needs_context_save=has_content and not has_tool_calls,
@@ -341,7 +355,9 @@ class AgentRuntime:
             if function_class is None:
                 function_class = function_storage.get_function_class(function_name)
             function = function_class(self.user, self.db, context_manager, self.side_effects, tool_call_id)
-            function_response_raw = await function.run_str_args(function_args)
+            with observability.tool_span(f'tool:{function_name}', input=function_args) as span:
+                function_response_raw = await function.run_str_args(function_args)
+                span.set_output(function_response_raw)
         except Exception as e:
             function_response_raw = f"Error: {e}"
 
@@ -358,6 +374,18 @@ class AgentRuntime:
         )
 
     async def _run_sub_agent(
+        self, prompt: str, llm_model, parent_function_storage: FunctionStorage,
+        parent_context_manager: ContextManager, deadline: float, skills_prompt: str = '',
+    ) -> str:
+        with observability.agent_span('sub-agent', input=prompt) as span:
+            result = await self._run_sub_agent_inner(
+                prompt, llm_model, parent_function_storage, parent_context_manager,
+                deadline, skills_prompt=skills_prompt,
+            )
+            span.set_output(result)
+            return result
+
+    async def _run_sub_agent_inner(
         self, prompt: str, llm_model, parent_function_storage: FunctionStorage,
         parent_context_manager: ContextManager, deadline: float, skills_prompt: str = '',
     ) -> str:
@@ -389,11 +417,10 @@ class AgentRuntime:
             if plan_text and plan_text != "No active plan.":
                 sub_system_prompt += f"\n\nCurrent plan:\n{plan_text}"
 
-        langfuse_metadata = build_langfuse_metadata(self.user)
         if llm_model.ANTHROPIC_CLAUDE_35_SONNET == self.user.current_model:
-            sub_chatgpt = AnthropicChatGPT(llm_model, sub_system_prompt, sub_function_storage, langfuse_metadata=langfuse_metadata)
+            sub_chatgpt = AnthropicChatGPT(llm_model, sub_system_prompt, sub_function_storage)
         else:
-            sub_chatgpt = ChatGPT(llm_model, sub_system_prompt, sub_function_storage, langfuse_metadata=langfuse_metadata)
+            sub_chatgpt = ChatGPT(llm_model, sub_system_prompt, sub_function_storage)
 
         # Snapshot the parent conversation so the sub-agent starts with full context
         # instead of cold. Trailing messages of an unfinished tool exchange (including
@@ -429,7 +456,9 @@ class AgentRuntime:
                     self.user, self.db, parent_context_manager,
                     self.side_effects, tool_call_id
                 )
-                result = await function.run_str_args(arguments)
+                with observability.tool_span(f'tool:{function_name}', input=arguments) as span:
+                    result = await function.run_str_args(arguments)
+                    span.set_output(result)
             except Exception as e:
                 result = f"Error: {e}"
             result = result if result is not None else "(no output)"

@@ -5,7 +5,7 @@ import pytest
 
 from app.openai_helpers.llm_client_factory import LLMClientFactory
 from tests.helpers.mock_llm_client import MockLLMClient
-from tests.helpers.telegram_factory import make_text_message
+from tests.helpers.telegram_factory import make_callback_query, make_text_message
 from tests.helpers.bot_spy import BotSpy
 
 
@@ -147,3 +147,44 @@ class TestStreaming:
         # Verify DB was updated by the function
         user = await telegram_bot.db.get_user(user_id)
         assert user.system_prompt_settings == 'Name: StreamTest'
+
+
+class TestStreamingCancellation:
+
+    async def test_stop_after_the_tool_call_chunk_does_not_execute_the_tool(self, bot_app):
+        """Stop pressed while the tool call is still streaming: the call is dropped instead of executed."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 55560
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("Hello!")
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm
+        await dp.feed_update(mock_bot, make_text_message('Hi', user_id=user_id))
+        await asyncio.sleep(0.1)
+
+        user = await telegram_bot.db.get_user(user_id)
+        user.streaming_answers = True
+        user.use_functions = True
+        user.system_prompt_settings_enabled = True
+        await telegram_bot.db.update_user(user)
+
+        mock_llm2 = MockLLMClient()
+        mock_llm2.add_streaming_response(
+            content_chunks=[],
+            tool_calls=[{
+                'id': 'call_cut_1',
+                'function': {'name': 'save_user_settings', 'arguments': json.dumps({'settings_text': 'Name: Cut'})},
+            }],
+            chunk_delay=0.3,
+        )
+        mock_llm2.add_streaming_response(content_chunks=["never requested"])
+        LLMClientFactory._model_clients['gpt-3.5-turbo'] = mock_llm2
+
+        turn = asyncio.create_task(dp.feed_update(mock_bot, make_text_message('Save my name', user_id=user_id)))
+        await asyncio.sleep(0.45)  # the tool-call chunk is out, the final usage chunk is not
+        await dp.feed_update(mock_bot, make_callback_query('cancel.cancel', message_id=1, user_id=user_id))
+        await asyncio.wait_for(turn, timeout=3)
+
+        user = await telegram_bot.db.get_user(user_id)
+        assert user.system_prompt_settings != 'Name: Cut'
+        assert len(mock_llm2.calls) == 1

@@ -1,6 +1,6 @@
-import openai
 import anthropic
-import settings
+
+from app import observability
 
 
 class BaseLLMClient:
@@ -30,16 +30,10 @@ class GenericAsyncOpenAIClient(BaseLLMClient):
     """
     def __init__(self, api_key, base_url=None, extra_completion_params=None):
         super().__init__(api_key, base_url, extra_completion_params)
-        if settings.LANGFUSE_ENABLED:
-            from langfuse.openai import AsyncOpenAI
-            self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        else:
-            self.client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self.client = observability.create_openai_client(api_key=api_key, base_url=base_url)
 
     async def chat_completions_create(self, model: str, messages, **additional_fields):
         additional_fields = self._merge_extra_params(additional_fields)
-        if not settings.LANGFUSE_ENABLED:
-            additional_fields.pop('metadata', None)
         return await self.client.chat.completions.create(model=model, messages=messages, **additional_fields)
 
 
@@ -49,8 +43,6 @@ class OpenAISpecificAsyncOpenAIClient(GenericAsyncOpenAIClient):
     """
     async def chat_completions_create(self, model: str, messages, **additional_fields):
         additional_fields = self._merge_extra_params(additional_fields)
-        if not settings.LANGFUSE_ENABLED:
-            additional_fields.pop('metadata', None)
         inner_additional_fields = {}
         if additional_fields.get("stream"):
             additional_fields.pop("stream_options", None)

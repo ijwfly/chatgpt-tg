@@ -10,7 +10,7 @@ from app.openai_helpers.llm_client_factory import LLMClientFactory
 from tests.helpers.bot_spy import BotSpy
 from tests.helpers.mock_anthropic_client import MockAnthropicClient
 from tests.helpers.mock_llm_client import MockLLMClient
-from tests.helpers.telegram_factory import make_text_message
+from tests.helpers.telegram_factory import make_callback_query, make_text_message
 
 CLAUDE = LLModel.ANTHROPIC_CLAUDE_35_SONNET
 
@@ -152,3 +152,52 @@ class TestAnthropic:
 
         spy.assert_sent_text_contains('Still fine after an unknown event, the answer arrives in full.')
         assert not any('Something went wrong' in t for t in spy.get_all_sent_texts())
+
+
+class TestAnthropicCancellation:
+
+    async def test_stop_cancels_a_streamed_claude_answer(self, anthropic_enabled, bot_app):
+        """The Anthropic stream honours the cancellation token: the partial answer is finalised, the rest is not read."""
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 61010
+        await _create_claude_user(telegram_bot, dp, user_id, streaming_answers=True)
+
+        client = MockAnthropicClient()
+        client.add_streaming_response(
+            text_chunks=[f'chunk {i} of a slow Claude answer that keeps going, ' for i in range(40)], chunk_delay=0.02,
+        )
+        LLMClientFactory._model_clients[CLAUDE] = client
+
+        turn = asyncio.create_task(dp.feed_update(mock_bot, make_text_message('Slow stream', user_id=user_id)))
+        await asyncio.sleep(0.25)
+        await dp.feed_update(mock_bot, make_callback_query('cancel.cancel', message_id=1, user_id=user_id))
+        await asyncio.wait_for(turn, timeout=2)
+
+        final = spy.get_all_shown_texts()[-1]
+        assert 'chunk 0' in final and 'chunk 39' not in final, final
+
+    async def test_stop_during_a_tool_use_does_not_execute_the_tool(self, anthropic_enabled, bot_app):
+        """A tool_use block cut off mid-stream has no usable input; it must be dropped, not executed."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 61011
+        await _create_claude_user(
+            telegram_bot, dp, user_id, streaming_answers=True, use_functions=True, system_prompt_settings_enabled=True,
+        )
+
+        client = MockAnthropicClient()
+        client.add_streaming_response(
+            tool_use={'id': 'toolu_02', 'name': 'save_user_settings', 'input': {'settings_text': 'Name: Cut Off'}},
+            chunk_delay=0.3,
+        )
+        client.add_streaming_response(text_chunks=['never requested'])
+        LLMClientFactory._model_clients[CLAUDE] = client
+
+        turn = asyncio.create_task(dp.feed_update(mock_bot, make_text_message('Remember my name', user_id=user_id)))
+        await asyncio.sleep(0.15)
+        await dp.feed_update(mock_bot, make_callback_query('cancel.cancel', message_id=1, user_id=user_id))
+        await asyncio.wait_for(turn, timeout=3)
+
+        user = await telegram_bot.db.get_user(user_id)
+        assert user.system_prompt_settings != 'Name: Cut Off'
+        assert len(client.calls) == 1  # no tool result round-trip
