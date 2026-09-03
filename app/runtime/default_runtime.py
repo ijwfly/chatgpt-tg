@@ -5,6 +5,7 @@ from app.bot.chatgpt_manager import ChatGptManager
 from app.runtime.langfuse_utils import build_langfuse_metadata
 from app.context.context_manager import ContextManager, build_context_manager
 from app.context.dialog_manager import DialogUtils
+from app.functions.base import build_status_message
 from app.llm_models import get_model_by_name
 from app.openai_helpers.anthropic_chatgpt import AnthropicChatGPT
 from app.openai_helpers.chatgpt import ChatGPT, parse_thinking
@@ -178,7 +179,7 @@ class DefaultLLMRuntime:
         status_message = f'Running {function_name}...'
         try:
             function_class = function_storage.get_function_class(function_name)
-            status_message = function_class.get_status_message()
+            status_message = build_status_message(function_class, function_args)
         except Exception:
             pass
 

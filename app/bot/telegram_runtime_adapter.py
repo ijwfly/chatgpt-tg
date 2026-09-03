@@ -8,7 +8,9 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 import settings
 from app.bot.cancellation_manager import get_cancel_button
-from app.bot.rich_messages import RICH_MESSAGE_LENGTH_CUTOFF, send_rich_message, split_markdown
+from app.bot.rich_messages import (
+    RICH_MESSAGE_LENGTH_CUTOFF, escape_rich_markdown, send_rich_message, split_markdown,
+)
 from app.bot.service_message import ChatServiceMessage, DraftStream, ServiceState
 from app.bot.utils import send_telegram_message
 from app.context.context_manager import ContextManager
@@ -27,7 +29,17 @@ TELEGRAM_MESSAGE_LENGTH_CUTOFF = RICH_MESSAGE_LENGTH_CUTOFF
 PLAIN_MESSAGE_LENGTH_CUTOFF = 4080
 THINKING_EMOJI = '\U0001f9e0'
 THINKING_MAX_CHARS = 300
+HINT_MAX_CHARS = 300
 MIN_STREAMING_CONTENT_LEN = 50
+
+
+def _format_hint(hint_text: str) -> str:
+    """Tool status hints carry model-supplied text (queries, commands, urls), so they are
+    collapsed to one line, capped and escaped before going into rich markdown."""
+    text = ' '.join(hint_text.split())
+    if len(text) > HINT_MAX_CHARS:
+        text = text[:HINT_MAX_CHARS] + '...'
+    return escape_rich_markdown(text)
 
 
 def _format_thinking_display(thinking_text: str) -> str:
@@ -161,7 +173,7 @@ class TelegramRuntimeAdapter:
                 elif isinstance(event, FunctionCallStarted):
                     if self.user.function_call_hints:
                         hint_text = event.status_message or f'Running {event.function_name}...'
-                        await show(live.set_hint(hint_text))
+                        await show(live.set_hint(_format_hint(hint_text)))
                         state = ServiceState.FUNCTION_HINT
                         await ensure_typing_action()
 
