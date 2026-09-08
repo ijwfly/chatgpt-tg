@@ -78,6 +78,7 @@ OPENAI_BASE_URL = 'https://api.openai.com/v1'
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 POSTGRES_TIMEZONE = pytz.timezone('UTC')
 SUCCESSIVE_FUNCTION_CALLS_LIMIT = 12  # limit of successive function calls that model can make
+FUNCTION_HINT_DETAIL_MAX_CHARS = 60   # per-call detail shown in the tool status hint (query, command, path)
 
 # Agent runtime settings
 AGENT_SYSTEM_PROMPT = """You are a proactive agent that completes tasks end-to-end. Do not stop at suggestions — take action and deliver results.

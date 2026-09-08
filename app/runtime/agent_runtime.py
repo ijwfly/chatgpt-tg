@@ -14,6 +14,7 @@ from app.functions.agent_tools import (
     AGENT_TOOLS_CORE, PLAN_TOOLS_NO_PLAN, PLAN_TOOLS_WITH_PLAN,
     SUB_AGENT_EXCLUDED_TOOLS,
 )
+from app.functions.base import build_status_message
 from app.functions.bash_sandbox import SANDBOX_TOOLS
 from app.functions.web_agents import WEB_AGENT_TOOLS
 from app.functions.mcp.mcp_function_storage import MCPFunctionManager
@@ -338,7 +339,7 @@ class AgentRuntime:
         status_message = f'Running {function_name}...'
         try:
             function_class = function_storage.get_function_class(function_name)
-            status_message = function_class.get_status_message()
+            status_message = build_status_message(function_class, function_args)
         except Exception:
             pass
 

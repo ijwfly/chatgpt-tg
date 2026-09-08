@@ -115,6 +115,7 @@ class WebSearchAgentParams(OpenAIFunctionParams):
 
 class WebSearchAgent(OpenAIFunction):
     PARAMS_SCHEMA = WebSearchAgentParams
+    STATUS_DETAIL_PARAM = 'query'
 
     async def run(self, params: WebSearchAgentParams) -> Optional[str]:
         return await run_web_agent(
@@ -159,6 +160,7 @@ class WebScraperAgentParams(OpenAIFunctionParams):
 
 class WebScraperAgent(OpenAIFunction):
     PARAMS_SCHEMA = WebScraperAgentParams
+    STATUS_DETAIL_PARAM = 'url'
 
     async def run(self, params: WebScraperAgentParams) -> Optional[str]:
         task = f"URL: {params.url}"

@@ -33,6 +33,13 @@ def make_mcp_client(server_url: str, headers: Optional[dict[str, str]] = None) -
     return Client(transport, read_timeout_seconds=float(settings.MCP_TOOL_CALL_TIMEOUT))
 
 
+# Argument names, most descriptive first, used to summarise an MCP tool call in chat
+STATUS_DETAIL_PREFERRED_KEYS = (
+    'query', 'q', 'url', 'path', 'file', 'filename', 'command', 'cmd',
+    'name', 'title', 'text', 'prompt', 'message', 'id',
+)
+
+
 class MCPFunction(OpenAIFunction):
     def __init__(
         self,
@@ -107,6 +114,17 @@ class MCPFunction(OpenAIFunction):
     def get_status_message(self) -> str:
         humanized = self.name.replace('_', ' ').replace('-', ' ').strip()
         return f'Running {humanized}...'
+
+    def get_status_detail(self, params: dict) -> Optional[str]:
+        """MCP schemas are server-defined, so guess the most descriptive argument."""
+        for key in STATUS_DETAIL_PREFERRED_KEYS:
+            value = params.get(key)
+            if isinstance(value, (str, int, float)) and not isinstance(value, bool) and str(value).strip():
+                return value
+        for value in params.values():
+            if isinstance(value, (str, int, float)) and not isinstance(value, bool) and str(value).strip():
+                return value
+        return None
 
 
 class MCPFunctionManager:

@@ -22,6 +22,7 @@ class GenerateImageDalle3Params(OpenAIFunctionParams):
 
 class GenerateImageDalle3(OpenAIFunction):
     PARAMS_SCHEMA = GenerateImageDalle3Params
+    STATUS_DETAIL_PARAM = 'image_prompt'
 
     @staticmethod
     async def download_image(url):

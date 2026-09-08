@@ -60,6 +60,7 @@ class SpawnTaskParams(OpenAIFunctionParams):
 
 class SpawnTask(AgentFunction):
     PARAMS_SCHEMA = SpawnTaskParams
+    STATUS_DETAIL_PARAM = 'description'
 
     async def run(self, params: SpawnTaskParams) -> Optional[str]:
         async def _run_sub_agent():
@@ -128,6 +129,16 @@ class CreatePlan(AgentFunction):
     def get_status_message(cls) -> str:
         return 'Creating plan...'
 
+    @classmethod
+    def get_status_detail(cls, params: dict) -> Optional[str]:
+        title = params.get('title')
+        if not title:
+            return None
+        steps = params.get('steps')
+        if isinstance(steps, list) and steps:
+            return f'{title} ({len(steps)} steps)'
+        return title
+
 
 # --- UpdatePlanStep ---
 
@@ -149,6 +160,15 @@ class UpdatePlanStep(AgentFunction):
     @classmethod
     def get_status_message(cls) -> str:
         return 'Updating plan...'
+
+    @classmethod
+    def get_status_detail(cls, params: dict) -> Optional[str]:
+        step_id = params.get('step_id')
+        if step_id is None:
+            return None
+        status = params.get('status')
+        # unicode arrow on purpose: '>' would be escaped into '&gt;' for rich markdown
+        return f'step {step_id} → {status}' if status else f'step {step_id}'
 
 
 # --- GetPlan ---
@@ -287,6 +307,14 @@ class ScheduleTask(OpenAIFunction):
         return 'Scheduling task...'
 
     @classmethod
+    def get_status_detail(cls, params: dict) -> Optional[str]:
+        title = params.get('title')
+        if not title:
+            return None
+        when = params.get('when') or params.get('cron_expression')
+        return f'{title} ({when})' if when else title
+
+    @classmethod
     def get_system_prompt_addition(cls) -> Optional[str]:
         return (
             "Use ScheduleTask for deferred execution. For one-time tasks use schedule_type='once' "
@@ -354,6 +382,11 @@ class CancelScheduledTask(OpenAIFunction):
     @classmethod
     def get_status_message(cls) -> str:
         return 'Cancelling scheduled task...'
+
+    @classmethod
+    def get_status_detail(cls, params: dict) -> Optional[str]:
+        task_id = params.get('task_id')
+        return f'#{task_id}' if task_id is not None else None
 
 
 # Core agent tools (always registered)

@@ -17,6 +17,7 @@ class QueryWolframAlphaParams(OpenAIFunctionParams):
 
 class QueryWolframAlpha(OpenAIFunction):
     PARAMS_SCHEMA = QueryWolframAlphaParams
+    STATUS_DETAIL_PARAM = 'query'
 
     @staticmethod
     async def query_wolframalpha(query: str):
