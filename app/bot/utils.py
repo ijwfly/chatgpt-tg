@@ -1,14 +1,15 @@
 import base64
 import io
 import asyncio
+import logging
 from datetime import date
 from functools import lru_cache
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import httpx
 import requests
 from aiogram import types
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import BufferedInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from async_lru import alru_cache
@@ -17,8 +18,12 @@ import settings
 from app.openai_helpers.utils import (calculate_whisper_usage_price,
                                       calculate_image_generation_usage_price, calculate_tts_usage_price)
 
+logger = logging.getLogger(__name__)
+
 TYPING_TIMEOUT = 180
-TYPING_DELAY = 2
+# clients show the indicator for ~5 seconds, so refreshing it more often only burns
+# the sendChatAction rate limit
+TYPING_DELAY = 4
 TYPING_QUERIES_LIMIT = TYPING_TIMEOUT // TYPING_DELAY
 
 
@@ -46,8 +51,17 @@ class TypingWorker:
     async def start_typing(self):
         async def typing_worker():
             while self.typing_queries_count < TYPING_QUERIES_LIMIT:
-                await self.bot.send_chat_action(chat_id=self.chat_id, action=self.action)
-                await asyncio.sleep(TYPING_DELAY)
+                delay = TYPING_DELAY
+                try:
+                    await self.bot.send_chat_action(chat_id=self.chat_id, action=self.action)
+                except TelegramRetryAfter as e:
+                    logger.warning(
+                        'Flood control on chat action in chat %s, waiting %s s', self.chat_id, e.retry_after
+                    )
+                    delay = max(delay, e.retry_after)
+                except TelegramAPIError as e:
+                    logger.warning('Chat action failed in chat %s: %s', self.chat_id, e)
+                await asyncio.sleep(delay)
                 self.typing_queries_count += 1
 
         self.typing_task = asyncio.create_task(typing_worker())
@@ -58,10 +72,9 @@ class TypingWorker:
             return
 
         self.typing_task.cancel()
-        try:
+        # the indicator is cosmetic: it must never break the operation it was decorating
+        with suppress(asyncio.CancelledError, Exception):
             await self.typing_task
-        except asyncio.CancelledError:
-            pass
         self.typing_task = None
 
 
