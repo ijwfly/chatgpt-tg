@@ -2,7 +2,7 @@ from typing import Optional
 
 from aiogram.types import Message
 
-from app.bot.utils import send_telegram_message, send_photo, send_document
+from app.bot.utils import download_telegram_file, send_telegram_message, send_photo, send_document
 
 
 class TelegramSideEffectHandler:
@@ -24,3 +24,6 @@ class TelegramSideEffectHandler:
     async def edit_message(self, message_id: int, text: str) -> None:
         chat_id = self.message.chat.id
         await self.message.bot.edit_message_text(text=text, chat_id=chat_id, message_id=message_id)
+
+    async def download_file(self, file_id: str, max_bytes: Optional[int] = None) -> bytes:
+        return await download_telegram_file(self.message.bot, file_id, max_bytes)

@@ -106,6 +106,44 @@ def make_document_message(file_name, file_id='test-doc-file-id', file_size=100,
     return types.Update.model_validate(update_dict)
 
 
+def make_photo_message(file_id='test-photo-file-id', caption=None, width=800, height=600,
+                       file_size=1024, user_id=12345, chat_id=None, reply_to_message_id=None):
+    if chat_id is None:
+        chat_id = user_id
+
+    message_id = _next_message_id()
+    message_dict = {
+        'message_id': message_id,
+        'from': _make_user_dict(user_id),
+        'chat': _make_chat_dict(chat_id),
+        'date': int(time.time()),
+        # telegram sends several sizes, the bot always takes the last (largest) one
+        'photo': [
+            {
+                'file_id': f'{file_id}-small',
+                'file_unique_id': f'unique-{file_id}-small',
+                'width': width // 4, 'height': height // 4, 'file_size': file_size // 4,
+            },
+            {
+                'file_id': file_id,
+                'file_unique_id': f'unique-{file_id}',
+                'width': width, 'height': height, 'file_size': file_size,
+            },
+        ],
+    }
+    if caption is not None:
+        message_dict['caption'] = caption
+
+    if reply_to_message_id is not None:
+        message_dict['reply_to_message'] = _make_reply_to_dict(chat_id, reply_to_message_id)
+
+    update_dict = {
+        'update_id': _next_update_id(),
+        'message': message_dict,
+    }
+    return types.Update.model_validate(update_dict)
+
+
 def make_voice_message(file_id='test-voice-id', file_size=2048, duration=3,
                        user_id=12345, chat_id=None, reply_to_message_id=None):
     if chat_id is None:

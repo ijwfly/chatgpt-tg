@@ -14,3 +14,7 @@ class SideEffectHandler(Protocol):
 
     async def edit_message(self, message_id: int, text: str) -> None:
         ...
+
+    async def download_file(self, file_id: str, max_bytes: Optional[int] = None) -> bytes:
+        """Fetches a file the user sent (by transport file id), e.g. an image the model wants to process."""
+        ...

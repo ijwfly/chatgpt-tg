@@ -5,6 +5,7 @@ import logging
 from datetime import date
 from functools import lru_cache
 from contextlib import asynccontextmanager, suppress
+from typing import Optional
 
 import httpx
 import requests
@@ -76,6 +77,16 @@ class TypingWorker:
         with suppress(asyncio.CancelledError, Exception):
             await self.typing_task
         self.typing_task = None
+
+
+async def download_telegram_file(bot, file_id: str, max_bytes: Optional[int] = None) -> bytes:
+    """Downloads a telegram file into memory. Raises ValueError if it is bigger than max_bytes."""
+    file = await bot.get_file(file_id)
+    if max_bytes and file.file_size and file.file_size > max_bytes:
+        raise ValueError(f'File is too big: {file.file_size} bytes, limit is {max_bytes} bytes')
+    downloaded = await bot.download_file(file.file_path)
+    # aiogram returns a BinaryIO unless a destination is given
+    return downloaded.read() if hasattr(downloaded, 'read') else bytes(downloaded)
 
 
 class Timer:

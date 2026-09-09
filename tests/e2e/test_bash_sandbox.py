@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 from unittest.mock import AsyncMock, patch
 
@@ -10,7 +11,7 @@ from app.openai_helpers.llm_client_factory import LLMClientFactory
 from app.sandbox.client import SandboxError
 from tests.helpers.fake_sandbox import FakeSandboxClient, patch_sandbox_client
 from tests.helpers.mock_llm_client import MockLLMClient
-from tests.helpers.telegram_factory import make_text_message, make_document_message
+from tests.helpers.telegram_factory import make_text_message, make_document_message, make_photo_message
 from tests.helpers.bot_spy import BotSpy
 
 
@@ -59,6 +60,36 @@ def _mock_document_download(mock_bot, file_content=b'csv,data\n1,2\n'):
             f.write(file_content)
 
     mock_bot.download_file = AsyncMock(side_effect=fake_download)
+
+
+async def _create_vision_agent_user(telegram_bot, dp, user_id):
+    """Agent user on a model that accepts images (gpt-3.5-turbo has no image_processing)."""
+    user = await _create_agent_user(telegram_bot, dp, user_id)
+    user.current_model = 'gpt-4.1'
+    await telegram_bot.db.update_user(user)
+    return user
+
+
+def _mock_photo_download(mock_bot, file_id='test-photo-file-id', content=b'jpeg-bytes'):
+    """Patch get_file/download_file on the mock bot for the in-memory image download."""
+    mock_bot.get_file = AsyncMock(return_value=types.File(
+        file_id=file_id,
+        file_unique_id=f'unique-{file_id}',
+        file_size=len(content),
+        file_path='photos/test.jpg',
+    ))
+    mock_bot.download_file = AsyncMock(side_effect=lambda *a, **kw: io.BytesIO(content))
+
+
+def _save_image_call(call_id='call_img_1', **arguments):
+    return {
+        'id': call_id,
+        'function': {
+            'name': 'save_image_to_workspace',
+            'arguments': json.dumps(arguments),
+        },
+    }
+
 
 
 class TestBashSandboxTools:
@@ -643,3 +674,135 @@ class TestDocumentCaption:
         contents = [str(m.get('content', '')) for m in mock_llm.calls[0]['messages']]
         assert any('first.csv' in c and 'compare these two' in c for c in contents)
         assert any('second.csv' in c for c in contents)
+
+
+class TestSaveImageToWorkspace:
+    """Images stay lazy: they are labeled in context and downloaded only when the tool asks."""
+
+    async def test_photo_is_labeled_in_context(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80101
+        await _create_vision_agent_user(telegram_bot, dp, user_id)
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response("A cat.")
+        LLMClientFactory._model_clients['gpt-4.1'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_photo_message(
+            file_id='cat-photo-id', caption='What is this?', user_id=user_id))
+        await asyncio.sleep(0.3)
+
+        assert len(mock_llm.calls) == 1
+        all_content = ' '.join(str(m.get('content', '')) for m in mock_llm.calls[0]['messages'])
+        assert '[image #1]' in all_content, f'Expected an image label, got: {all_content}'
+        assert 'cat-photo-id' in all_content
+        # nothing is written to the workspace until the model asks for it
+        assert FakeSandboxClient.uploads == {}
+
+    async def test_image_saved_with_default_name(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        spy = BotSpy(mock_bot)
+        user_id = 80102
+        await _create_vision_agent_user(telegram_bot, dp, user_id)
+        _mock_photo_download(mock_bot, file_id='cat-photo-id', content=b'jpeg-bytes')
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(content=None, tool_calls=[_save_image_call()])
+        mock_llm.add_response(content="Saved it.")
+        LLMClientFactory._model_clients['gpt-4.1'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_photo_message(
+            file_id='cat-photo-id', caption='Save this photo', user_id=user_id))
+        await asyncio.sleep(0.4)
+
+        spy.assert_sent_text_contains("Saved it.")
+        assert FakeSandboxClient.uploads == {'photo_1.jpg': b'jpeg-bytes'}
+        # the tool downloaded exactly the image it was pointed at
+        assert mock_bot.get_file.await_args.args[0] == 'cat-photo-id'
+
+        tool_results = [m for m in mock_llm.calls[1]['messages'] if m.get('role') == 'tool']
+        assert any('photo_1.jpg' in str(m.get('content', '')) for m in tool_results)
+
+    async def test_explicit_path_is_used(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80103
+        await _create_vision_agent_user(telegram_bot, dp, user_id)
+        _mock_photo_download(mock_bot, file_id='cat-photo-id')
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(content=None, tool_calls=[_save_image_call(path='photos/scan.jpg')])
+        mock_llm.add_response(content="Done.")
+        LLMClientFactory._model_clients['gpt-4.1'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_photo_message(
+            file_id='cat-photo-id', caption='Save it', user_id=user_id))
+        await asyncio.sleep(0.4)
+
+        assert list(FakeSandboxClient.uploads) == ['photos/scan.jpg']
+
+    async def test_existing_name_gets_a_suffix(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80104
+        await _create_vision_agent_user(telegram_bot, dp, user_id)
+        _mock_photo_download(mock_bot, file_id='cat-photo-id')
+        FakeSandboxClient.uploads['photo_1.jpg'] = b'older file'
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(content=None, tool_calls=[_save_image_call()])
+        mock_llm.add_response(content="Done.")
+        LLMClientFactory._model_clients['gpt-4.1'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_photo_message(
+            file_id='cat-photo-id', caption='Save it', user_id=user_id))
+        await asyncio.sleep(0.4)
+
+        assert FakeSandboxClient.uploads['photo_1.jpg'] == b'older file'
+        assert FakeSandboxClient.uploads['photo_1_1.jpg'] == b'jpeg-bytes'
+
+    async def test_unknown_image_id_is_reported_to_the_llm(self, bot_app):
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80105
+        await _create_vision_agent_user(telegram_bot, dp, user_id)
+        _mock_photo_download(mock_bot, file_id='cat-photo-id')
+
+        mock_llm = MockLLMClient()
+        mock_llm.add_response(content=None, tool_calls=[_save_image_call(image_id=7)])
+        mock_llm.add_response(content="No such image.")
+        LLMClientFactory._model_clients['gpt-4.1'] = mock_llm
+
+        await dp.feed_update(mock_bot, make_photo_message(
+            file_id='cat-photo-id', caption='Save image 7', user_id=user_id))
+        await asyncio.sleep(0.4)
+
+        assert FakeSandboxClient.uploads == {}
+        tool_results = [m for m in mock_llm.calls[1]['messages'] if m.get('role') == 'tool']
+        assert any('Error' in str(m.get('content', '')) for m in tool_results)
+
+    async def test_earlier_image_is_reachable_by_its_label(self, bot_app):
+        """The model can go back to the first photo of the dialog by its number."""
+        telegram_bot, dp, mock_bot = bot_app
+        user_id = 80106
+        await _create_vision_agent_user(telegram_bot, dp, user_id)
+
+        first_llm = MockLLMClient()
+        first_llm.add_response("A cat.")
+        LLMClientFactory._model_clients['gpt-4.1'] = first_llm
+        await dp.feed_update(mock_bot, make_photo_message(
+            file_id='first-photo-id', caption='Photo one', user_id=user_id))
+        await asyncio.sleep(0.3)
+
+        _mock_photo_download(mock_bot, file_id='first-photo-id', content=b'first-bytes')
+        second_llm = MockLLMClient()
+        second_llm.add_response(content=None, tool_calls=[_save_image_call(image_id=1)])
+        second_llm.add_response(content="Saved the first one.")
+        LLMClientFactory._model_clients['gpt-4.1'] = second_llm
+
+        await dp.feed_update(mock_bot, make_photo_message(
+            file_id='second-photo-id', caption='Now save the first photo', user_id=user_id))
+        await asyncio.sleep(0.4)
+
+        assert FakeSandboxClient.uploads == {'photo_1.jpg': b'first-bytes'}
+        assert mock_bot.get_file.await_args.args[0] == 'first-photo-id'
+        # the second photo got its own label
+        all_content = ' '.join(str(m.get('content', '')) for m in second_llm.calls[0]['messages'])
+        assert '[image #2]' in all_content

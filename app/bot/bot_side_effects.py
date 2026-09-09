@@ -4,6 +4,7 @@ from aiogram import Bot
 from aiogram.types import BufferedInputFile
 
 from app.bot.rich_messages import send_rich_message_to_chat
+from app.bot.utils import download_telegram_file
 
 
 class BotSideEffectHandler:
@@ -33,3 +34,6 @@ class BotSideEffectHandler:
 
     async def edit_message(self, message_id: int, text: str) -> None:
         await self.bot.edit_message_text(text=text, chat_id=self.chat_id, message_id=message_id)
+
+    async def download_file(self, file_id: str, max_bytes: Optional[int] = None) -> bytes:
+        return await download_telegram_file(self.bot, file_id, max_bytes)

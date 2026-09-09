@@ -4,7 +4,9 @@ from pydantic import Field
 
 import settings
 from app.functions.base import OpenAIFunction, OpenAIFunctionParams
+from app.runtime.image_refs import find_image
 from app.sandbox.client import SandboxClient, SandboxError
+from app.sandbox.workspace_files import sanitize_workspace_path, unique_workspace_name
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -198,4 +200,74 @@ class SendFileToChat(OpenAIFunction):
         return 'Sending file...'
 
 
-SANDBOX_TOOLS = [BashExec, ReadFile, WriteFile, EditFile, SendFileToChat]
+# --- save_image_to_workspace ---
+
+class SaveImageToWorkspaceParams(OpenAIFunctionParams):
+    image_id: Optional[int] = Field(
+        None, description="number from the [image #N] label; defaults to the most recent image"
+    )
+    path: Optional[str] = Field(
+        None, description="destination path relative to your workspace; defaults to photo_<N>.jpg"
+    )
+
+
+class SaveImageToWorkspace(OpenAIFunction):
+    PARAMS_SCHEMA = SaveImageToWorkspaceParams
+
+    async def run(self, params: SaveImageToWorkspaceParams) -> Optional[str]:
+        messages = self.context_manager.dialog_manager.get_dialog_messages()
+        found = find_image(messages, params.image_id)
+        if found is None:
+            if params.image_id is None:
+                return "Error: there are no images in this conversation"
+            return f"Error: image #{params.image_id} is not in this conversation"
+        number, file_id = found
+
+        default_name = f'photo_{number}.jpg' if number else 'photo.jpg'
+        name = sanitize_workspace_path(params.path or default_name)
+        max_bytes = settings.SANDBOX_UPLOAD_MAX_MB * 1024 * 1024
+        try:
+            data = await self.side_effects.download_file(file_id, max_bytes=max_bytes)
+        except Exception as e:
+            return f"Error: cannot download the image: {e}"
+
+        sandbox_client = SandboxClient()
+        try:
+            name = await unique_workspace_name(sandbox_client, self.user.telegram_id, name)
+            result = await sandbox_client.upload_file(self.user.telegram_id, name, data)
+        except SandboxError as e:
+            return f"Error: {e}"
+        return f"Image saved to workspace: {name} ({result.get('size', len(data))} bytes)"
+
+    @classmethod
+    def get_name(cls) -> str:
+        return 'save_image_to_workspace'
+
+    @classmethod
+    def get_description(cls) -> str:
+        return ("Download an image the user sent in this conversation into your workspace, so you "
+                "can process it as a file: run a script on it, convert it, or send it back with "
+                "send_file_to_chat.")
+
+    @classmethod
+    def get_system_prompt_addition(cls) -> Optional[str]:
+        return (
+            "Images the user sends are labeled [image #N] in the conversation. You already see "
+            "their content; when you need the file itself, call save_image_to_workspace with that "
+            "number and work with the saved file."
+        )
+
+    @classmethod
+    def get_status_message(cls) -> str:
+        return 'Saving image...'
+
+    @classmethod
+    def get_status_detail(cls, params: dict) -> Optional[str]:
+        path = params.get('path')
+        if path:
+            return str(path)
+        image_id = params.get('image_id')
+        return f'#{image_id}' if image_id is not None else None
+
+
+SANDBOX_TOOLS = [BashExec, ReadFile, WriteFile, EditFile, SendFileToChat, SaveImageToWorkspace]

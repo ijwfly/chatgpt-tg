@@ -4,6 +4,7 @@ import settings
 from app.context.context_manager import ContextManager
 from app.context.dialog_manager import DialogUtils
 from app.openai_helpers.count_tokens import calculate_image_tokens
+from app.runtime.image_refs import format_image_label, next_image_number
 from app.runtime.user_input import UserInput
 
 
@@ -28,8 +29,11 @@ async def add_user_input_to_context(user_input: UserInput, context_manager: Cont
         )
 
     # Add text/image messages
+    image_number = None
     for text_input in user_input.text_inputs:
         if text_input.images:
+            if image_number is None:
+                image_number = next_image_number(context_manager.dialog_manager.get_dialog_messages())
             content = []
             if text_input.text:
                 content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_TEXT, text_input.text))
@@ -39,7 +43,11 @@ async def add_user_input_to_context(user_input: UserInput, context_manager: Cont
                     f'{settings.IMAGE_PROXY_URL}:{settings.IMAGE_PROXY_PORT}',
                     f'{img.file_id}_{tokens}.jpg',
                 )
+                # the label lets the model point at this exact image later, e.g. to save it as a file
+                content.append(DialogUtils.construct_message_content_part(
+                    DialogUtils.CONTENT_TEXT, format_image_label(image_number)))
                 content.append(DialogUtils.construct_message_content_part(DialogUtils.CONTENT_IMAGE_URL, file_url))
+                image_number += 1
             dialog_message = DialogUtils.prepare_user_message(content)
         elif text_input.text:
             dialog_message = DialogUtils.prepare_user_message(text_input.text)
