@@ -6,9 +6,6 @@ class SideEffectHandler(Protocol):
     async def send_message(self, text: str) -> int:
         ...
 
-    async def send_photo(self, photo_bytes: bytes, caption: Optional[str] = None) -> int:
-        ...
-
     async def send_document(self, document_bytes: bytes, filename: str, caption: Optional[str] = None) -> int:
         ...
 

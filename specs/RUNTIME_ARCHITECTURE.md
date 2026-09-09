@@ -134,7 +134,6 @@ RuntimeEvent                        # base
 ```python
 class SideEffectHandler(Protocol):
     async def send_message(self, text: str) -> int: ...
-    async def send_photo(self, photo_bytes: bytes, caption: Optional[str] = None) -> int: ...
     async def send_document(self, document_bytes: bytes, filename: str,
                             caption: Optional[str] = None) -> int: ...
     async def edit_message(self, message_id: int, text: str) -> None: ...
@@ -256,7 +255,6 @@ This split exists because the runtime is transport-agnostic and cannot know the 
 | File | Change |
 |------|--------|
 | `base.py` | Accepts `SideEffectHandler` instead of `aiogram.types.Message` |
-| `dalle_3.py` | Uses `self.side_effects.send_photo()` |
 | `save_user_settings.py` | Uses `self.side_effects.send_message()` |
 | `mcp/mcp_function_storage.py` | `__call__` accepts `side_effects` instead of `message` |
 
@@ -410,7 +408,7 @@ class HTTPSideEffectHandler:
         # Return a placeholder message_id (or store in your system)
         return -1
 
-    async def send_photo(self, photo_bytes: bytes, caption=None) -> int:
+    async def send_document(self, document_bytes: bytes, filename: str, caption=None) -> int:
         # Encode and return via HTTP response
         return -1
 ```

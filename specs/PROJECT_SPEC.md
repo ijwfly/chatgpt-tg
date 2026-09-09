@@ -52,7 +52,7 @@
 ┌─────────────────────────────────────────────┐
 │            External Services (API)           │
 │                                              │
-│  • OpenAI (Chat, DALL-E 3, Whisper, TTS)    │
+│  • OpenAI (Chat, Whisper, TTS)              │
 │  • Anthropic (Claude)                        │
 │  • OpenRouter (third-party models)           │
 │  • WolframAlpha (optional)                   │
@@ -263,13 +263,13 @@ chatgpttg.user                         chatgpttg.message
 │ role (user_roles enum)    │
 │ streaming_answers (bool)  │          chatgpttg.completion_usage
 │ function_call_verbose(bool)│          ┌────────────────────────────┐
-│ image_generation (bool)   │◀─────────│ user_id (bigserial FK)     │
-│ tts_voice (text)          │          │ id (bigserial PK)          │
-│ system_prompt_settings(txt)│          │ prompt_tokens (int)        │
-│ system_prompt_settings_   │          │ completion_tokens (int)    │
-│   enabled (bool)          │          │ total_tokens (int)         │
-│ cdate (timestamptz)       │          │ model (text)               │
-└───────────────────────────┘          │ cdate (timestamptz)        │
+│ tts_voice (text)          │◀─────────│ user_id (bigserial FK)     │
+│ system_prompt_settings(txt)│          │ id (bigserial PK)          │
+│ system_prompt_settings_   │          │ prompt_tokens (int)        │
+│   enabled (bool)          │          │ completion_tokens (int)    │
+│ cdate (timestamptz)       │          │ total_tokens (int)         │
+└───────────────────────────┘          │ model (text)               │
+                                       │ cdate (timestamptz)        │
                                        │ price (numeric)            │
 chatgpttg.whisper_usage                └────────────────────────────┘
 ┌────────────────────────┐
@@ -277,6 +277,8 @@ chatgpttg.whisper_usage                └────────────�
 │ cdate, price           │             ┌────────────────────────────┐
 └────────────────────────┘             │ id, user_id, model         │
                                        │ resolution, cdate, price   │
+                                       │ (history only: DALL-E 3    │
+                                       │  tool was removed)         │
 chatgpttg.tts_usage                    └────────────────────────────┘
 ┌────────────────────────┐
 │ id, user_id, model     │
@@ -327,7 +329,7 @@ chatgpttg.user_roles:    ('admin', 'advanced', 'basic', 'stranger')
 | 0003 | `0003_add_user_roles.sql` | Role-based access control |
 | 0004 | `0004_add_streaming_answers.sql` | Streaming settings |
 | 0005 | `0005_add_image_generation_usage.sql` | Image generation tracking |
-| 0006 | `0006_add_user_image_generation_setting.sql` | User image generation setting |
+| 0006 | `0006_add_user_image_generation_setting.sql` | User image generation setting (dropped in 0019) |
 | 0007 | `0007_add_tts_usage_and_settings.sql` | TTS usage and voice settings |
 | 0008 | `0008_add_user_system_prompt_settings.sql` | User system prompt settings |
 | 0009 | `0009_add_message_type_document.sql` | Document message type |
@@ -336,6 +338,7 @@ chatgpttg.user_roles:    ('admin', 'advanced', 'basic', 'stranger')
 | 0012 | `0012_add_price_to_usage.sql` | Price field in usage tables |
 | 0014 | `0014_agent_mode_and_plans.sql` | Plan management tables |
 | 0015 | `0015_scheduled_tasks.sql` | Scheduled task tables |
+| 0019 | `0019_drop_user_image_generation_setting.sql` | Drops `user.image_generation` (DALL-E 3 removed) |
 
 > Migrations are forward-only — no rollback mechanism exists.
 
@@ -443,7 +446,6 @@ class OpenAIFunction(ABC):
 
 | Class | File | Activation Condition | Description |
 |-------|------|---------------------|-------------|
-| `GenerateImageDalle3` | `functions/dalle_3.py` | `user.image_generation` AND role check | DALL-E 3 image generation (1024×1024, 1024×1792, 1792×1024). Adds system prompt for tailored prompts. Returns `None` (adds result to context itself) |
 | `QueryWolframAlpha` | `functions/wolframalpha.py` | `ENABLE_WOLFRAMALPHA` | Queries to WolframAlpha API. Extracts Input interpretation, Result, Results fields |
 | `SaveUserSettings` | `functions/save_user_settings.py` | `user.system_prompt_settings_enabled` | Saving user settings to `system_prompt_settings` |
 
@@ -500,7 +502,6 @@ Only the catalog goes into the system prompt (`app/skills/catalog.py`, sourced f
 
 1. **Static functions** — enabled unconditionally (WolframAlpha when `ENABLE_WOLFRAMALPHA`)
 2. **Conditional functions** — depend on user settings and roles:
-   - DALL-E 3 → `user.image_generation` + role check
    - SaveUserSettings → `user.system_prompt_settings_enabled`
 3. **MCP functions** — for each server from `settings.MCP_SERVERS`:
    - Check `check_access_conditions(mcp_config.min_role, user.role)`
@@ -531,7 +532,6 @@ Check: `check_access_conditions(required_role, user_role)` — comparison of ind
 | Bot access | `USER_ROLE_BOT_ACCESS` | `BASIC` |
 | Model selection | `USER_ROLE_CHOOSE_MODEL` | `BASIC` |
 | Streaming responses | `USER_ROLE_STREAMING_ANSWERS` | `BASIC` |
-| Image generation | `USER_ROLE_IMAGE_GENERATION` | `BASIC` |
 | Text-to-Speech | `USER_ROLE_TTS` | `BASIC` |
 | /usage_all (all users stats) | hardcoded | `ADMIN` |
 | Full model list | hardcoded | `ADMIN` |
@@ -570,7 +570,6 @@ Opened via `/settings`. Three types of settings:
 
 **OnOffSetting** — on/off toggle:
 - `use_functions` — use function calling
-- `image_generation` — image generation
 - `system_prompt_settings_enabled` — save user settings
 - `voice_as_prompt` — voice as prompt (vs context)
 - `function_call_verbose` — show function call details
@@ -651,7 +650,6 @@ File: `settings.py`
 | `USER_ROLE_BOT_ACCESS` | `BASIC` | Minimum role for bot access |
 | `USER_ROLE_CHOOSE_MODEL` | `BASIC` | Minimum role for model selection |
 | `USER_ROLE_STREAMING_ANSWERS` | `BASIC` | Minimum role for streaming |
-| `USER_ROLE_IMAGE_GENERATION` | `BASIC` | Minimum role for image gen |
 | `USER_ROLE_TTS` | `BASIC` | Minimum role for TTS |
 
 **Integrations (optional):**
@@ -734,7 +732,6 @@ class User:
     role: Optional[UserRole]
     streaming_answers: bool
     function_call_verbose: bool
-    image_generation: bool
     tts_voice: str
     system_prompt_settings: Optional[str]
     system_prompt_settings_enabled: Optional[bool]
@@ -849,7 +846,6 @@ chatgpt-tg/
 │   │
 │   ├── functions/
 │   │   ├── base.py               # OpenAIFunction ABC: base class for all tool functions
-│   │   ├── dalle_3.py            # GenerateImageDalle3: DALL-E 3 image generation
 │   │   ├── wolframalpha.py       # QueryWolframAlpha: WolframAlpha queries
 │   │   ├── save_user_settings.py # SaveUserSettings: saving user preferences
 │   │   ├── agent_tools.py       # Agent-specific tools (plan, task, schedule management)

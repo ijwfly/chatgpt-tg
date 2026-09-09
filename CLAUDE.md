@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Telegram bot that provides access to multiple LLM providers (OpenAI, Anthropic, OpenRouter, local LM Studio) with features like streaming responses, function/tool calling, image generation (DALL-E 3), voice transcription (Whisper), TTS, automatic context summarization, and MCP server integration.
+A Telegram bot that provides access to multiple LLM providers (OpenAI, Anthropic, OpenRouter, local LM Studio) with features like streaming responses, function/tool calling, voice transcription (Whisper), TTS, automatic context summarization, and MCP server integration.
 
 ## Running the Project
 
@@ -54,7 +54,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - `app/functions/base.py` — `OpenAIFunction` base class. Accepts `SideEffectHandler` (not aiogram Message) for transport interactions. Subclasses define params via Pydantic `PARAMS_SCHEMA`, implement `run()`, provide `get_description()` and optional `get_system_prompt_addition()`
 - `app/openai_helpers/function_storage.py` — `FunctionStorage` registry, converts functions to OpenAI function/tool format
 - `app/context/function_manager.py` — decides which functions to register based on settings and user role
-- Built-in functions: `wolframalpha`, `dalle_3`, `save_user_settings`
+- Built-in functions: `wolframalpha`, `save_user_settings`
 - Web agents (`app/functions/web_agents.py`, enabled via `ENABLE_WEB_AGENTS` + `TAVILY_API_KEY`): `web_search_agent` and `web_scraper_agent` — each runs an isolated LLM sub-agent (`app/runtime/web_agent_runner.py`, clean context, billed usage) equipped with internal Tavily tools (`tavily_search`/`tavily_extract`, client in `app/web/tavily_client.py`); registered in both `FunctionManager` and `AgentRuntime`
 - MCP integration: `app/functions/mcp/` — dynamically loads tools from configured MCP servers
 
@@ -75,7 +75,7 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 ### Database
 - PostgreSQL via `asyncpg`, no ORM
 - `app/storage/db.py` — `DB` class with raw SQL queries, `DBFactory` manages connection pool
-- Schema in `chatgpttg` schema, tables: `user`, `message`, `completion_usage`, `whisper_usage`, `image_generation_usage`, `tts_usage`
+- Schema in `chatgpttg` schema, tables: `user`, `message`, `completion_usage`, `whisper_usage`, `tts_usage` (plus `image_generation_usage`, kept only as billing history of the removed DALL-E 3 tool)
 - Messages store full dialog history as JSON with `previous_message_ids` for branching sub-dialogues
 
 ### Key Patterns

@@ -27,7 +27,6 @@ class User(pydantic.BaseModel):
     streaming_answers: bool
     function_call_verbose: bool
     function_call_hints: bool = True
-    image_generation: bool
     tts_voice: str
     system_prompt_settings: Optional[str]
     system_prompt_settings_enabled: Optional[bool]
@@ -81,14 +80,14 @@ class DB:
         SET current_model = $1, gpt_mode = $2, forward_as_prompt = $3,
         voice_as_prompt = $4, use_functions = $5, auto_summarize = $6,
         full_name = $7, username = $8, role = $9, streaming_answers = $10,
-        function_call_verbose = $11, image_generation = $12, tts_voice = $13,
-        system_prompt_settings = $14, system_prompt_settings_enabled = $15,
-        agent_mode = $16, function_call_hints = $17 WHERE id = $18 RETURNING *'''
+        function_call_verbose = $11, tts_voice = $12,
+        system_prompt_settings = $13, system_prompt_settings_enabled = $14,
+        agent_mode = $15, function_call_hints = $16 WHERE id = $17 RETURNING *'''
         return User(**await self.connection_pool.fetchrow(
             sql, user.current_model, user.gpt_mode, user.forward_as_prompt,
             user.voice_as_prompt, user.use_functions, user.auto_summarize,
             user.full_name, user.username, user.role.value, user.streaming_answers,
-            user.function_call_verbose, user.image_generation, user.tts_voice,
+            user.function_call_verbose, user.tts_voice,
             user.system_prompt_settings, user.system_prompt_settings_enabled,
             user.agent_mode, user.function_call_hints, user.id,
         ))
@@ -175,10 +174,6 @@ class DB:
         sql = 'INSERT INTO chatgpttg.whisper_usage (user_id, audio_seconds, price) VALUES ($1, $2, $3)'
         await self.connection_pool.fetchrow(sql, user_id, audio_seconds, price)
 
-    async def create_image_generation_usage(self, user_id, model, resolution, price):
-        sql = 'INSERT INTO chatgpttg.image_generation_usage (user_id, model, resolution, price) VALUES ($1, $2, $3, $4)'
-        await self.connection_pool.fetchrow(sql, user_id, model, resolution, price)
-
     async def create_tts_usage(self, user_id: int, model: str, characters_count: int, price):
         sql = 'INSERT INTO chatgpttg.tts_usage (user_id, model, characters_count, price) VALUES ($1, $2, $3, $4)'
         await self.connection_pool.fetchrow(sql, user_id, model, characters_count, price)
@@ -210,23 +205,6 @@ class DB:
         if not records:
             return []
         return [CompletionUsage(**dict(record)) for record in records]
-
-    async def get_user_current_month_image_generation_usage(self, user_id):
-        sql = '''
-        SELECT model, resolution, COUNT(*) AS usage_count
-        FROM chatgpttg.image_generation_usage
-        WHERE user_id = $1 AND
-          date_trunc('month', cdate) = date_trunc('month', current_date)
-        GROUP BY model, resolution;
-        '''
-        records = await self.connection_pool.fetch(sql, user_id)
-        if not records:
-            return []
-        return [{
-            'model': record['model'],
-            'resolution': record['resolution'],
-            'usage_count': record['usage_count'],
-        } for record in records]
 
     async def get_user_current_month_tts_usage(self, user_id):
         sql = '''
@@ -295,35 +273,6 @@ class DB:
             name = ' - '.join([full_name, username])
             name = f'[{telegram_id}] {name}' if name else f'[{telegram_id}]'
             result[name] = record['audio_seconds']
-        return result
-
-    async def get_all_users_image_generation_usage(self, month_date: date = None):
-        if not month_date:
-            month_date = datetime.now(settings.POSTGRES_TIMEZONE).date()
-
-        year, month = month_date.year, month_date.month
-
-        sql = f'''
-        SELECT u.telegram_id, u.username, u.full_name, COUNT(*) AS usage_count, igu.model, igu.resolution
-        FROM chatgpttg.user AS u
-        JOIN chatgpttg.image_generation_usage AS igu ON u.id = igu.user_id
-        WHERE EXTRACT(YEAR FROM igu.cdate) = {year} AND EXTRACT(MONTH FROM igu.cdate) = {month}
-        GROUP BY u.telegram_id, u.username, u.full_name, igu.model, igu.resolution
-        ORDER BY u.telegram_id, igu.model, igu.resolution;
-        '''
-        records = await self.connection_pool.fetch(sql)
-        result = defaultdict(list)
-        for record in records:
-            telegram_id = record['telegram_id']
-            full_name = record['full_name'] if record['full_name'] else ''
-            username = f"@{record['username']}" if record['username'] else ''
-            name = ' - '.join([full_name, username])
-            name = f'[{telegram_id}] {name}' if name else f'[{telegram_id}]'
-            result[name].append({
-                'model': record['model'],
-                'resolution': record['resolution'],
-                'usage_count': record['usage_count'],
-            })
         return result
 
     async def get_all_users_tts_usage(self, month_date: date = None):

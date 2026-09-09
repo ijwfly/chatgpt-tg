@@ -27,7 +27,7 @@ Trace (user_id = db user.id, session_id = "{chat_id}:{root db message id}")
 - Generations pick up `user_id` / `session_id` / `tags` automatically from
   `propagate_attributes` entered by the turn — there is no per-call metadata plumbing.
 
-**Not traced** (same as before this integration): whisper, TTS, dalle-3, embeddings (they
+**Not traced** (same as before this integration): whisper, TTS, embeddings (they
 use the raw `OpenAIAsync` singleton) and context summarization attribution.
 
 ## Semantics

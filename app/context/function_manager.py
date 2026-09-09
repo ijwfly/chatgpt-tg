@@ -3,7 +3,6 @@ from typing import Optional
 import logging
 import settings
 from app.context.dialog_manager import DialogManager
-from app.functions.dalle_3 import GenerateImageDalle3
 from app.functions.mcp.mcp_function_storage import MCPFunctionManager
 from app.functions.save_user_settings import SaveUserSettings
 from app.functions.web_agents import WEB_AGENT_TOOLS
@@ -11,7 +10,6 @@ from app.functions.wolframalpha import QueryWolframAlpha
 from app.openai_helpers.function_storage import FunctionStorage
 from app.storage.db import DB, User
 from app.storage.user_role import check_access_conditions
-from settings import USER_ROLE_IMAGE_GENERATION
 
 
 logger = logging.getLogger(__name__)
@@ -38,9 +36,6 @@ class FunctionManager:
 
     def get_conditional_functions(self):
         functions = []
-
-        if self.user.image_generation and check_access_conditions(USER_ROLE_IMAGE_GENERATION, self.user.role):
-            functions.append(GenerateImageDalle3)
 
         if self.user.system_prompt_settings_enabled:
             functions.append(SaveUserSettings)

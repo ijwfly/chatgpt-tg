@@ -9,7 +9,7 @@ can act as an autonomous agent that plans and completes multi-step tasks.
 🔥 **Agent mode** — autonomous multi-step tasks with background sub-agents and live plans
 🔥 **Skills** — teach the agent a workflow once; it stores it and loads it when it fits
 🔥 **MCP integration** — plug in external tools via Model Context Protocol servers
-🔥 **Vision + DALL-E 3** — image understanding and image generation out of the box
+🔥 **Vision** — image understanding out of the box
 
 ## 🔑 Key Features
 
@@ -31,14 +31,13 @@ can act as an autonomous agent that plans and completes multi-step tasks.
    the next message the skill is in its catalog and it follows your process by itself.
 6. **MCP tools** — dynamically load tools from configured MCP servers, with per-server
    access control (minimum role) and custom headers.
-7. **Function / tool calling** — the model can call built-in tools when useful: image
-   generation (DALL-E 3), WolframAlpha, and more.
+7. **Function / tool calling** — the model can call built-in tools when useful: WolframAlpha,
+   web search, and more.
 8. **Scheduled tasks** — ask the bot to do something later using natural language
    ("remind me tomorrow at 9"); a scheduler fires it at the right time.
 9. **Streaming responses** — answers stream into Telegram in real time, with a cancel
    button, and `<think>` reasoning blocks shown as a live status while the model thinks.
-10. **Vision & image generation** — send images for the model to analyze, or ask it to
-   generate images with DALL-E 3.
+10. **Vision** — send images for the model to analyze.
 11. **Voice & speech** — voice messages and video notes are transcribed (via
     `gpt-4o-transcribe`) and used as input; `/text2speech` turns any message into a voice
     reply (TTS).
@@ -75,7 +74,7 @@ The shortest path to a working bot — three steps:
    ```
 
 That's it. Database migrations run automatically on Postgres startup — no manual DB setup.
-Out of the box you get streaming responses, vision, DALL-E 3 image generation, voice / video
+Out of the box you get streaming responses, vision, voice / video
 note transcription, TTS, automatic context summarization, and scheduled tasks.
 
 **Recommended: set up access control.** With the defaults, anyone who finds your bot can use

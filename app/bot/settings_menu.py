@@ -98,7 +98,6 @@ class Settings:
             'all_models': ChoiceSetting('Model', 'current_model', ALL_MODELS_OPTIONS),
             'gpt_mode': ChoiceSetting('GPT mode', 'gpt_mode', list(settings.gpt_mode.keys())),
             'use_functions': OnOffSetting('Use functions', 'use_functions'),
-            'image_generation': OnOffSetting('Image generation', 'image_generation'),
             'system_prompt_settings_enabled': OnOffSetting('User info saving', 'system_prompt_settings_enabled'),
             'tts-voice': ChoiceSetting('TTS voice', 'tts_voice', TTS_VOICES),
             'voice_as_prompt': OnOffSetting('Voice as prompt', 'voice_as_prompt'),
@@ -112,7 +111,6 @@ class Settings:
         self.minimum_required_roles = {
             'current_model': settings.USER_ROLE_CHOOSE_MODEL,
             'all_models': UserRole.ADMIN,
-            'image_generation': settings.USER_ROLE_IMAGE_GENERATION,
             'tts-voice': settings.USER_ROLE_TTS,
             'streaming_answers': settings.USER_ROLE_STREAMING_ANSWERS,
         }
