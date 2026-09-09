@@ -1,11 +1,16 @@
+import logging
+from typing import Iterable, Set
 from urllib.parse import urljoin
 
 import settings
 from app.context.context_manager import ContextManager
 from app.context.dialog_manager import DialogUtils
+from app.context.tool_call_repair import interrupted_tool_response
 from app.openai_helpers.count_tokens import calculate_image_tokens
 from app.runtime.image_refs import format_image_label, next_image_number
 from app.runtime.user_input import UserInput
+
+logger = logging.getLogger(__name__)
 
 
 async def add_user_input_to_context(user_input: UserInput, context_manager: ContextManager):
@@ -54,3 +59,19 @@ async def add_user_input_to_context(user_input: UserInput, context_manager: Cont
         else:
             continue
         await context_manager.add_message(dialog_message, text_input.tg_message_id)
+
+
+async def close_unanswered_tool_calls(context_manager: ContextManager, tool_calls: Iterable, answered_ids: Set[str]):
+    """
+    Saves an error result for every tool call that got no result, so the assistant message with
+    `tool_calls` already stored in the dialog does not break every later request of this branch.
+    Called when the tool loop is interrupted (cancellation, transport error, generator close);
+    best effort — a failure here is only logged.
+    """
+    for tool_call in tool_calls or []:
+        if not tool_call.id or tool_call.id in answered_ids:
+            continue
+        try:
+            await context_manager.add_message(interrupted_tool_response(tool_call.id), -1)
+        except Exception as e:
+            logger.warning(f'Could not close interrupted tool call {tool_call.id}: {e}')

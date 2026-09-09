@@ -4,6 +4,7 @@ from typing import List, Optional, Union
 import settings
 from app.runtime.conversation_session import ConversationSession
 from app.openai_helpers.chatgpt import DialogMessage, summarize_messages, DialogMessageContentPart
+from app.context.tool_call_repair import repair_dangling_tool_calls
 from app.openai_helpers.count_tokens import count_dialog_messages_tokens
 from app.openai_helpers.utils import calculate_completion_usage_price
 from app.storage.db import User, DB, Message, MessageType
@@ -111,7 +112,8 @@ class DialogManager:
         if self.messages is None:
             raise ValueError('You must call process_dialog first')
         dialog_messages = [d.message for d in self.messages]
-        return dialog_messages
+        # a tool call left without a result (interrupted turn) would make every later request invalid
+        return repair_dangling_tool_calls(dialog_messages)
 
 
 class DialogUtils:
