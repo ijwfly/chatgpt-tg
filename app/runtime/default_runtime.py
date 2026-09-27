@@ -1,3 +1,4 @@
+from contextlib import aclosing
 from typing import Callable, AsyncGenerator, Optional
 
 import settings
@@ -14,7 +15,7 @@ from app.runtime.events import (
     RuntimeEvent, StreamingContentDelta, FinalResponse,
     FunctionCallStarted, FunctionCallCompleted, ErrorEvent,
 )
-from app.runtime.context_utils import add_user_input_to_context
+from app.runtime.context_utils import add_user_input_to_context, close_unanswered_tool_calls
 from app.runtime.side_effects import SideEffectHandler
 from app.runtime.user_input import UserInput
 from app.storage.db import DB, User
@@ -67,10 +68,14 @@ class DefaultLLMRuntime:
             context_dialog_messages = await context_manager.get_context_messages()
             response_generator = await chat_gpt_manager.send_user_message(self.user, context_dialog_messages, is_cancelled)
 
-            async for event in self._handle_response(
+            handler = self._handle_response(
                 chat_gpt_manager, context_manager, response_generator, function_storage, is_cancelled
-            ):
-                yield event
+            )
+            # aclosing: closing this generator mid-turn closes the handler in the same task, so its
+            # cleanup (closing interrupted tool calls) runs right away instead of at garbage collection
+            async with aclosing(handler):
+                async for event in handler:
+                    yield event
         except Exception as e:
             turn.end(error=e)
             raise
@@ -139,11 +144,13 @@ class DefaultLLMRuntime:
                     response_generator = await chat_gpt_manager.send_user_message(
                         self.user, context_dialog_messages, is_cancelled
                     )
-                    async for sub_event in self._handle_response(
+                    handler = self._handle_response(
                         chat_gpt_manager, context_manager, response_generator,
                         function_storage, is_cancelled, recursive_count + 1,
-                    ):
-                        yield sub_event
+                    )
+                    async with aclosing(handler):
+                        async for sub_event in handler:
+                            yield sub_event
                 else:
                     yield event
 
@@ -155,35 +162,48 @@ class DefaultLLMRuntime:
                 # Content messages are saved by the adapter; only save tool-call-only messages here
                 await context_manager.add_message(dialog_message, -1)
 
-            for tool_call in dialog_message.tool_calls:
-                if tool_call.type != 'function':
-                    raise ValueError(f'Unknown tool call type: {tool_call.type}')
-                tool_call_id = tool_call.id
-                function_call = tool_call.function
+            answered_tool_call_ids = set()
+            try:
+                for tool_call in dialog_message.tool_calls:
+                    if tool_call.type != 'function':
+                        raise ValueError(f'Unknown tool call type: {tool_call.type}')
+                    tool_call_id = tool_call.id
+                    function_call = tool_call.function
 
-                async for event in self._run_function(
-                    function_call, function_storage, context_manager, tool_call_id
-                ):
-                    if isinstance(event, FunctionCallCompleted):
-                        yield event
-                        if event.result is not None:
-                            pass_tool_response_to_gpt = True
-                            tool_response = DialogUtils.prepare_tool_call_response(tool_call_id, event.result)
-                            context_dialog_messages = await context_manager.add_message(
-                                tool_response, event.tg_message_id
-                            )
-                    else:
-                        yield event
+                    async for event in self._run_function(
+                        function_call, function_storage, context_manager, tool_call_id
+                    ):
+                        if isinstance(event, FunctionCallCompleted):
+                            if event.result is not None:
+                                # saved before the event goes out: the adapter may fail on it
+                                pass_tool_response_to_gpt = True
+                                tool_response = DialogUtils.prepare_tool_call_response(tool_call_id, event.result)
+                                context_dialog_messages = await context_manager.add_message(
+                                    tool_response, event.tg_message_id
+                                )
+                                answered_tool_call_ids.add(tool_call_id)
+                            yield event
+                        else:
+                            yield event
+            except BaseException:
+                # the tool_calls message is already in the dialog; a cancelled task, a transport
+                # error or a closed generator must not leave it without results
+                await close_unanswered_tool_calls(
+                    context_manager, dialog_message.tool_calls, answered_tool_call_ids,
+                )
+                raise
 
             if pass_tool_response_to_gpt and context_dialog_messages:
                 response_generator = await chat_gpt_manager.send_user_message(
                     self.user, context_dialog_messages, is_cancelled
                 )
-                async for event in self._handle_response(
+                handler = self._handle_response(
                     chat_gpt_manager, context_manager, response_generator,
                     function_storage, is_cancelled, recursive_count + 1,
-                ):
-                    yield event
+                )
+                async with aclosing(handler):
+                    async for event in handler:
+                        yield event
 
     async def _run_function(
         self, function_call, function_storage, context_manager, tool_call_id: str = None,

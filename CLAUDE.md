@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Telegram bot that provides access to multiple LLM providers (OpenAI, Anthropic, OpenRouter, local LM Studio) with features like streaming responses, function/tool calling, image generation (DALL-E 3), voice transcription (Whisper), TTS, automatic context summarization, and MCP server integration.
+A Telegram bot that provides access to multiple LLM providers (OpenAI, Anthropic, OpenRouter, local LM Studio) with features like streaming responses, function/tool calling, voice transcription (Whisper), TTS, automatic context summarization, and MCP server integration.
 
 ## Running the Project
 
@@ -54,15 +54,16 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 - `app/functions/base.py` — `OpenAIFunction` base class. Accepts `SideEffectHandler` (not aiogram Message) for transport interactions. Subclasses define params via Pydantic `PARAMS_SCHEMA`, implement `run()`, provide `get_description()` and optional `get_system_prompt_addition()`
 - `app/openai_helpers/function_storage.py` — `FunctionStorage` registry, converts functions to OpenAI function/tool format
 - `app/context/function_manager.py` — decides which functions to register based on settings and user role
-- Built-in functions: `wolframalpha`, `dalle_3`, `save_user_settings`
+- Built-in functions: `wolframalpha`, `save_user_settings`
 - Web agents (`app/functions/web_agents.py`, enabled via `ENABLE_WEB_AGENTS` + `TAVILY_API_KEY`): `web_search_agent` and `web_scraper_agent` — each runs an isolated LLM sub-agent (`app/runtime/web_agent_runner.py`, clean context, billed usage) equipped with internal Tavily tools (`tavily_search`/`tavily_extract`, client in `app/web/tavily_client.py`); registered in both `FunctionManager` and `AgentRuntime`
 - MCP integration: `app/functions/mcp/` — dynamically loads tools from configured MCP servers
 
 ### Bash Sandbox (agent mode)
 - `sandbox/` — separate docker-compose service (ubuntu-based, internal network only, no published ports). Per-user isolation via Linux users + `sudo -u`, personal workspace `/workspace/user_<telegram_id>` (chmod 700), lazy provisioning on every request (`ensure_user`). HTTP API: `POST /exec` (bash with process-group-kill timeout), `POST /fileop` (read/write/edit/stat/list/delete via `file_helper.py` under sudo), `GET/PUT /files/{path}` (streaming), `GET /skills` (skills catalog). Paths are confined to the caller's workspace by `resolve_path`; the shared `/workspace/public_skills` is the only exception and only for read-only operations (`allow_public=True`). Caller identified by `X-User-Id` header — trusted internal network, no auth
 - `app/sandbox/client.py` — `SandboxClient` (httpx), raises `SandboxError`
-- `app/functions/bash_sandbox.py` — agent tools: `bash_exec`, `read_file`, `write_file`, `edit_file`, `send_file_to_chat`. Registered in `AgentRuntime` when `settings.ENABLE_BASH_SANDBOX` (off by default) — so available only with `agent_mode=on`
+- `app/functions/bash_sandbox.py` — agent tools: `bash_exec`, `read_file`, `write_file`, `edit_file`, `send_file_to_chat`, `save_image_to_workspace`. Registered in `AgentRuntime` when `settings.ENABLE_BASH_SANDBOX` (off by default) — so available only with `agent_mode=on`
 - Incoming Telegram documents: when user has `agent_mode=on` and sandbox is enabled, `BatchedInputHandler.handle_document_sandbox` saves them into the user's workspace (with agent_mode off documents are not accepted); the agent is notified via a `[file uploaded to agent workspace]` context message. Both the user's document message and the bot's `Saved to agent workspace` confirmation resolve to that context message on reply (via `message_tg_alias`). A document sent with a caption is answered by the agent (`UserInput.force_prompt`) — the caption goes into the same context message; a caption on a forwarded document follows `forward_as_prompt`
+- Incoming images stay lazy: a photo is not written to the workspace, it goes into context as an image with an `[image #N]` label (`app/runtime/image_refs.py`, added by `add_user_input_to_context`). When the model needs the file itself it calls `save_image_to_workspace`, which recovers the telegram file_id from the stored image-proxy url, downloads the bytes via `SideEffectHandler.download_file` and uploads them to the workspace. Names are sanitized and de-duplicated by `app/sandbox/workspace_files.py` (shared with the document path)
 - Outgoing files: `send_file_to_chat` downloads from the sandbox and sends via the `send_document` side effect (`SideEffectHandler` protocol + `TelegramSideEffectHandler`); it sets `result_tg_message_id`, so the tool response row carries the document's tg id and a reply to the file continues the dialog branch
 
 ### Skills (agent mode)
@@ -74,11 +75,12 @@ All configuration is in `settings.py`. The file has defaults at the top and loca
 ### Database
 - PostgreSQL via `asyncpg`, no ORM
 - `app/storage/db.py` — `DB` class with raw SQL queries, `DBFactory` manages connection pool
-- Schema in `chatgpttg` schema, tables: `user`, `message`, `completion_usage`, `whisper_usage`, `image_generation_usage`, `tts_usage`
+- Schema in `chatgpttg` schema, tables: `user`, `message`, `completion_usage`, `whisper_usage`, `tts_usage` (plus `image_generation_usage`, kept only as billing history of the removed DALL-E 3 tool)
 - Messages store full dialog history as JSON with `previous_message_ids` for branching sub-dialogues
 
 ### Key Patterns
 - **Sub-dialogues**: replying to a message creates a branch — `DialogManager` loads only that branch's history. Chat messages without a context row of their own (upload confirmations, the user's voice message behind a transcription) are registered as aliases in `message_tg_alias`, so replying to them resolves to the right row
+- **Interrupted tool calls**: the assistant `tool_calls` row is saved before the tools run, each `tool` result after its tool. If the turn dies in between (task cancelled on restart, transport error in the adapter, generator closed) the runtimes' tool loops catch `BaseException` and save an `Error: … interrupted` result for every unanswered call (`close_unanswered_tool_calls` in `app/runtime/context_utils.py`); `DialogManager.get_dialog_messages` additionally repairs already broken histories on load (`app/context/tool_call_repair.py`). Both OpenAI and Anthropic reject a `tool_calls` message without results. The adapter and both runtimes wrap nested event generators in `contextlib.aclosing` so this cleanup runs in the same task instead of at garbage collection
 - **Context expiration**: messages older than `MESSAGE_EXPIRATION_WINDOW` (default 1h) start fresh context
 - **Auto-summarization**: when context exceeds `short_term_memory_tokens`, older messages get summarized via LLM
 - **Rich messages**: LLM answers, `/usage`, `/models` and admin cards are sent as Telegram Rich Messages (`sendRichMessage` with `InputRichMessage(markdown=...)`, GFM markdown, 32768-char limit) via `app/bot/rich_messages.py`; a rejected markup falls back to plain `sendMessage`. Service texts (errors, confirmations, transcriptions, verbose tool output) stay plain via `utils.send_telegram_message`. See `specs/RICH_MESSAGES.md`

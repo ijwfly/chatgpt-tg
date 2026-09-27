@@ -31,7 +31,6 @@ All outgoing Telegram calls funnel through the bot session's `make_request(bot, 
 | `sendMessage` | `{message_id, from, chat, date, text}` | Response messages, function verbose output |
 | `editMessageText` | Same as sendMessage | Streaming updates |
 | `editMessageReplyMarkup` | Same as sendMessage | Settings toggle (update keyboard) |
-| `sendPhoto` | Same as sendMessage | DALL-E image results |
 | `sendChatAction` | `True` | TypingWorker background loop |
 | `deleteMessage` | `True` | /usage, /settings, /models |
 | `answerCallbackQuery` | `True` | Inline button callbacks |
@@ -252,7 +251,6 @@ Covers: ScheduleTask creation (one-time via dateparser, recurring via cron), Lis
 
 | Scenario | Why | Priority |
 |----------|-----|----------|
-| Image generation (DALL-E) | Needs mock of `OpenAIAsync.instance().images.generate()` + `httpx` | Low |
 | Voice input (Whisper) | Needs mock of file download + pydub + Whisper API | Low |
 | Context auto-summarization | Needs enough messages to exceed `short_term_memory_tokens` | Low |
 | Access control (role gating) | Needs user with insufficient role | Low |

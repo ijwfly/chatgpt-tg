@@ -10,7 +10,6 @@ from app.functions.agent_tools import (
     CancelScheduledTask, CreatePlan, ScheduleTask, SpawnTask, UpdatePlanStep, WaitTask,
 )
 from app.functions.bash_sandbox import BashExec, EditFile, ReadFile, SendFileToChat, WriteFile
-from app.functions.dalle_3 import GenerateImageDalle3
 from app.functions.mcp.mcp_function_storage import MCPFunction
 from app.functions.save_user_settings import SaveUserSettings
 from app.functions.web_agents import WebScraperAgent, WebSearchAgent
@@ -34,8 +33,6 @@ class TestSimpleDetails:
         (WebScraperAgent, {'url': 'https://example.com/post', 'task': 'summarize'},
          'Reading web page: https://example.com/post'),
         (QueryWolframAlpha, {'query': 'integral of x^2'}, 'Querying WolframAlpha: integral of x^2'),
-        (GenerateImageDalle3, {'image_prompt': 'a cat in a spacesuit'},
-         'Generating image: a cat in a spacesuit'),
         (SpawnTask, {'description': 'collect Q3 numbers', 'prompt': 'long prompt here'},
          'Spawning sub-agent: collect Q3 numbers'),
     ])

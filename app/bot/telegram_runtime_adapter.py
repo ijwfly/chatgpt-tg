@@ -1,4 +1,4 @@
-from contextlib import suppress
+from contextlib import aclosing, suppress
 from typing import Callable
 
 from aiogram.enums import ChatAction, ChatType
@@ -117,79 +117,82 @@ class TelegramRuntimeAdapter:
                 live = self._fallback_live_output()
 
         try:
-            async for event in runtime.process_turn(user_input, session, is_cancelled):
-                if isinstance(event, StreamingContentDelta):
-                    if state == ServiceState.STREAMING_OVERFLOW:
-                        continue
+            # aclosing: if this loop is abandoned (transport error, cancellation) the runtime generator is
+            # closed right here, in the same task, so it can finish its bookkeeping (e.g. close tool calls)
+            async with aclosing(runtime.process_turn(user_input, session, is_cancelled)) as events:
+                async for event in events:
+                    if isinstance(event, StreamingContentDelta):
+                        if state == ServiceState.STREAMING_OVERFLOW:
+                            continue
 
-                    if event.is_thinking:
-                        thinking_display = _format_thinking_display(event.thinking_text)
-                        throttle = WAIT_BETWEEN_MESSAGE_UPDATES if state == ServiceState.THINKING else 0
-                        await show(live.set_thinking(thinking_display, throttle_seconds=throttle))
-                        state = ServiceState.THINKING
-                        await ensure_typing_action()
-                        continue
+                        if event.is_thinking:
+                            thinking_display = _format_thinking_display(event.thinking_text)
+                            throttle = WAIT_BETWEEN_MESSAGE_UPDATES if state == ServiceState.THINKING else 0
+                            await show(live.set_thinking(thinking_display, throttle_seconds=throttle))
+                            state = ServiceState.THINKING
+                            await ensure_typing_action()
+                            continue
 
-                    new_content = ' '.join(event.visible_text.strip().split(' ')[:-1]) if event.visible_text else ''
-                    if len(new_content) < MIN_STREAMING_CONTENT_LEN:
-                        continue
+                        new_content = ' '.join(event.visible_text.strip().split(' ')[:-1]) if event.visible_text else ''
+                        if len(new_content) < MIN_STREAMING_CONTENT_LEN:
+                            continue
 
-                    if len(new_content) > TELEGRAM_MESSAGE_LENGTH_CUTOFF:
-                        truncated = f'{new_content[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]} ⏳...'
-                        await show(live.set_content(truncated))
-                        live.freeze()
-                        state = ServiceState.STREAMING_OVERFLOW
-                        await ensure_typing_action()
-                        continue
+                        if len(new_content) > TELEGRAM_MESSAGE_LENGTH_CUTOFF:
+                            truncated = f'{new_content[:TELEGRAM_MESSAGE_LENGTH_CUTOFF]} ⏳...'
+                            await show(live.set_content(truncated))
+                            live.freeze()
+                            state = ServiceState.STREAMING_OVERFLOW
+                            await ensure_typing_action()
+                            continue
 
-                    throttle = WAIT_BETWEEN_MESSAGE_UPDATES if state == ServiceState.STREAMING else 0
-                    await show(live.set_content(new_content, throttle_seconds=throttle))
-                    state = ServiceState.STREAMING
-                    await ensure_typing_action()
-
-                elif isinstance(event, FinalResponse):
-                    final_dialog_message = event.dialog_message
-
-                    if final_dialog_message and final_dialog_message.content:
-                        dialog_messages = self._split_dialog_message(
-                            final_dialog_message, TELEGRAM_MESSAGE_LENGTH_CUTOFF,
-                        )
-                        first, rest = dialog_messages[0], dialog_messages[1:]
-
-                        first_id = await live.finish(first.content)
-                        if event.needs_context_save and first_id is not None:
-                            await self.context_manager.add_message(first, first_id)
-
-                        for dm in rest:
-                            response = await with_flood_retry(lambda: send_rich_message(self.message, dm.content))
-                            if event.needs_context_save:
-                                await self.context_manager.add_message(dm, response.message_id)
-
-                        # The answer is out; any following phase (e.g. another agent
-                        # iteration) starts with a fresh live output.
-                        live = self._new_live_output()
-                        typing_action_sent = False
-                        state = ServiceState.IDLE
-                    else:
-                        # Tool-only / empty response — keep the live output for the next event.
-                        pass
-
-                elif isinstance(event, FunctionCallStarted):
-                    if self.user.function_call_hints:
-                        hint_text = event.status_message or f'Running {event.function_name}...'
-                        await show(live.set_hint(_format_hint(hint_text)))
-                        state = ServiceState.FUNCTION_HINT
+                        throttle = WAIT_BETWEEN_MESSAGE_UPDATES if state == ServiceState.STREAMING else 0
+                        await show(live.set_content(new_content, throttle_seconds=throttle))
+                        state = ServiceState.STREAMING
                         await ensure_typing_action()
 
-                elif isinstance(event, FunctionCallCompleted):
-                    if self.user.function_call_verbose:
-                        with suppress(TelegramBadRequest):
-                            text = (
-                                f'Function call: {event.function_name}({event.function_args})'
-                                f'\n\nResponse: {event.result}'
+                    elif isinstance(event, FinalResponse):
+                        final_dialog_message = event.dialog_message
+
+                        if final_dialog_message and final_dialog_message.content:
+                            dialog_messages = self._split_dialog_message(
+                                final_dialog_message, TELEGRAM_MESSAGE_LENGTH_CUTOFF,
                             )
-                            text = text[:PLAIN_MESSAGE_LENGTH_CUTOFF]
-                            await send_telegram_message(self.message, text)
+                            first, rest = dialog_messages[0], dialog_messages[1:]
+
+                            first_id = await live.finish(first.content)
+                            if event.needs_context_save and first_id is not None:
+                                await self.context_manager.add_message(first, first_id)
+
+                            for dm in rest:
+                                response = await with_flood_retry(lambda: send_rich_message(self.message, dm.content))
+                                if event.needs_context_save:
+                                    await self.context_manager.add_message(dm, response.message_id)
+
+                            # The answer is out; any following phase (e.g. another agent
+                            # iteration) starts with a fresh live output.
+                            live = self._new_live_output()
+                            typing_action_sent = False
+                            state = ServiceState.IDLE
+                        else:
+                            # Tool-only / empty response — keep the live output for the next event.
+                            pass
+
+                    elif isinstance(event, FunctionCallStarted):
+                        if self.user.function_call_hints:
+                            hint_text = event.status_message or f'Running {event.function_name}...'
+                            await show(live.set_hint(_format_hint(hint_text)))
+                            state = ServiceState.FUNCTION_HINT
+                            await ensure_typing_action()
+
+                    elif isinstance(event, FunctionCallCompleted):
+                        if self.user.function_call_verbose:
+                            with suppress(TelegramBadRequest):
+                                text = (
+                                    f'Function call: {event.function_name}({event.function_args})'
+                                    f'\n\nResponse: {event.result}'
+                                )
+                                text = text[:PLAIN_MESSAGE_LENGTH_CUTOFF]
+                                await send_telegram_message(self.message, text)
         finally:
             if state in (ServiceState.THINKING, ServiceState.STREAMING, ServiceState.FUNCTION_HINT) \
                     and live.needs_cleanup:

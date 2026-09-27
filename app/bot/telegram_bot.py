@@ -22,8 +22,7 @@ from app.bot.user_role_manager import UserRoleManager
 from app.bot.utils import (get_hide_button, get_usage_response_all_users, TypingWorker)
 from app.bot.rich_messages import send_rich_message
 from app.bot.utils import send_telegram_message
-from app.openai_helpers.utils import (calculate_whisper_usage_price, OpenAIAsync,
-                                      calculate_image_generation_usage_price, calculate_tts_usage_price)
+from app.openai_helpers.utils import calculate_whisper_usage_price, OpenAIAsync, calculate_tts_usage_price
 from app.storage.db import DBFactory, User
 from app.storage.user_role import check_access_conditions, UserRole
 
@@ -123,14 +122,6 @@ class TelegramBot:
         total += whisper_price
         if whisper_price:
             result.append(f'**Speech2Text:** {whisper_usage} seconds, ${whisper_price}')
-
-        image_generation_usage = await self.db.get_user_current_month_image_generation_usage(user.id)
-        for usage in image_generation_usage:
-            price = calculate_image_generation_usage_price(
-                usage['model'], usage['resolution'], usage['usage_count']
-            )
-            total += price
-            result.append(f'**{usage["model"]}:** {usage["usage_count"]} images, {usage["resolution"]} resolution, ${price}')
 
         tts_usages = await self.db.get_user_current_month_tts_usage(user.id)
         for tts_usage in tts_usages:

@@ -1,24 +1,29 @@
 import base64
 import io
 import asyncio
+import logging
 from datetime import date
 from functools import lru_cache
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from typing import Optional
 
 import httpx
 import requests
 from aiogram import types
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import BufferedInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from async_lru import alru_cache
 
 import settings
-from app.openai_helpers.utils import (calculate_whisper_usage_price,
-                                      calculate_image_generation_usage_price, calculate_tts_usage_price)
+from app.openai_helpers.utils import calculate_whisper_usage_price, calculate_tts_usage_price
+
+logger = logging.getLogger(__name__)
 
 TYPING_TIMEOUT = 180
-TYPING_DELAY = 2
+# clients show the indicator for ~5 seconds, so refreshing it more often only burns
+# the sendChatAction rate limit
+TYPING_DELAY = 4
 TYPING_QUERIES_LIMIT = TYPING_TIMEOUT // TYPING_DELAY
 
 
@@ -46,8 +51,17 @@ class TypingWorker:
     async def start_typing(self):
         async def typing_worker():
             while self.typing_queries_count < TYPING_QUERIES_LIMIT:
-                await self.bot.send_chat_action(chat_id=self.chat_id, action=self.action)
-                await asyncio.sleep(TYPING_DELAY)
+                delay = TYPING_DELAY
+                try:
+                    await self.bot.send_chat_action(chat_id=self.chat_id, action=self.action)
+                except TelegramRetryAfter as e:
+                    logger.warning(
+                        'Flood control on chat action in chat %s, waiting %s s', self.chat_id, e.retry_after
+                    )
+                    delay = max(delay, e.retry_after)
+                except TelegramAPIError as e:
+                    logger.warning('Chat action failed in chat %s: %s', self.chat_id, e)
+                await asyncio.sleep(delay)
                 self.typing_queries_count += 1
 
         self.typing_task = asyncio.create_task(typing_worker())
@@ -58,11 +72,20 @@ class TypingWorker:
             return
 
         self.typing_task.cancel()
-        try:
+        # the indicator is cosmetic: it must never break the operation it was decorating
+        with suppress(asyncio.CancelledError, Exception):
             await self.typing_task
-        except asyncio.CancelledError:
-            pass
         self.typing_task = None
+
+
+async def download_telegram_file(bot, file_id: str, max_bytes: Optional[int] = None) -> bytes:
+    """Downloads a telegram file into memory. Raises ValueError if it is bigger than max_bytes."""
+    file = await bot.get_file(file_id)
+    if max_bytes and file.file_size and file.file_size > max_bytes:
+        raise ValueError(f'File is too big: {file.file_size} bytes, limit is {max_bytes} bytes')
+    downloaded = await bot.download_file(file.file_path)
+    # aiogram returns a BinaryIO unless a destination is given
+    return downloaded.read() if hasattr(downloaded, 'read') else bytes(downloaded)
 
 
 class Timer:
@@ -128,16 +151,6 @@ async def send_telegram_message(message: types.Message, text: str, reply_markup=
     return await send_message(text, parse_mode=None, reply_markup=reply_markup)
 
 
-async def send_photo(message: types.Message, photo_bytes, caption=None, reply_markup=None):
-    if message.reply_to_message is None:
-        send_message = message.answer_photo
-    else:
-        send_message = message.reply_photo
-
-    photo = BufferedInputFile(photo_bytes, filename='image.png')
-    return await send_message(photo, caption=caption, reply_markup=reply_markup)
-
-
 async def send_document(message: types.Message, document_bytes, filename, caption=None):
     document = BufferedInputFile(document_bytes, filename=filename)
     if message.reply_to_message is None:
@@ -173,7 +186,6 @@ def merge_dicts(dict_1, dict_2):
 async def get_usage_response_all_users(db, month_date: date = None) -> str:
     completion_usages = await db.get_all_users_completion_usage(month_date)
     whisper_usages = await db.get_all_users_whisper_usage(month_date)
-    image_generation_usages = await db.get_all_users_image_generation_usage(month_date)
     tts_usages = await db.get_all_users_tts_usage(month_date)
     result = []
     # TODO: this will work incorrectly if user never used chat completion but used other features
@@ -182,11 +194,6 @@ async def get_usage_response_all_users(db, month_date: date = None) -> str:
 
         for usage in user_completion_usages:
             user_usage_price += usage.price
-
-        for usage in image_generation_usages.get(name, []):
-            user_usage_price += calculate_image_generation_usage_price(
-                usage['model'], usage['resolution'], usage['usage_count']
-            )
 
         for usage in tts_usages.get(name, []):
             user_usage_price += calculate_tts_usage_price(usage['characters_count'], usage['model'])

@@ -134,10 +134,13 @@ RuntimeEvent                        # base
 ```python
 class SideEffectHandler(Protocol):
     async def send_message(self, text: str) -> int: ...
-    async def send_photo(self, photo_bytes: bytes, caption: Optional[str] = None) -> int: ...
+    async def send_document(self, document_bytes: bytes, filename: str,
+                            caption: Optional[str] = None) -> int: ...
+    async def edit_message(self, message_id: int, text: str) -> None: ...
+    async def download_file(self, file_id: str, max_bytes: Optional[int] = None) -> bytes: ...
 ```
 
-Functions use this instead of `aiogram.types.Message` to send messages/photos. Returns the transport message ID. The Telegram implementation is `TelegramSideEffectHandler` (`app/bot/telegram_side_effects.py`).
+Functions use this instead of `aiogram.types.Message` to send messages/photos. Send methods return the transport message ID; `download_file` fetches a file the user sent (by transport file id) — `save_image_to_workspace` uses it to pull an image into the sandbox. The Telegram implementations are `TelegramSideEffectHandler` (`app/bot/telegram_side_effects.py`) and `BotSideEffectHandler` (`app/bot/bot_side_effects.py`, scheduled tasks).
 
 ---
 
@@ -252,7 +255,6 @@ This split exists because the runtime is transport-agnostic and cannot know the 
 | File | Change |
 |------|--------|
 | `base.py` | Accepts `SideEffectHandler` instead of `aiogram.types.Message` |
-| `dalle_3.py` | Uses `self.side_effects.send_photo()` |
 | `save_user_settings.py` | Uses `self.side_effects.send_message()` |
 | `mcp/mcp_function_storage.py` | `__call__` accepts `side_effects` instead of `message` |
 
@@ -406,7 +408,7 @@ class HTTPSideEffectHandler:
         # Return a placeholder message_id (or store in your system)
         return -1
 
-    async def send_photo(self, photo_bytes: bytes, caption=None) -> int:
+    async def send_document(self, document_bytes: bytes, filename: str, caption=None) -> int:
         # Encode and return via HTTP response
         return -1
 ```

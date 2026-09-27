@@ -2,6 +2,7 @@ from typing import Callable, AsyncGenerator, Optional, List
 
 import asyncio
 import logging
+from contextlib import aclosing
 import time
 
 import settings
@@ -23,7 +24,7 @@ from app.openai_helpers.anthropic_chatgpt import AnthropicChatGPT
 from app.openai_helpers.chatgpt import ChatGPT, DialogMessage, parse_thinking
 from app.openai_helpers.function_storage import FunctionStorage
 from app.runtime.background_task_manager import BackgroundTaskManager
-from app.runtime.context_utils import add_user_input_to_context
+from app.runtime.context_utils import add_user_input_to_context, close_unanswered_tool_calls
 from app.runtime.conversation_session import ConversationSession
 from app.runtime.events import (
     RuntimeEvent, StreamingContentDelta, FinalResponse,
@@ -163,11 +164,15 @@ class AgentRuntime:
         ctx_token = agent_context_var.set(agent_ctx)
 
         try:
-            async for event in self._agent_loop(
+            agent_loop = self._agent_loop(
                 chat_gpt, chat_gpt_manager, context_manager, function_storage,
                 bg_manager, plan_manager, is_cancelled,
-            ):
-                yield event
+            )
+            # aclosing: when this generator is closed mid-turn the loop is closed with it, in the same
+            # task and context, so its cleanup (closing interrupted tool calls) runs right away
+            async with aclosing(agent_loop):
+                async for event in agent_loop:
+                    yield event
         except Exception as e:
             turn.end(error=e)
             raise
@@ -296,25 +301,36 @@ class AgentRuntime:
                 await context_manager.add_message(dialog_message, -1)
 
                 pass_tool_response_to_gpt = False
-                for tool_call in dialog_message.tool_calls:
-                    if tool_call.type != 'function':
-                        raise ValueError(f'Unknown tool call type: {tool_call.type}')
-                    tool_call_id = tool_call.id
-                    function_call = tool_call.function
+                answered_tool_call_ids = set()
+                try:
+                    for tool_call in dialog_message.tool_calls:
+                        if tool_call.type != 'function':
+                            raise ValueError(f'Unknown tool call type: {tool_call.type}')
+                        tool_call_id = tool_call.id
+                        function_call = tool_call.function
 
-                    async for event in self._run_function(
-                        function_call, function_storage, context_manager, tool_call_id
-                    ):
-                        if isinstance(event, FunctionCallCompleted):
-                            yield event
-                            if event.result is not None:
-                                pass_tool_response_to_gpt = True
-                                tool_response = DialogUtils.prepare_tool_call_response(
-                                    tool_call_id, event.result
-                                )
-                                await context_manager.add_message(tool_response, event.tg_message_id)
-                        else:
-                            yield event
+                        async for event in self._run_function(
+                            function_call, function_storage, context_manager, tool_call_id
+                        ):
+                            if isinstance(event, FunctionCallCompleted):
+                                if event.result is not None:
+                                    # saved before the event goes out: the adapter may fail on it
+                                    pass_tool_response_to_gpt = True
+                                    tool_response = DialogUtils.prepare_tool_call_response(
+                                        tool_call_id, event.result
+                                    )
+                                    await context_manager.add_message(tool_response, event.tg_message_id)
+                                    answered_tool_call_ids.add(tool_call_id)
+                                yield event
+                            else:
+                                yield event
+                except BaseException:
+                    # the tool_calls message is already in the dialog; a cancelled task, a transport
+                    # error or a closed generator must not leave it without results
+                    await close_unanswered_tool_calls(
+                        context_manager, dialog_message.tool_calls, answered_tool_call_ids,
+                    )
+                    raise
 
                 if not pass_tool_response_to_gpt:
                     break

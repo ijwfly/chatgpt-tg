@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import asyncio
-import re
 import tempfile
 from contextlib import suppress
 from typing import List, Optional
@@ -21,6 +20,7 @@ from app.openai_helpers.whisper import get_audio_speech_to_text
 from app.runtime.user_input import UserInput, TextInput, ImageInput, VoiceTranscription, \
     SandboxFileInput
 from app.sandbox.client import SandboxClient, SandboxError
+from app.sandbox.workspace_files import sanitize_workspace_filename, unique_workspace_name
 from app.storage.db import User
 
 logger = logging.getLogger(__name__)
@@ -185,8 +185,8 @@ class BatchedInputHandler:
                     temp_filepath = os.path.join(temp_dir, 'document')
                     await self.bot.download_file(file.file_path, destination=temp_filepath)
 
-                    safe_name = self._sanitize_workspace_filename(message.document.file_name)
-                    safe_name = await self._unique_workspace_name(sandbox_client, user.telegram_id, safe_name)
+                    safe_name = sanitize_workspace_filename(message.document.file_name)
+                    safe_name = await unique_workspace_name(sandbox_client, user.telegram_id, safe_name)
 
                     with open(temp_filepath, 'rb') as f:
                         data = f.read()
@@ -227,25 +227,6 @@ class BatchedInputHandler:
         ))
         if caption_is_prompt:
             user_input.force_prompt = True
-
-    @staticmethod
-    def _sanitize_workspace_filename(filename: str) -> str:
-        safe_name = os.path.basename(filename or '')
-        # \w is unicode-aware: keeps letters in any alphabet (incl. cyrillic) and digits
-        safe_name = re.sub(r'[^\w.-]', '_', safe_name)
-        if not safe_name.strip('._'):
-            safe_name = 'file'
-        return safe_name
-
-    @staticmethod
-    async def _unique_workspace_name(sandbox_client: SandboxClient, telegram_user_id: int, filename: str) -> str:
-        base, ext = os.path.splitext(filename)
-        candidate = filename
-        counter = 1
-        while (await sandbox_client.stat(telegram_user_id, candidate)).get('type') != 'missing':
-            candidate = f'{base}_{counter}{ext}'
-            counter += 1
-        return candidate
 
     async def handle_voice(self, message: types.Message, user: User, user_input: UserInput):
         """
