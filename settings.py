@@ -74,6 +74,11 @@ WEB_AGENT_EXTRACT_MAX_CHARS = 8000   # per-URL truncation of extracted content
 
 # Utility settings
 OPENAI_BASE_URL = 'https://api.openai.com/v1'
+
+# Speech-to-text (independent of the user's chat model and TTS)
+STT_PROVIDER = 'openai'              # 'openai' or 'openrouter'; uses the provider's token/base URL
+STT_MODEL = 'gpt-4o-transcribe'       # OpenRouter requires a full ID, e.g. 'deepgram/nova-3'
+STT_TEMPERATURE = None              # None omits the parameter; otherwise a number in 0..1
 MESSAGE_EXPIRATION_WINDOW = 60 * 60  # 1 hour
 POSTGRES_TIMEZONE = pytz.timezone('UTC')
 SUCCESSIVE_FUNCTION_CALLS_LIMIT = 12  # limit of successive function calls that model can make

@@ -16,7 +16,7 @@ from app.bot.message_processor import MessageProcessor
 from app.bot.utils import TypingWorker, message_is_forward, get_username, Timer
 from app.llm_models import get_model_by_name
 from app.openai_helpers.utils import calculate_whisper_usage_price
-from app.openai_helpers.whisper import get_audio_speech_to_text
+from app.speech.transcription import get_audio_speech_to_text
 from app.runtime.user_input import UserInput, TextInput, ImageInput, VoiceTranscription, \
     SandboxFileInput
 from app.sandbox.client import SandboxClient, SandboxError
@@ -231,7 +231,7 @@ class BatchedInputHandler:
     async def handle_voice(self, message: types.Message, user: User, user_input: UserInput):
         """
         Handles voice message, audio file, or video note (round video). Downloads the file, extracts audio and
-        converts it to mp3 (ffmpeg handles video notes too), sends it to whisper, sends response to user,
+        converts it to mp3 (ffmpeg handles video notes too), transcribes it, sends response to user,
         adds response to context.
         """
         if message.voice:
