@@ -93,6 +93,36 @@ first message and use it to make yourself admin.
 Any setting from `settings.py` can be overridden in `settings_local.py` — see
 `settings_local.py.example` for the most common options.
 
+### Speech-to-text provider
+
+Voice messages, audio files and video notes use OpenAI by default:
+`STT_PROVIDER = 'openai'`, `STT_MODEL = 'gpt-4o-transcribe'`. The STT client
+uses `OPENAI_TOKEN` / `OPENAI_BASE_URL` and is separate from TTS and embeddings.
+
+To use OpenRouter, add to `settings_local.py`:
+
+```python
+OPENROUTER_TOKEN = 'your-openrouter-key'
+STT_PROVIDER = 'openrouter'
+STT_MODEL = 'deepgram/nova-3'  # or 'openai/gpt-4o-transcribe'
+STT_TEMPERATURE = None
+```
+
+OpenRouter uses `OPENROUTER_BASE_URL` (default `https://openrouter.ai/api/v1`)
+and requires a full model ID from its
+[STT catalog](https://openrouter.ai/collections/speech-to-text-models).
+Direct OpenAI uses its unprefixed IDs, such as `gpt-4o-transcribe`.
+Changing the STT provider does not change the user's chat model or TTS.
+
+Language is always auto-detected. `STT_TEMPERATURE = None` omits the parameter;
+set a number in `0..1` only if the selected model supports it. Set `0` to
+retain the previously explicit zero temperature. Unsupported parameters or
+models produce an API error; the bot does not silently switch models or remove
+parameters. Invalid provider, empty model/key, or invalid temperature fails at
+startup. Restart the bot after changing these settings. Usage accounting is
+unchanged and still uses the existing fixed STT rate, not OpenRouter's tariff.
+
+
 ## 🤖 Full agent setup
 
 Agent mode is enabled by default (`ENABLE_AGENT_RUNTIME = True`); each user switches it on in
