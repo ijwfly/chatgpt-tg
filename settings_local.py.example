@@ -19,9 +19,9 @@ TELEGRAM_BOT_TOKEN = ''
 # === OpenAI base URL (for proxies or compatible APIs) ===
 # OPENAI_BASE_URL = 'https://api.openai.com/v1'
 
-# === Speech-to-text (OpenAI by default; independent of chat model and TTS) ===
-# STT_PROVIDER = 'openai'  # or 'openrouter', using OPENROUTER_TOKEN
-# STT_MODEL = 'gpt-4o-transcribe'  # OpenRouter: 'openai/gpt-4o-transcribe' or 'deepgram/nova-3'
+# === Speech-to-text (example: Google Gemini via OpenRouter; default remains OpenAI) ===
+# STT_PROVIDER = 'openrouter'  # requires OPENROUTER_TOKEN above; independent of chat model and TTS
+# STT_MODEL = 'google/gemini-3.5-transcribe'
 # STT_TEMPERATURE = None  # omit parameter; 0..1 if supported by the selected model
 
 # === Database (if not using docker-compose defaults) ===
