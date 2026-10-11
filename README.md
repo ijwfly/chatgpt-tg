@@ -169,11 +169,23 @@ path — goes into the agent's system prompt; the agent opens a skill's body its
 description matches the task, so you can have many skills without bloating the prompt. The
 format matches Claude Code Agent Skills, so skills are portable.
 
-Personal skills live in `skills/` in the user's sandbox workspace and are created by the agent
-itself — the bundled `skill-creator` skill walks it through writing one and validating it with
-`scripts/validate_skill.py`. Shared read-only skills live in `/workspace/public_skills`: put a
-folder in `sandbox/skills/` and rebuild the sandbox image (`docker-compose up -d --build
-sandbox`), or drop one straight into the `sandbox_workspace` volume under `public_skills/`.
+Personal skills live at `skills/<skill-name>/SKILL.md` in the user's sandbox workspace.
+The bundled `skill-creator` guides creation, editing, and installation from a ZIP or folder,
+including validation with its `scripts/validate_skill.py`.
+
+To install an external skill, enable agent mode, upload its ZIP and ask the bot to install it
+(in the caption or a reply). The upload itself stays in the workspace root; it is not an
+installation. The agent inspects and stages the archive, handles wrapper folders, and installs
+the complete skill folder under `skills/<skill-name>/`, preserving companion files. It must
+not overwrite an existing personal skill without an explicit replacement request. The catalog
+only scans immediate subfolders of `skills/`; content validation alone does not verify the
+installation path. A created or installed skill becomes available on the next user message.
+
+Shared read-only skills live in `/workspace/public_skills`: put a folder in `sandbox/skills/`
+and rebuild the sandbox image (`docker-compose up -d --build sandbox`), or drop one straight
+into the `sandbox_workspace` volume under `public_skills/`. Bundled skills are re-synced on
+container startup; changes to the bundled `skill-creator` require a sandbox rebuild and restart.
+A personal skill with the same name shadows a shared one, including `skill-creator`.
 
 **4. MCP servers**
 
