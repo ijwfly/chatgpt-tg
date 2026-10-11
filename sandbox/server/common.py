@@ -1,18 +1,14 @@
-"""Shared config, logging, user provisioning and path resolution.
-
-Adapted from the bash-mcp reference project. Auth layers (JWT, registry,
-admin API) are dropped: this service lives on the internal docker network
-and trusts the X-User-Id header set by the bot.
-"""
+"""Shared sandbox configuration, identity provisioning and subprocess isolation."""
 
 import asyncio
 import json
 import logging
 import os
-import pwd
+import shutil
+import stat
 import re
 import signal
-import subprocess
+from identities import IdentityError, IdentityRegistry, LINUX_USER_RE, check_root_directory
 from contextvars import ContextVar
 from typing import Optional
 
@@ -31,8 +27,6 @@ HELPER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "file_hel
 
 current_user: ContextVar[str] = ContextVar("current_user")
 
-# Linux usernames are capped at 32 chars; "user_" prefix leaves 27.
-LINUX_USER_RE = re.compile(r"^user_[a-z0-9_]{1,27}$")
 
 
 class PathOutsideWorkspace(Exception):
@@ -61,31 +55,51 @@ def workspace_for(linux_user: str) -> str:
 
 
 def ensure_user(linux_user: str) -> None:
-    """Create OS user and workspace directory if they don't exist yet.
+    IdentityRegistry(WORKSPACE_ROOT).ensure_user(linux_user)
 
-    Checks the OS user via `id`, not the directory — the workspace volume
-    persists across container recreations while OS users do not.
-    """
-    r = subprocess.run(["id", linux_user], capture_output=True)
-    if r.returncode != 0:
-        subprocess.run(
-            ["useradd", "-m", "-s", "/bin/bash", "-G", "mcpusers", linux_user],
-            check=False,
-            capture_output=True,
-        )
-        logger.info("provisioned linux user=%s", linux_user)
-    workspace = workspace_for(linux_user)
-    os.makedirs(workspace, exist_ok=True)
+
+def initialize_sandbox() -> None:
+    """Restore identities before shared-skill sync or HTTP serving."""
+    IdentityRegistry(WORKSPACE_ROOT).restore()
+    sync_public_skills()
+
+
+def _check_public_tree(path: str) -> None:
+    st = os.lstat(path)
+    if (st.st_uid != 0 or st.st_gid != 0 or st.st_mode & 0o022
+            or not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode))):
+        raise IdentityError("Unsafe shared skills ownership, type or permissions")
+    if stat.S_ISDIR(st.st_mode):
+        for name in os.listdir(path):
+            _check_public_tree(os.path.join(path, name))
+
+
+def sync_public_skills(source: str = "/opt/skills") -> None:
+    """Sync bundled skills without following volume-controlled symlinks."""
+    check_root_directory(WORKSPACE_ROOT)
     try:
-        os.chmod(workspace, 0o700)
-    except OSError:
-        pass  # bind mounts on some hosts (macOS) may not support chmod
-    try:
-        uid = pwd.getpwnam(linux_user).pw_uid
-        if os.stat(workspace).st_uid != uid:
-            subprocess.run(["chown", "-R", f"{linux_user}:{linux_user}", workspace], check=False)
-    except (KeyError, OSError):
+        os.mkdir(PUBLIC_SKILLS_DIR, 0o755)
+    except FileExistsError:
         pass
+    _check_public_tree(PUBLIC_SKILLS_DIR)
+    if os.path.isdir(source):
+        _check_public_tree(source)
+        for name in os.listdir(source):
+            bundled = os.path.join(source, name)
+            if not os.path.isdir(bundled):
+                continue
+            destination = os.path.join(PUBLIC_SKILLS_DIR, name)
+            if os.path.exists(destination):
+                if not os.path.isdir(destination):
+                    raise IdentityError("Bundled skill conflicts with a shared file")
+                shutil.rmtree(destination)
+            shutil.copytree(bundled, destination)
+    # Existing admin skills stay intact, readable by users but never writable.
+    for base, directories, files in os.walk(PUBLIC_SKILLS_DIR):
+        os.chmod(base, 0o755)
+        for name in files:
+            path = os.path.join(base, name)
+            os.chmod(path, 0o755 if os.stat(path).st_mode & 0o111 else 0o644)
 
 
 def _is_inside(resolved: str, base: str) -> bool:
@@ -120,9 +134,39 @@ def personal_skills_dir(linux_user: str) -> str:
     return os.path.join(workspace_for(linux_user), PERSONAL_SKILLS_DIRNAME)
 
 
+def user_environment(linux_user: str) -> dict:
+    return {
+        "HOME": workspace_for(linux_user),
+        "USER": linux_user,
+        "LOGNAME": linux_user,
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "LANG": "C.UTF-8",
+    }
+
+
+def user_cmd(linux_user: str, *command: str) -> list:
+    # sudo may rewrite PATH; env -i makes the target's exact environment explicit.
+    environment = user_environment(linux_user)
+    return ["/usr/bin/sudo", "-H", "-u", linux_user, "--", "/usr/bin/env", "-i",
+            *(f"{key}={value}" for key, value in environment.items()), *command]
+
+
+def user_process_options(linux_user: str) -> dict:
+    return {
+        "env": user_environment(linux_user),
+        "cwd": workspace_for(linux_user),
+        "start_new_session": True,
+        "umask": 0o077,
+    }
+
+
+def bash_cmd(linux_user: str, command: str) -> list:
+    return user_cmd(linux_user, "/bin/bash", "--noprofile", "--norc", "-c",
+                    'umask 077\nexport PATH="$HOME/.local/bin:$PATH"\n' + command)
+
+
 def helper_cmd(linux_user: str, *args: str) -> list:
-    """Build the file_helper.py invocation under sudo."""
-    return ["sudo", "-u", linux_user, "python3", HELPER_PATH, *args]
+    return user_cmd(linux_user, "/usr/bin/python3", "-I", HELPER_PATH, *args)
 
 
 def kill_process_group(proc) -> None:
@@ -139,7 +183,7 @@ async def run_file_op(linux_user: str, payload: dict, timeout: int = 30) -> dict
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        preexec_fn=os.setsid,
+        **user_process_options(linux_user),
     )
     stdin_data = json.dumps(payload).encode()
     try:

@@ -20,7 +20,7 @@ from app.speech.transcription import get_audio_speech_to_text
 from app.runtime.user_input import UserInput, TextInput, ImageInput, VoiceTranscription, \
     SandboxFileInput
 from app.sandbox.client import SandboxClient, SandboxError
-from app.sandbox.workspace_files import sanitize_workspace_filename, unique_workspace_name
+from app.sandbox.workspace_files import sanitize_workspace_filename, upload_workspace_file
 from app.storage.db import User
 
 logger = logging.getLogger(__name__)
@@ -185,12 +185,12 @@ class BatchedInputHandler:
                     temp_filepath = os.path.join(temp_dir, 'document')
                     await self.bot.download_file(file.file_path, destination=temp_filepath)
 
-                    safe_name = sanitize_workspace_filename(message.document.file_name)
-                    safe_name = await unique_workspace_name(sandbox_client, user.telegram_id, safe_name)
+                    safe_name = f'inbox/{sanitize_workspace_filename(message.document.file_name)}'
 
                     with open(temp_filepath, 'rb') as f:
                         data = f.read()
-                    result = await sandbox_client.upload_file(user.telegram_id, safe_name, data)
+                    result = await upload_workspace_file(sandbox_client, user.telegram_id, safe_name, data)
+                    safe_name = result['path']
 
             sandbox_file = SandboxFileInput(
                 filename=safe_name,

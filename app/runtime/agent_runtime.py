@@ -424,6 +424,7 @@ class AgentRuntime:
 
         # Build system prompt with optional plan context
         sub_system_prompt = "You are a sub-agent working on a specific task. Complete it and return your result."
+        sub_system_prompt += sub_function_storage.get_system_prompt_addition()
         if skills_prompt:
             # sub-agents have the same file tools, so they get the same skills catalog
             sub_system_prompt += '\n\n' + skills_prompt

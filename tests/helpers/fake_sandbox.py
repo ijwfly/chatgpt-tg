@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from unittest.mock import patch
 
-from app.sandbox.client import SandboxError
+from app.sandbox.client import SandboxError, SandboxFileExists
 
 SANDBOX_CLIENT_IMPORT_SITES = (
     'app.functions.bash_sandbox.SandboxClient',
@@ -54,6 +54,8 @@ class FakeSandboxClient:
         return {'status': 'ok', 'size': len(content), 'path': path}
 
     async def upload_file(self, telegram_user_id, rel_path, data):
+        if rel_path in FakeSandboxClient.uploads:
+            raise SandboxFileExists(f'File exists: {rel_path}')
         FakeSandboxClient.uploads[rel_path] = data
         return {'status': 'ok', 'size': len(data), 'path': rel_path}
 

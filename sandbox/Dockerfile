@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Layer 2: sudo + user isolation setup
-# - passwordless sudo for root (needed for lazy user creation via sudo -u)
+# - passwordless sudo for root (needed for isolated sudo -H -u subprocesses)
 # - mcpusers group: every provisioned user joins it; per-group resource
 #   limits are rendered into /etc/security/limits.d by entrypoint.sh
 # - pam_limits on sudo sessions so those limits apply to sudo -u commands
@@ -30,7 +30,7 @@ COPY entrypoint.sh /opt/entrypoint.sh
 RUN chmod +x /opt/entrypoint.sh
 
 # Layer 5: working directory
-RUN mkdir -p /workspace
+RUN mkdir -p /workspace && chown root:root /workspace && chmod 755 /workspace
 
 WORKDIR /workspace
 EXPOSE 8080

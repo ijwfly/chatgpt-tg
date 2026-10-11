@@ -54,8 +54,13 @@ Keep it one or two sentences. It must fit the catalog limit, so stay well under 
 
 ## 4. Create the files
 
-Personal skills live in `skills/` inside your workspace — that is the only place you can
-write. `/workspace/public_skills/` is shared and read-only; to adapt a shared skill, copy it
+Personal skills live in `skills/<skill-name>/` inside your persistent home/workspace.
+Keep task work in `projects/<task-name>/`, deliverables in `outbox/<task-name>/`, and archive
+staging in `tmp/<task-name>/`, not directly in `~/`. User uploads are in `inbox/`; preserve
+the originals unless asked to remove them. For an uploaded skill, its archive in `inbox/`
+is not an installation: the final path must be `skills/<skill-name>/SKILL.md`, without
+extra wrapper directories.
+`/workspace/public_skills/` is shared and read-only; to adapt a shared skill, copy it
 into `skills/` under the same name (a personal skill overrides a shared one of the same name).
 
 Write `SKILL.md` with `write_file`:
