@@ -6,6 +6,8 @@ write files there, so both sanitize names and resolve collisions the same way.
 import os
 import re
 
+from app.sandbox.client import SandboxFileExists
+
 
 def sanitize_workspace_path(path: str) -> str:
     """Makes a name supplied by the user or the model safe to use as a workspace-relative path.
@@ -26,16 +28,18 @@ def sanitize_workspace_path(path: str) -> str:
 
 
 def sanitize_workspace_filename(filename: str) -> str:
-    """Same, but for names that must stay a single file in the workspace root."""
+    """Sanitize a single uploaded filename; the caller chooses its destination directory."""
     return sanitize_workspace_path(os.path.basename(filename or ''))
 
 
-async def unique_workspace_name(sandbox_client, telegram_user_id: int, path: str) -> str:
-    """Appends _1, _2, ... until the path is free, so uploads never overwrite existing files."""
+async def upload_workspace_file(sandbox_client, telegram_user_id: int, path: str, data: bytes) -> dict:
+    """Upload exclusively, choosing a suffix on collisions, including concurrent uploads."""
     base, ext = os.path.splitext(path)
     candidate = path
     counter = 1
-    while (await sandbox_client.stat(telegram_user_id, candidate)).get('type') != 'missing':
-        candidate = f'{base}_{counter}{ext}'
-        counter += 1
-    return candidate
+    while True:
+        try:
+            return await sandbox_client.upload_file(telegram_user_id, candidate, data)
+        except SandboxFileExists:
+            candidate = f'{base}_{counter}{ext}'
+            counter += 1

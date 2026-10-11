@@ -1,7 +1,7 @@
 """HTTP client for the sandbox service (see sandbox/).
 
-Each user is identified by their telegram id passed in the X-User-Id header;
-the sandbox maps it to an isolated linux user with a private workspace.
+Requests carry the bot's bearer token and the user's telegram id in X-User-Id;
+the sandbox maps the id to an isolated linux user with a persistent home.
 """
 
 import os
@@ -18,6 +18,10 @@ class SandboxError(Exception):
     pass
 
 
+class SandboxFileExists(SandboxError):
+    """An exclusive upload collided with an existing file."""
+
+
 def _extract_error(response: httpx.Response) -> str:
     try:
         return response.json().get('error', response.text)
@@ -31,7 +35,12 @@ class SandboxClient:
 
     @staticmethod
     def _headers(telegram_user_id) -> dict:
-        return {'X-User-Id': str(telegram_user_id)}
+        if not settings.SANDBOX_API_TOKEN:
+            raise SandboxError('SANDBOX_API_TOKEN must be configured for the bot and sandbox')
+        return {
+            'X-User-Id': str(telegram_user_id),
+            'Authorization': f'Bearer {settings.SANDBOX_API_TOKEN}',
+        }
 
     async def exec(self, telegram_user_id, command: str, timeout: int) -> dict:
         try:
@@ -102,6 +111,8 @@ class SandboxClient:
                 )
         except httpx.HTTPError as e:
             raise SandboxError(f'Sandbox unavailable: {e}')
+        if response.status_code == 409:
+            raise SandboxFileExists(_extract_error(response))
         if response.status_code != 200:
             raise SandboxError(_extract_error(response))
         return response.json()

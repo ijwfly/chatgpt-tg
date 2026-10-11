@@ -226,9 +226,8 @@ class TestSandboxDocumentUpload:
         await asyncio.sleep(0.3)
 
         # filename is sanitized (space -> underscore) and uploaded
-        assert 'my_report.csv' in FakeSandboxClient.uploads
-        assert FakeSandboxClient.uploads['my_report.csv'] == b'csv,data\n1,2\n'
-        spy.assert_sent_text_contains('Saved to agent workspace: my_report.csv')
+        assert FakeSandboxClient.uploads['inbox/my_report.csv'] == b'csv,data\n1,2\n'
+        spy.assert_sent_text_contains('inbox/my_report.csv')
 
         # next prompt: LLM sees the workspace file notice in context
         mock_llm = MockLLMClient()
@@ -240,7 +239,7 @@ class TestSandboxDocumentUpload:
         await asyncio.sleep(0.3)
 
         all_contents = [str(m.get('content', '')) for m in mock_llm.calls[0]['messages']]
-        assert any('[file uploaded to agent workspace] my_report.csv' in c for c in all_contents)
+        assert any('[file uploaded to agent workspace] inbox/my_report.csv' in c for c in all_contents)
 
     async def test_document_cyrillic_name_preserved(self, bot_app):
         """Unicode (cyrillic) filenames are kept, only unsafe chars are replaced."""
@@ -255,8 +254,8 @@ class TestSandboxDocumentUpload:
         await dp.feed_update(mock_bot, update)
         await asyncio.sleep(0.3)
 
-        assert 'Собеседование_CTO__финал_.pdf' in FakeSandboxClient.uploads
-        spy.assert_sent_text_contains('Saved to agent workspace: Собеседование_CTO__финал_.pdf')
+        assert FakeSandboxClient.uploads['inbox/Собеседование_CTO__финал_.pdf'] == b'pdf-bytes'
+        spy.assert_sent_text_contains('inbox/Собеседование_CTO__финал_.pdf')
 
     async def test_document_name_collision_gets_suffix(self, bot_app):
         """Uploading a file with an existing name gets a numeric suffix."""
@@ -276,9 +275,9 @@ class TestSandboxDocumentUpload:
         await dp.feed_update(mock_bot, update2)
         await asyncio.sleep(0.3)
 
-        assert FakeSandboxClient.uploads['data.txt'] == b'first'
-        assert FakeSandboxClient.uploads['data_1.txt'] == b'second'
-        spy.assert_sent_text_contains('Saved to agent workspace: data_1.txt')
+        assert FakeSandboxClient.uploads['inbox/data.txt'] == b'first'
+        assert FakeSandboxClient.uploads['inbox/data_1.txt'] == b'second'
+        spy.assert_sent_text_contains('inbox/data_1.txt')
 
     async def test_document_without_agent_mode_keeps_old_behavior(self, bot_app):
         """With agent_mode off documents are not accepted."""
@@ -346,7 +345,7 @@ class TestFileMessageBranching:
 
         assert by_alias is not None, 'confirmation message must resolve to a dialog message'
         assert by_alias.id == by_document.id
-        assert '[file uploaded to agent workspace] data.csv' in str(by_alias.message.content)
+        assert '[file uploaded to agent workspace] inbox/data.csv' in str(by_alias.message.content)
 
     async def test_reply_to_upload_confirmation_keeps_branch(self, bot_app):
         """Replying to the upload confirmation continues the branch the file belongs to."""
@@ -385,7 +384,7 @@ class TestFileMessageBranching:
         assert len(mock_llm3.calls) == 1
         contents = [str(m.get('content', '')) for m in mock_llm3.calls[0]['messages']]
         assert any('Remember the number 42' in c for c in contents)
-        assert any('[file uploaded to agent workspace] report.csv' in c for c in contents)
+        assert any('[file uploaded to agent workspace] inbox/report.csv' in c for c in contents)
         assert not any('Unrelated later message' in c for c in contents)
 
     async def test_reply_to_user_document_message_keeps_branch(self, bot_app):
@@ -417,7 +416,7 @@ class TestFileMessageBranching:
 
         contents = [str(m.get('content', '')) for m in mock_llm2.calls[0]['messages']]
         assert any('Remember the number 42' in c for c in contents)
-        assert any('[file uploaded to agent workspace] report.csv' in c for c in contents)
+        assert any('[file uploaded to agent workspace] inbox/report.csv' in c for c in contents)
 
     async def test_document_reply_starts_from_replied_branch(self, bot_app):
         """A document sent as a reply is attached to the replied-to branch."""
@@ -514,7 +513,7 @@ class TestDocumentCaption:
         assert len(mock_llm.calls) == 1, 'a captioned document must be answered'
         contents = [str(m.get('content', '')) for m in mock_llm.calls[0]['messages']]
         assert any(
-            '[file uploaded to agent workspace] data.csv' in c and 'вот файл, разбери его' in c
+            '[file uploaded to agent workspace] inbox/data.csv' in c and 'вот файл, разбери его' in c
             for c in contents
         ), f'file notice and caption must share one context message, got: {contents}'
         spy.assert_sent_text_contains('The file has two columns.')
@@ -540,7 +539,7 @@ class TestDocumentCaption:
         await asyncio.sleep(0.3)
 
         assert mock_llm.calls == [], 'a bare document must stay context-only'
-        spy.assert_sent_text_contains('Saved to agent workspace: data.csv')
+        spy.assert_sent_text_contains('inbox/data.csv')
 
     async def test_captioned_document_without_agent_mode(self, bot_app, db_pool):
         """Without agent mode a captioned document is still rejected and answers nothing."""
@@ -716,12 +715,12 @@ class TestSaveImageToWorkspace:
         await asyncio.sleep(0.4)
 
         spy.assert_sent_text_contains("Saved it.")
-        assert FakeSandboxClient.uploads == {'photo_1.jpg': b'jpeg-bytes'}
+        assert FakeSandboxClient.uploads == {'inbox/photo_1.jpg': b'jpeg-bytes'}
         # the tool downloaded exactly the image it was pointed at
         assert mock_bot.get_file.await_args.args[0] == 'cat-photo-id'
 
         tool_results = [m for m in mock_llm.calls[1]['messages'] if m.get('role') == 'tool']
-        assert any('photo_1.jpg' in str(m.get('content', '')) for m in tool_results)
+        assert any('inbox/photo_1.jpg' in str(m.get('content', '')) for m in tool_results)
 
     async def test_explicit_path_is_used(self, bot_app):
         telegram_bot, dp, mock_bot = bot_app
@@ -745,7 +744,7 @@ class TestSaveImageToWorkspace:
         user_id = 80104
         await _create_vision_agent_user(telegram_bot, dp, user_id)
         _mock_photo_download(mock_bot, file_id='cat-photo-id')
-        FakeSandboxClient.uploads['photo_1.jpg'] = b'older file'
+        FakeSandboxClient.uploads['inbox/photo_1.jpg'] = b'older file'
 
         mock_llm = MockLLMClient()
         mock_llm.add_response(content=None, tool_calls=[_save_image_call()])
@@ -756,8 +755,8 @@ class TestSaveImageToWorkspace:
             file_id='cat-photo-id', caption='Save it', user_id=user_id))
         await asyncio.sleep(0.4)
 
-        assert FakeSandboxClient.uploads['photo_1.jpg'] == b'older file'
-        assert FakeSandboxClient.uploads['photo_1_1.jpg'] == b'jpeg-bytes'
+        assert FakeSandboxClient.uploads['inbox/photo_1.jpg'] == b'older file'
+        assert FakeSandboxClient.uploads['inbox/photo_1_1.jpg'] == b'jpeg-bytes'
 
     async def test_unknown_image_id_is_reported_to_the_llm(self, bot_app):
         telegram_bot, dp, mock_bot = bot_app
@@ -801,7 +800,7 @@ class TestSaveImageToWorkspace:
             file_id='second-photo-id', caption='Now save the first photo', user_id=user_id))
         await asyncio.sleep(0.4)
 
-        assert FakeSandboxClient.uploads == {'photo_1.jpg': b'first-bytes'}
+        assert FakeSandboxClient.uploads == {'inbox/photo_1.jpg': b'first-bytes'}
         assert mock_bot.get_file.await_args.args[0] == 'first-photo-id'
         # the second photo got its own label
         all_content = ' '.join(str(m.get('content', '')) for m in second_llm.calls[0]['messages'])

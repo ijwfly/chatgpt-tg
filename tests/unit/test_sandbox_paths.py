@@ -3,6 +3,7 @@
 import importlib.util
 import os
 import pathlib
+import sys
 
 import pytest
 
@@ -11,6 +12,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 def _load(name, relative_path):
     spec = importlib.util.spec_from_file_location(name, REPO_ROOT / relative_path)
+    sys.path.insert(0, str(REPO_ROOT / "sandbox" / "server"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

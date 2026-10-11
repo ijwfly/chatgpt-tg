@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -122,9 +123,10 @@ RICH_DRAFT_STREAMING = False
 # Bash sandbox (agent mode)
 # Per-user bash execution environment served by the `sandbox` docker-compose service.
 # When enabled, users with agent_mode=on get bash/file tools and their uploaded
-# documents are stored in a personal sandbox workspace.
+# documents are stored under inbox/ in a persistent Linux home.
 ENABLE_BASH_SANDBOX = False          # enable in settings_local.py after starting the sandbox service
 SANDBOX_URL = 'http://sandbox:8080'
+SANDBOX_API_TOKEN = os.environ.get('SANDBOX_API_TOKEN', '')  # shared with sandbox; never expose to tools
 SANDBOX_BASH_TIMEOUT_DEFAULT = 60    # default timeout for bash_exec tool calls, seconds
 SANDBOX_REQUEST_TIMEOUT = 330        # httpx timeout for sandbox requests (> sandbox BASH_TIMEOUT_MAX)
 SANDBOX_MAX_OUTPUT_CHARS = 10000     # stdout/stderr truncation limit for LLM tool results

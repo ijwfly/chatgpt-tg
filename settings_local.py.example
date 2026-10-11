@@ -52,9 +52,9 @@ TELEGRAM_BOT_TOKEN = ''
 # WEB_AGENT_MODEL = ''  # model for the sub-agents; empty = user's current model
 
 # === Bash sandbox (agent mode) ===
-# The sandbox service starts with docker-compose; this flag gives the agent
-# bash_exec / read_file / write_file / edit_file / send_file_to_chat tools
-# and routes uploaded documents into the agent's workspace.
+# Set SANDBOX_API_TOKEN in the host environment/.env for both app and sandbox first.
+# The flag gives the agent bash_exec / read_file / write_file / edit_file /
+# send_file_to_chat tools; uploads go into ~/inbox/ in its persistent Linux home.
 # ENABLE_BASH_SANDBOX = False
 
 # === Skills (agent mode, needs ENABLE_BASH_SANDBOX) ===
