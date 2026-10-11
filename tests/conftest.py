@@ -16,6 +16,9 @@ settings.OPENAI_TOKEN = 'test-openai-key'
 settings.TELEGRAM_BOT_TOKEN = '123456:TEST-TOKEN'
 settings.ANTHROPIC_TOKEN = ''
 settings.OPENROUTER_TOKEN = ''
+settings.STT_PROVIDER = 'openai'
+settings.STT_MODEL = 'gpt-4o-transcribe'
+settings.STT_TEMPERATURE = None
 settings.POSTGRES_HOST = os.environ.get('POSTGRES_HOST', 'localhost')
 settings.POSTGRES_PORT = int(os.environ.get('POSTGRES_PORT', '15432'))
 settings.POSTGRES_USER = os.environ.get('POSTGRES_USER', 'postgres')
@@ -41,6 +44,7 @@ from aiogram.client.session.base import BaseSession
 from app.bot.telegram_bot import TelegramBot
 from app.storage.db import DBFactory, DB
 from app.openai_helpers.llm_client_factory import LLMClientFactory
+from app.speech import transcription
 from tests.helpers.bot_spy import BotSpy
 
 import asyncpg
@@ -214,6 +218,7 @@ async def bot_app(mock_bot, db, db_pool):
             await telegram_bot.scheduler_service.stop()
         if telegram_bot.monthly_usage_task:
             await telegram_bot.monthly_usage_task.stop()
+        await transcription.close()
 
         LLMClientFactory._model_clients = old_clients
         get_models.cache_clear()

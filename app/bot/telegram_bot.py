@@ -11,6 +11,7 @@ from dateutil.relativedelta import relativedelta
 
 import settings
 from app import observability
+from app.speech import transcription
 from app.bot.batched_input_handler import BatchedInputHandler
 from app.bot.cancellation_manager import CancellationManager
 from app.bot.models_menu import ModelsMenu
@@ -55,6 +56,7 @@ class TelegramBot:
         self.batched_handler = None
 
     async def on_startup(self, **kwargs):
+        transcription.initialize()
         self.db = await DBFactory.create_database(
             settings.POSTGRES_USER, settings.POSTGRES_PASSWORD,
             settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE
@@ -87,6 +89,7 @@ class TelegramBot:
             await self.scheduler_service.stop()
         if self.monthly_usage_task:
             await self.monthly_usage_task.stop()
+        await transcription.close()
         await DBFactory().close_database()
         self.db = None
 
