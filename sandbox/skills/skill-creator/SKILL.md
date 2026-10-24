@@ -1,13 +1,16 @@
 ---
 name: skill-creator
-description: Creating a new skill or editing an existing one. Use when asked to make a skill, save a workflow or process as a skill, teach you to do something the same way every time, or fix a skill that is not triggering.
+description: Create, edit, or install skills from a ZIP archive or folder. Use when asked to make a skill, save a workflow as a skill, install an uploaded skill, fix a skill installed in the wrong place, or fix a skill that is not triggering.
 ---
 
-# Creating a skill
+# Creating and installing skills
 
 A skill is a folder of instructions you load only when the task needs it. Its `description`
 is the only trigger — the catalog in your system prompt lists names and descriptions, and you
 decide from there whether to open the body.
+
+For an existing skill supplied as a ZIP or folder, follow **Install an existing skill** below;
+do not start the creation interview. For a new skill, follow steps 1–6.
 
 ## 1. Find out what the skill is for
 
@@ -54,7 +57,9 @@ Keep it one or two sentences. It must fit the catalog limit, so stay well under 
 
 ## 4. Create the files
 
-Personal skills live in `skills/<skill-name>/` inside your persistent home/workspace.
+Personal skills must live in `skills/<skill-name>/` inside your persistent home/workspace
+to be discovered. You can write elsewhere in the workspace, but a skill placed there is
+not installed.
 Keep task work in `projects/<task-name>/`, deliverables in `outbox/<task-name>/`, and archive
 staging in `tmp/<task-name>/`, not directly in `~/`. User uploads are in `inbox/`; preserve
 the originals unless asked to remove them. For an uploaded skill, its archive in `inbox/`
@@ -86,8 +91,60 @@ python3 /workspace/public_skills/skill-creator/scripts/validate_skill.py skills/
 It checks the frontmatter, the name, the description length and that every relative file the
 body references exists. Fix whatever it reports and run it again until it passes.
 
+Also check that the final path is `skills/<skill-name>/SKILL.md`, relative to the workspace,
+with no extra wrapper directory. The validator checks contents, not installation location;
+the catalog only scans immediate subfolders of `skills/`.
+
 ## 6. Hand it over
 
 Show the user the skill's name, description and file tree, and say plainly that the catalog
 picks it up starting with their next message. Suggest a test phrasing that should trigger it —
 if it does not trigger, the description is the thing to fix, not the body.
+
+## Install an existing skill
+
+An uploaded ZIP is saved to `inbox/` in the persistent home/workspace. That is the upload
+location, **not** the installation location. Install only when the user requests it;
+not every ZIP is a skill.
+
+1. **Inspect before extracting.** List archive entries with Python's stdlib `zipfile` (do not
+   assume `unzip` is installed). Reject absolute paths, `..` traversal, symlinks, and any
+   entry whose resolved destination escapes the extraction directory. Do not execute scripts
+   from the uploaded skill to install it.
+2. **Stage inside the workspace.** Extract into a new temporary directory under `tmp/<task-name>/`,
+   never directly into the workspace root or over existing skills. For an existing folder,
+   inspect its contents and reject links that escape the folder before copying it.
+3. **Find the skill root.** Locate `SKILL.md`: it may be at the archive root, inside a named
+   folder, or inside an extra wrapper folder. Ignore packaging metadata such as `__MACOSX`.
+   If there is no `SKILL.md`, report that the input is not a skill. If there are several,
+   install all only if requested; otherwise ask which skills the user wants.
+4. **Read and validate.** Read the frontmatter and use its `name`, not the ZIP filename, as the
+   destination folder name. It must be kebab-case and match the final folder name. Preserve
+   the entire skill folder, including companion files and their relative paths; do not copy
+   just `SKILL.md` or rewrite the skill's instructions. Validate the staged folder with the
+   bundled validator from step 5 (stage it under its declared name). Report invalid content
+   rather than silently changing an externally authored skill.
+5. **Check the destination.** The only personal installation path is `skills/<skill-name>/`.
+   If it already exists, do not merge or overwrite it unless the user explicitly requested
+   replacement of that skill. Validate the replacement before touching the installed copy;
+   replace the whole folder so obsolete files do not survive. A shared skill with the same
+   name will be shadowed by this personal copy; tell the user.
+6. **Install and verify.** Create `skills/` if needed and copy or move the complete staged
+   skill folder to `skills/<skill-name>/`. There must be exactly one skill-folder level
+   between `skills/` and `SKILL.md`, not `skills/<wrapper>/<skill-name>/SKILL.md`.
+   Run the bundled validator again against the final path:
+
+   ```
+   python3 /workspace/public_skills/skill-creator/scripts/validate_skill.py skills/<skill-name>
+   ```
+
+   Check the final path separately: passing validation outside `skills/` does not mean the
+   skill is installed. Remove temporary staging files you created, but keep the uploaded
+   archive or original folder unless the user asked to remove it.
+7. **Confirm the result.** Show the installed name, description, final path and file tree.
+   Explain that it enters the catalog on the next user message, not during this turn.
+   Suggest a request that should trigger it.
+
+To fix a skill previously unpacked into the workspace root, follow the same inspection,
+validation and conflict checks, then move its complete folder into `skills/<skill-name>/`.
+Do not leave a second active copy or delete unrelated workspace files.
