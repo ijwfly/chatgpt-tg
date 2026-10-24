@@ -18,7 +18,10 @@ Skills are folders with instructions for a specific kind of task. If a skill's d
 matches the task at hand, read its SKILL.md first and follow it — it is written for exactly \
 this situation and overrides your default approach. Personal skills live in `skills/` in your \
 workspace and can be created and edited; skills under {public_dir} are shared and read-only. \
-A skill you create appears in this list starting with the next user message.
+Before installing a skill from a ZIP or folder, read the skill-creator SKILL.md from this \
+catalog and follow its installation procedure. Install personal skills only at \
+`skills/<skill-name>/SKILL.md`; extracting into the workspace root is not installation. \
+A skill you create or install appears in this list starting with the next user message.
 
 Available skills:"""
 
