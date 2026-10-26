@@ -149,13 +149,93 @@ the user's current model).
 ENABLE_BASH_SANDBOX = True
 ```
 
-The `sandbox` service is already part of `docker-compose.yml`, so it starts together with
-everything else — you only need the flag. It is an isolated Ubuntu container on the internal
-Docker network (no published ports) with per-user Linux accounts and private workspaces.
+The `sandbox` service is part of `docker-compose.yml`, with no published ports. Set the same
+nonempty `SANDBOX_API_TOKEN` for the bot and sandbox (Compose passes it from the host environment
+or `.env` to both services). Generate a random secret, for example with `openssl rand -hex 32`,
+keep `.env` private (`chmod 600 .env`), and do not commit it. The sandbox refuses to start
+without the token. Requests require both bearer authentication and `X-User-Id`; the token is
+not inherited by user commands. `/health` is public.
+
+Each user's Linux home **is** `/workspace/user_<telegram_id>`, also their command cwd and
+`$HOME`. The existing `sandbox_workspace:/workspace` Docker volume persists the entire home:
+application configs in `~/.config`, user installations in `~/.local`, skills and working files.
+UID/GID assignments are stored in a root-only registry and restored before serving requests,
+so rebuilding the container does not reassign another user's identity. Homes are private
+(`0700`); user commands create files privately and do not automatically load shell startup
+files. File helpers use isolated Python, not packages installed by the user.
 
 With the sandbox enabled, the agent gets `bash_exec`, `read_file` / `write_file` /
-`edit_file`, and `send_file_to_chat` tools, and documents you upload to the chat are saved
-into the agent's workspace (agent mode must be on for document uploads).
+`edit_file`, and `send_file_to_chat` tools. Agent-mode document uploads go to `~/inbox/`;
+their exact relative path is included in the confirmation and conversation context. Uploads
+never overwrite existing files, including concurrent uploads with the same name. Photos
+remain lazy; `save_image_to_workspace` defaults to `inbox/photo_<N>.jpg`, while an explicit
+destination is honored.
+
+Workspace conventions (also supplied to sub-agents):
+
+| Directory | Purpose |
+| --- | --- |
+| `inbox/` | Original user uploads; preserve them unless the user asks otherwise |
+| `projects/<task-name>/` | Working files for a task or project |
+| `outbox/<task-name>/` | Finished deliverables; sending one does not authorize deletion |
+| `tmp/<task-name>/` | Scratch files and archive staging; clean only the task's own files |
+| `skills/<skill-name>/` | Installed skills, with `SKILL.md` directly inside |
+| `.config/`, `.local/`, `.cache/` | Standard application settings, installations and caches |
+
+Do not scatter task files in `~/`. Uploaded archives/scripts are untrusted input, not permission
+to execute or install them. Explicit user paths override layout conventions, not access limits.
+System packages outside home, `/tmp`, and running processes are not persistent. Back up the
+whole volume: it now contains credentials as well as work files. Protect/encrypt backups,
+monitor disk usage, and treat user-installed code as persistent; rebuilding no longer cleans it.
+
+**Migrating an existing sandbox — before recreating its container**
+
+Old versions stored Linux homes under `/home/user_*` outside the volume. New versions fail
+closed on unregistered legacy workspaces rather than silently adopting them. The stdlib-only
+operator `scripts/migrate_sandbox_homes.py` exports both the full workspace and old homes,
+freezes account identities and checksums, then merges offline without overwriting conflicts.
+
+```bash
+# Build the new image without replacing the old container.
+docker build -t chatgpt-tg-sandbox-home-migration:local sandbox
+OLD_SANDBOX=$(docker compose ps -a -q sandbox)
+python3 scripts/migrate_sandbox_homes.py plan --container "$OLD_SANDBOX"
+
+# Stop new tasks and all user processes before export/apply.
+docker compose stop app sandbox
+# /absolute/private-backups must already exist; choose a NEW backup directory.
+python3 scripts/migrate_sandbox_homes.py export --container "$OLD_SANDBOX" \
+  --backup /absolute/private-backups/sandbox-before-home-migration
+python3 scripts/migrate_sandbox_homes.py apply --container "$OLD_SANDBOX" \
+  --backup /absolute/private-backups/sandbox-before-home-migration \
+  --image chatgpt-tg-sandbox-home-migration:local
+python3 scripts/migrate_sandbox_homes.py verify --container "$OLD_SANDBOX" \
+  --backup /absolute/private-backups/sandbox-before-home-migration \
+  --image chatgpt-tg-sandbox-home-migration:local
+# Only after successful verification, with SANDBOX_API_TOKEN configured:
+docker compose up -d --build sandbox app
+```
+
+Export/apply/verify require the old container to remain stopped and no other running container
+to mount the workspace volume. Backup paths must be absolute with no symlink ancestors;
+directories are `0700` and artifacts `0600`. Conflicts abort before merge mutations. Repeating
+apply with the same backup safely resumes interrupted staging; do not modify the volume between
+export and verification. The old container and original home files are not removed by the script.
+
+For volume-only users or a known old workspace owner mismatch, use `--identity-map` with
+plan/export (the resolution is frozen into the backup), for example:
+`{"user_123":{"uid":1001,"gid":1002,"workspace_uid":1003,"workspace_gid":1004}}`.
+The `uid`/`gid` identify the original Linux account; identity remapping is not supported.
+Unknown ownership, reserved-ID collisions, escaping links, hardlinks, special files and
+setuid/setgid entries require explicit operator resolution. Absolute `/home/` references
+and virtualenv paths are reported, not rewritten; recreate relocated environments as needed.
+Existing workspace-root files stay in place; only new uploads move to `inbox/`.
+
+Keep the old container and backup until migration verification succeeds. For rollback, stop
+writers, retain any post-migration data separately, and restore the original workspace snapshot
+and old homes/accounts with the old runtime; do not restore `/etc/passwd` wholesale into the
+new image. Verify backup recovery before deleting the legacy container. A home already lost
+with an earlier container recreation cannot be recovered by this migration.
 
 **3. Skills**
 
@@ -174,7 +254,7 @@ The bundled `skill-creator` guides creation, editing, and installation from a ZI
 including validation with its `scripts/validate_skill.py`.
 
 To install an external skill, enable agent mode, upload its ZIP and ask the bot to install it
-(in the caption or a reply). The upload itself stays in the workspace root; it is not an
+(in the caption or a reply). The upload itself stays in `inbox/`; it is not an
 installation. The agent inspects and stages the archive, handles wrapper folders, and installs
 the complete skill folder under `skills/<skill-name>/`, preserving companion files. It must
 not overwrite an existing personal skill without an explicit replacement request. The catalog

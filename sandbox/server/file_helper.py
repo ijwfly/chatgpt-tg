@@ -15,7 +15,7 @@ Operations:
 
 Streaming modes (raw bytes, for the files HTTP API):
   file_helper.py --stream-read <path>    file contents to stdout
-  file_helper.py --stream-write <path>   stdin to file, JSON result to stdout
+  file_helper.py --stream-write <path>   exclusive create from stdin, JSON result to stdout
 """
 
 import json
@@ -244,20 +244,34 @@ def stream_read(path: str) -> int:
 
 
 def stream_write(path: str) -> int:
+    created = None
     try:
         parent = os.path.dirname(path)
         if parent:
             os.makedirs(parent, exist_ok=True)
-        with open(path, "wb") as f:
+        with open(path, "xb") as f:
+            created = os.fstat(f.fileno())
             shutil.copyfileobj(sys.stdin.buffer, f)
-        json.dump({"status": "ok", "size": os.path.getsize(path), "path": path}, sys.stdout)
+            size = f.tell()
+        json.dump({"status": "ok", "size": size, "path": path}, sys.stdout)
+    except FileExistsError as e:
+        print(str(e), file=sys.stderr)
+        return 3  # HTTP 409; callers choose a new upload name, never overwrite.
     except OSError as e:
+        if created is not None:
+            try:
+                current = os.lstat(path)
+                if (current.st_dev, current.st_ino) == (created.st_dev, created.st_ino):
+                    os.unlink(path)
+            except OSError:
+                pass
         print(str(e), file=sys.stderr)
         return 1
     return 0
 
 
 def main():
+    os.umask(0o077)
     if len(sys.argv) == 3 and sys.argv[1] == "--stream-read":
         sys.exit(stream_read(sys.argv[2]))
     if len(sys.argv) == 3 and sys.argv[1] == "--stream-write":

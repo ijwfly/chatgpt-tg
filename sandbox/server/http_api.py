@@ -1,8 +1,7 @@
 """HTTP routes: health check, bash execution, file operations, files API.
 
-All routes except /health require the X-User-Id header (enforced by
-UserIdMiddleware in main.py, which provisions the user and sets the
-current_user contextvar).
+All routes except /health require a Bearer token and X-User-Id header, enforced
+by UserIdMiddleware before user provisioning and context setup.
 """
 
 import asyncio
@@ -18,6 +17,7 @@ from common import (
     BASH_TIMEOUT_MAX,
     PUBLIC_SKILLS_DIR,
     PathOutsideWorkspace,
+    bash_cmd,
     get_current_user,
     helper_cmd,
     kill_process_group,
@@ -25,6 +25,7 @@ from common import (
     personal_skills_dir,
     resolve_path,
     run_file_op,
+    user_process_options,
     workspace_for,
 )
 
@@ -61,15 +62,14 @@ async def exec_command(request):
 
     linux_user = get_current_user()
     cwd = workspace_for(linux_user)
-    cmd = ["sudo", "-u", linux_user, "bash", "-c", command]
+    cmd = bash_cmd(linux_user, command)
 
     started = time.monotonic()
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        cwd=cwd,
-        preexec_fn=os.setsid,
+        **user_process_options(linux_user),
     )
 
     try:
@@ -180,7 +180,7 @@ async def _stream_download(linux_user, abs_path):
         *helper_cmd(linux_user, "--stream-read", abs_path),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        preexec_fn=os.setsid,
+        **user_process_options(linux_user),
     )
     first = await proc.stdout.read(CHUNK_SIZE)
     if not first:
@@ -230,7 +230,7 @@ async def files_put(request):
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        preexec_fn=os.setsid,
+        **user_process_options(linux_user),
     )
     try:
         async for chunk in request.stream():
@@ -249,10 +249,12 @@ async def files_put(request):
 
     if proc.returncode != 0:
         error = stderr.decode(errors="replace").strip() or "write failed"
-        return JSONResponse({"error": error}, status_code=_error_status(error))
+        status = 409 if proc.returncode == 3 else _error_status(error)
+        return JSONResponse({"error": error}, status_code=status)
 
     result = json.loads(stdout.decode())
     logger.info("files upload user=%s path=%s size=%s", linux_user, abs_path, result.get("size"))
+    result["path"] = os.path.relpath(abs_path, workspace_for(linux_user))
     return JSONResponse(result)
 
 

@@ -57,8 +57,14 @@ Keep it one or two sentences. It must fit the catalog limit, so stay well under 
 
 ## 4. Create the files
 
-Personal skills must live in `skills/<skill-name>/` inside your workspace to be discovered.
-You can write elsewhere in the workspace, but a skill placed there is not installed.
+Personal skills must live in `skills/<skill-name>/` inside your persistent home/workspace
+to be discovered. You can write elsewhere in the workspace, but a skill placed there is
+not installed.
+Keep task work in `projects/<task-name>/`, deliverables in `outbox/<task-name>/`, and archive
+staging in `tmp/<task-name>/`, not directly in `~/`. User uploads are in `inbox/`; preserve
+the originals unless asked to remove them. For an uploaded skill, its archive in `inbox/`
+is not an installation: the final path must be `skills/<skill-name>/SKILL.md`, without
+extra wrapper directories.
 `/workspace/public_skills/` is shared and read-only; to adapt a shared skill, copy it
 into `skills/` under the same name (a personal skill overrides a shared one of the same name).
 
@@ -97,14 +103,15 @@ if it does not trigger, the description is the thing to fix, not the body.
 
 ## Install an existing skill
 
-An uploaded ZIP is saved to the workspace root. That is the upload location, **not** the
-installation location. Install only when the user requests it; not every ZIP is a skill.
+An uploaded ZIP is saved to `inbox/` in the persistent home/workspace. That is the upload
+location, **not** the installation location. Install only when the user requests it;
+not every ZIP is a skill.
 
 1. **Inspect before extracting.** List archive entries with Python's stdlib `zipfile` (do not
    assume `unzip` is installed). Reject absolute paths, `..` traversal, symlinks, and any
    entry whose resolved destination escapes the extraction directory. Do not execute scripts
    from the uploaded skill to install it.
-2. **Stage inside the workspace.** Extract into a new temporary directory under the workspace,
+2. **Stage inside the workspace.** Extract into a new temporary directory under `tmp/<task-name>/`,
    never directly into the workspace root or over existing skills. For an existing folder,
    inspect its contents and reject links that escape the folder before copying it.
 3. **Find the skill root.** Locate `SKILL.md`: it may be at the archive root, inside a named
