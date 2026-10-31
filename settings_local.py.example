@@ -87,7 +87,6 @@ TELEGRAM_BOT_TOKEN = ''
 # from app.openai_helpers.llm_client import OpenAISpecificAsyncOpenAIClient, AnthropicAsyncClient
 # Responses API (e.g. gpt-6.1-sol): set api_client=OpenAIResponsesClient on the model.
 # from app.openai_helpers.responses_client import OpenAIResponsesClient
-# See README's OpenAI Responses API example for a complete configuration.
 # from decimal import Decimal
 #
 # EXTRA_MODELS = [
