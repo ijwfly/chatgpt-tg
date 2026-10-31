@@ -1,6 +1,6 @@
 import json
 import re
-from contextlib import suppress
+from contextlib import aclosing, suppress
 from decimal import Decimal
 from typing import List, Any, Optional, Callable, Union
 
@@ -50,6 +50,8 @@ class DialogMessage(pydantic.BaseModel):
     tool_calls: Optional[List[ToolCall]] = None
     tool_call_id: Optional[str] = None
     thinking: Optional[str] = None
+    # Opaque Responses reasoning items, including encrypted state needed after tool calls.
+    responses_reasoning: Optional[List[dict]] = None
 
     def get_text_content(self):
         if isinstance(self.content, str):
@@ -106,6 +108,8 @@ class DialogMessage(pydantic.BaseModel):
                 })
         if self.tool_call_id:
             data['tool_call_id'] = self.tool_call_id
+        if self.responses_reasoning:
+            data['responses_reasoning'] = self.responses_reasoning
         return data
 
 
@@ -230,8 +234,21 @@ class ChatGPT:
             stream=True,
             **additional_fields,
         )
+        try:
+            async with aclosing(self._read_stream(resp_generator, prompt_tokens, is_cancelled)) as updates:
+                async for update in updates:
+                    yield update
+        finally:
+            close = getattr(resp_generator, 'close', None)
+            if close is not None:
+                await close()
+            elif getattr(resp_generator, 'response', None) is not None:
+                await resp_generator.response.aclose()
+
+    async def _read_stream(self, resp_generator, prompt_tokens, is_cancelled):
         result_dict = {}
         tool_calls_accumulator = {}
+        responses_reasoning = None
         async for resp_part in resp_generator:
             dialog_message = None
             completion_usage = None
@@ -241,9 +258,11 @@ class ChatGPT:
                 completion_usage = CompletionUsage(model=self.llm_model.model_name, **resp_part.usage.model_dump())
 
             delta = resp_part.choices[0].delta if resp_part.choices else None
+            if delta is not None and getattr(delta, 'responses_reasoning', None) is not None:
+                responses_reasoning = delta.responses_reasoning
             if delta and delta.content:
                 # function_call / tool_calls deltas are accumulated separately below
-                result_dict = merge_dicts(result_dict, delta.model_dump(exclude={'function_call', 'tool_calls'}))
+                result_dict = merge_dicts(result_dict, delta.model_dump(exclude={'function_call', 'tool_calls', 'responses_reasoning'}))
                 dialog_message = DialogMessage(**result_dict)
                 completion_tokens = count_messages_tokens([result_dict], model=self.llm_model.model_name)
             if delta and delta.function_call is not None:
@@ -333,6 +352,7 @@ class ChatGPT:
 
             # openai doesn't return this field in streaming mode somewhy
             dialog_message.role = 'assistant'
+            dialog_message.responses_reasoning = responses_reasoning
 
             if isinstance(dialog_message.content, str):
                 visible, thinking, is_thinking = parse_thinking(dialog_message.content)

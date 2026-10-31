@@ -85,6 +85,8 @@ TELEGRAM_BOT_TOKEN = ''
 # === Extra LLM models (added without modifying llm_models.py) ===
 # from app.llm_models import LLModel, LLMPrice, LLMContextConfiguration, LLMCapabilities
 # from app.openai_helpers.llm_client import OpenAISpecificAsyncOpenAIClient, AnthropicAsyncClient
+# Responses API (e.g. gpt-6.1-sol): set api_client=OpenAIResponsesClient on the model.
+# from app.openai_helpers.responses_client import OpenAIResponsesClient
 # from decimal import Decimal
 #
 # EXTRA_MODELS = [
@@ -101,8 +103,9 @@ TELEGRAM_BOT_TOKEN = ''
 #         capabilities=LLMCapabilities(
 #             streaming_responses=True,
 #         ),
-#         # Optional: arbitrary kwargs forwarded to chat.completions.create()
-#         # for this model. Use `extra_body` to pass vendor-specific params
+#         # Optional: arbitrary kwargs forwarded to the model's selected API
+#         # (chat.completions.create() or responses.create()).
+#         # Use `extra_body` to pass vendor-specific params
 #         # (e.g. vLLM / SGLang chat_template_kwargs). Runtime values set by
 #         # the bot (tools, stream, metadata) take precedence over these.
 #         # extra_completion_params={

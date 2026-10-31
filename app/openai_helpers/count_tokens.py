@@ -75,7 +75,8 @@ def count_messages_tokens(messages: List[dict], model="gpt-3.5-turbo") -> int:
                         ValueError('Unknown content type')
 
         for key, value in message.items():
-            if key == 'content':
+            # Encrypted reasoning is opaque API state, not tokenizable conversation text.
+            if key in ('content', 'responses_reasoning'):
                 continue
             if value is None:
                 continue

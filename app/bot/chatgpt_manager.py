@@ -1,3 +1,4 @@
+from contextlib import aclosing
 from typing import List, AsyncGenerator, Callable
 
 from app.llm_models import get_model_by_name
@@ -27,8 +28,9 @@ class ChatGptManager:
     async def send_user_message_streaming(self, user: User, messages: List[DialogMessage], is_cancelled: Callable[[], bool]) -> AsyncGenerator[DialogMessage, None]:
         dialog_message = None
         completion_usage = None
-        async for dialog_message, completion_usage in self.chatgpt.send_messages_streaming(messages, is_cancelled):
-            yield dialog_message
+        async with aclosing(self.chatgpt.send_messages_streaming(messages, is_cancelled)) as updates:
+            async for dialog_message, completion_usage in updates:
+                yield dialog_message
 
         if dialog_message is None or completion_usage is None:
             raise ValueError("Call to ChatGPT failed")
