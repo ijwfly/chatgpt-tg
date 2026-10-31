@@ -22,6 +22,12 @@ class BaseLLMClient:
             merged['extra_body'] = {**model_eb, **call_eb}
         return merged
 
+    @staticmethod
+    def _chat_messages(messages):
+        # Responses state is persisted locally, never sent to Chat Completions providers.
+        return [{key: value for key, value in message.items() if key != 'responses_reasoning'}
+                if 'responses_reasoning' in message else message for message in messages]
+
 
 class GenericAsyncOpenAIClient(BaseLLMClient):
     """
@@ -34,7 +40,9 @@ class GenericAsyncOpenAIClient(BaseLLMClient):
 
     async def chat_completions_create(self, model: str, messages, **additional_fields):
         additional_fields = self._merge_extra_params(additional_fields)
-        return await self.client.chat.completions.create(model=model, messages=messages, **additional_fields)
+        return await self.client.chat.completions.create(
+            model=model, messages=self._chat_messages(messages), **additional_fields,
+        )
 
 
 class OpenAISpecificAsyncOpenAIClient(GenericAsyncOpenAIClient):
@@ -51,7 +59,7 @@ class OpenAISpecificAsyncOpenAIClient(GenericAsyncOpenAIClient):
             }
         return await self.client.chat.completions.create(
             model=model,
-            messages=messages,
+            messages=self._chat_messages(messages),
             **inner_additional_fields,
             **additional_fields,
         )

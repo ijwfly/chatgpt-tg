@@ -358,6 +358,59 @@ This gives you full access to all model parameters: `model_price` (with `LLMPric
 `capabilities` (with `LLMCapabilities`), `api_client` (e.g. `OpenAISpecificAsyncOpenAIClient`,
 `AnthropicAsyncClient`), `minimum_user_role`, etc.
 
+**OpenAI Responses API**
+
+Select `OpenAIResponsesClient` for models that require Responses for tool calling
+(including `gpt-6.1-sol`). Existing models keep their configured Chat Completions or
+Anthropic client; there is no automatic endpoint fallback.
+
+Example `settings_local.py` configuration (append to an existing `EXTRA_MODELS` list
+instead of replacing it):
+
+```python
+from app.openai_helpers.responses_client import OpenAIResponsesClient
+from app.storage.user_role import UserRole
+
+EXTRA_MODELS = [{
+    'model_name': 'gpt-6.1-sol',
+    'model_readable_name': 'GPT-6.1 Sol',
+    'api_key': OPENAI_TOKEN,
+    'base_url': 'https://api.openai.com/v1',  # or a proxy supporting /responses
+    'api_client': OpenAIResponsesClient,
+    'minimum_user_role': UserRole.BASIC,
+    'context_configuration': {
+        'short_term_memory_tokens': 32 * 1024,
+        'summary_length': 8 * 1024,
+        'hard_max_context_size': 64 * 1024,
+    },
+    'capabilities': {
+        'tool_calling': True,
+        'image_processing': True,
+        'streaming_responses': True,
+    },
+}]
+```
+
+Restart the app and choose the model via `/models`. Context values above are local
+bot budgets, not the model's advertised limits. Configure `model_price` using your
+provider's actual per-1000-token rates; omitted prices default to zero.
+
+Both streaming and non-streaming requests support function tools, images, usage
+accounting, summarization, and the existing normal/agent/sub-agent execution paths.
+`extra_completion_params` goes to `responses.create()` for this client, so use
+Responses-native options such as `max_output_tokens` and
+`reasoning={'effort': 'medium'}` when supported by the selected model.
+
+Requests default to `store=False` and replay local dialog history, including encrypted
+reasoning items persisted alongside assistant tool calls. They do not depend on
+`previous_response_id` or server-side conversations. Existing optional tool parameters
+remain optional (`strict=False` unless explicitly configured). Failed or truncated
+streams and incomplete tool-call responses fail the turn rather than executing
+unfinished calls; stopping generation closes the HTTP stream.
+
+Protocol reference: [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling).
+
+
 **Observability (optional)**
 
 Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` (and optionally `LANGFUSE_BASE_URL`,

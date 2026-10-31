@@ -174,9 +174,7 @@ async def _build_streaming_response(resp_data, model):
         if resp_data.get('chunk_delay'):
             await asyncio.sleep(resp_data['chunk_delay'])
         chunk = MagicMock()
-        delta = MagicMock()
-        delta.content = None
-        delta.function_call = None
+        delta = MockDelta()
         mock_tc_chunks = []
         for i, tc in enumerate(tool_calls_data):
             tc_chunk = MagicMock()
